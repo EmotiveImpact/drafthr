@@ -21,9 +21,9 @@ export function buildPreviewSourceHtml(
     ${letterhead}
     <div class="letter-body">${resolved}</div>
     ${attachments}
-    ${figures}
     <hr class="letter-rule" />
     <div class="letter-disclaimer">${disclaimer}</div>
+    ${figures}
   `;
 }
 

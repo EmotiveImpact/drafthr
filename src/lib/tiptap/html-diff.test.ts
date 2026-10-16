@@ -143,4 +143,19 @@ describe("diffHtmlAsSuggestion", () => {
     expect(out).not.toMatch(/<script>/);
     expect(out).toContain("Claude &quot;AI&quot; &lt;ops&gt;");
   });
+
+  it("a reworded clause reads as the old phrase struck, then the new phrase", () => {
+    const out = diffHtmlAsSuggestion(
+      "<p>Your call times are not yet complete for the other targets in the guide.</p>",
+      "<p>Your call times do not yet meet the standard set out in the guide.</p>",
+      ATTRS,
+    );
+    const summaries = listSuggestionsHtml(out);
+    const dels = summaries.filter((s) => s.kind === "deletion").map((s) => s.text.trim());
+    const inss = summaries.filter((s) => s.kind === "insertion").map((s) => s.text.trim());
+    expect(dels).toEqual(["are not yet complete for the other targets"]);
+    expect(inss).toEqual(["do not yet meet the standard set out"]);
+    // Struck phrase first, inserted phrase straight after, common text outside.
+    expect(out).toMatch(/Your call times <del[^>]*>are not yet complete for the other targets<\/del><ins[^>]*>do not yet meet the standard set out<\/ins> in the guide\./);
+  });
 });

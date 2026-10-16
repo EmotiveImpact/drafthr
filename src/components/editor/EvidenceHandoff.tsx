@@ -17,6 +17,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Paperclip, ArrowRight, AlertTriangle, X } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
+import { evidenceUsage } from "./evidence-tier";
 
 export type EvidenceHandoffReason =
   | { kind: "unused"; unusedFilenames: string[]; total: number; usedCount: number }
@@ -36,18 +37,9 @@ export function evaluateEvidenceHandoff(
 
   const items = draft.evidence ?? [];
 
-  // Build the set of evidence ids referenced anywhere in section HTML.
-  const cited = new Set<string>();
-  for (const section of draft.sections) {
-    const html = section.html ?? "";
-    const figRe = /data-fig-id="([^"]+)"/g;
-    const attRe = /data-att-id="([^"]+)"/g;
-    let m;
-    while ((m = figRe.exec(html))) cited.add(m[1]);
-    while ((m = attRe.exec(html))) cited.add(m[1]);
-  }
-
-  const unused = items.filter((i) => !cited.has(i.id));
+  // Used: cited in the text or linked to a section (as the Progress
+  // checklist counts it, LETTER-X46).
+  const { unused } = evidenceUsage(draft);
 
   // 1) Heavy tier with too little evidence — surface first because it's a
   //    structural concern, not just an audit-trail nag.
@@ -153,7 +145,7 @@ export function EvidenceHandoff({
               </div>
               <div>
                 <Dialog.Title className="m-0 text-[15px] font-semibold leading-tight">
-                  Evidence check before Review
+                  Evidence check before review
                 </Dialog.Title>
                 <Dialog.Description className="text-[11.5px] text-[var(--ds-muted)] mt-0.5">
                   Quick look at your supporting evidence.
@@ -197,7 +189,7 @@ export function EvidenceHandoff({
                 className="h-8 px-3 rounded-md border border-[var(--ds-line)] bg-white text-[12px] font-semibold text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] inline-flex items-center gap-1.5 transition"
               >
                 <Paperclip className="size-3.5" />
-                Open Evidence
+                Open evidence
               </button>
               <button
                 type="button"
@@ -207,7 +199,7 @@ export function EvidenceHandoff({
                 }}
                 className="h-8 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 inline-flex items-center gap-1.5 transition"
               >
-                Continue to Review
+                Continue to review
                 <ArrowRight className="size-3.5" />
               </button>
             </div>
@@ -228,13 +220,17 @@ function UnusedBody({
   return (
     <>
       <p className="m-0">
-        You have <strong>{total}</strong>{" "}
-        {total === 1 ? "evidence item" : "evidence items"}.{" "}
-        <strong>{usedCount}</strong>{" "}
-        {usedCount === 1 ? "is referenced" : "are referenced"}.{" "}
-        <strong>{unusedCount}</strong>{" "}
-        {unusedCount === 1 ? "is unused" : "are unused"} — these won&rsquo;t be
-        cited anywhere in the letter:
+        You have <strong>{total}</strong> {total === 1 ? "evidence item" : "evidence items"}.{" "}
+        {usedCount === 0 ? (
+          <>
+            {total === 1 ? "It isn't" : "None of them is"} cited in the letter or linked to a section yet:
+          </>
+        ) : (
+          <>
+            <strong>{usedCount}</strong> {usedCount === 1 ? "is" : "are"} used in the letter.{" "}
+            {unusedCount === 1 ? "This one isn't" : `These ${unusedCount} aren't`} cited or linked to a section yet:
+          </>
+        )}
       </p>
       <ul className="m-0 mt-2 pl-4 list-disc text-[12.5px] text-[var(--ds-muted)] space-y-0.5">
         {unusedFilenames.map((name) => (
@@ -258,10 +254,18 @@ function HeavyLowCountBody({
   const { count } = reason;
   return (
     <p className="m-0">
-      This letter type relies heavily on supporting evidence, but you only have{" "}
-      <strong>{count === 0 ? "no items" : `${count} item${count === 1 ? "" : "s"}`}</strong>{" "}
-      attached. Reviewers expect at least two — usually the chronology plus
-      one or two specific incidents. Consider adding more before exporting.
+      This letter type relies heavily on supporting evidence, but{" "}
+      {count === 0 ? (
+        <>
+          <strong>nothing is attached</strong> yet.
+        </>
+      ) : (
+        <>
+          only <strong>{count === 1 ? "1 item is" : `${count} items are`}</strong> attached.
+        </>
+      )}{" "}
+      Reviewers expect at least two, usually the chronology plus one or two
+      specific incidents. Consider adding more before you send it for review.
     </p>
   );
 }

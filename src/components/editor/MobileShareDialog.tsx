@@ -37,7 +37,7 @@ export function MobileShareDialog({ open, onOpenChange, draftId }: Props) {
       ? `${window.location.origin}/m/${draftId}`
       : `/m/${draftId}`;
 
-  // Reset the "Copied!" affirmation when the dialog re-opens.
+  // Reset the "Copied" confirmation when the dialog re-opens.
   useEffect(() => {
     if (!open) setCopied(false);
   }, [open]);
@@ -80,7 +80,7 @@ export function MobileShareDialog({ open, onOpenChange, draftId }: Props) {
           </DialogTitle>
           <DialogDescription>
             Open this link on your phone for a chromeless, scrollable view of
-            the letter. No editing — just clean reading.
+            the letter. No editing, just clean reading.
           </DialogDescription>
         </DialogHeader>
 

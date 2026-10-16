@@ -1,0 +1,110 @@
+/**
+ * The Settings sections, in the order of the section list, and how a
+ * `?tab=` value maps onto them. Old links (the seven tabs Settings used to
+ * have) keep working: `?tab=company` opens Workspace, `?tab=data` opens
+ * Privacy and data, and so on. No `tab` opens Profile.
+ */
+export type SettingsSectionId =
+  | "profile"
+  | "workspace"
+  | "team"
+  | "policies"
+  | "defaults"
+  | "integrations"
+  | "billing"
+  | "security"
+  | "data";
+
+export type SettingsGroup = "You" | "Workspace" | "Account";
+
+export type SettingsSection = {
+  id: SettingsSectionId;
+  label: string;
+  group: SettingsGroup;
+  /** The line under the pane title. */
+  line: string;
+};
+
+export const SETTINGS_SECTIONS: SettingsSection[] = [
+  {
+    id: "profile",
+    label: "Profile",
+    group: "You",
+    line: "Your role and the details DraftHR fills into new letters.",
+  },
+  {
+    id: "workspace",
+    label: "Workspace",
+    group: "Workspace",
+    line: "The company on your letters, with its letterhead and signature.",
+  },
+  {
+    id: "team",
+    label: "Team and roles",
+    group: "Workspace",
+    line: "People with access to this workspace. Admins can invite, change roles and remove members.",
+  },
+  {
+    id: "policies",
+    label: "Policies",
+    group: "Workspace",
+    line: "The workplace policies your letters may refer to, with a link to each.",
+  },
+  {
+    id: "defaults",
+    label: "Letter defaults",
+    group: "Workspace",
+    line: "The jurisdiction, tone and drafting quality every new letter starts with. You can change the jurisdiction and tone for each letter in the wizard.",
+  },
+  {
+    id: "integrations",
+    label: "Integrations and directory sync",
+    group: "Workspace",
+    line: "Link your company directory so new starters get access and leavers lose it.",
+  },
+  {
+    id: "billing",
+    label: "Billing",
+    group: "Account",
+    line: "Only owners and admins can change the plan or payment details.",
+  },
+  {
+    id: "security",
+    label: "Security",
+    group: "Account",
+    line: "Your password and, for admins, the copy of the audit log sent to your own tools.",
+  },
+  {
+    id: "data",
+    label: "Privacy and data",
+    group: "Account",
+    line: "What DraftHR keeps in this browser, and how to export or clear it.",
+  },
+];
+
+/** Legacy tab ids from the old underline tabs. */
+const ALIASES: Record<string, SettingsSectionId> = {
+  company: "workspace",
+  members: "team",
+  directory: "integrations",
+  "directory-sync": "integrations",
+  privacy: "data",
+};
+
+/** The section a `?tab=` value opens. Unknown or missing values open Profile. */
+export function resolveSettingsSection(tab: string | null | undefined): SettingsSectionId {
+  if (!tab) return "profile";
+  const key = tab.trim().toLowerCase();
+  if (ALIASES[key]) return ALIASES[key];
+  const hit = SETTINGS_SECTIONS.find((s) => s.id === key);
+  return hit ? hit.id : "profile";
+}
+
+/** The `?tab=` value written when a section is picked (none for Profile). */
+export function tabParamFor(id: SettingsSectionId): string | null {
+  return id === "profile" ? null : id;
+}
+
+export function sectionById(id: SettingsSectionId): SettingsSection {
+  return SETTINGS_SECTIONS.find((s) => s.id === id) ?? SETTINGS_SECTIONS[0]!;
+}

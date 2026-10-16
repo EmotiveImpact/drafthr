@@ -3,6 +3,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { MessageSquarePlus, Send, Quote, ExternalLink, Check } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
+import { notifyComment } from "@/lib/collab-notify";
 import { useProfileStore } from "@/lib/profile";
 import { Avatar } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
@@ -81,6 +82,8 @@ export function CommentPopover({
       quote,
     });
     if (applyMark && newId) applyMark(newId);
+    // Email the author that a comment landed, as the Comments panel does.
+    notifyComment(draft.id, text);
     setBody("");
     setPosted(true);
     // Auto-close after a brief confirmation flash so the user sees the post landed.
@@ -132,8 +135,8 @@ export function CommentPopover({
             <div
               className="mb-2 p-2 rounded-[var(--r-sm)] text-[11px] italic leading-relaxed"
               style={{
-                background: "var(--comment-highlight, #fef3c7)",
-                borderLeft: "3px solid var(--comment-highlight-strong, #fde68a)",
+                background: "var(--comment-highlight)",
+                borderLeft: "3px solid var(--comment-highlight-strong)",
                 color: "var(--ds-ink)",
               }}
             >

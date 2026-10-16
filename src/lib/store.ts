@@ -34,6 +34,7 @@ import type {
   Task,
 } from "./letters/types";
 import { uid } from "./utils";
+import { useProfileStore } from "./profile";
 import { getLetterMeta } from "./letters/catalog";
 import {
   addDaysToDateOnly,
@@ -688,7 +689,9 @@ export const useDraftStore = create<Store>()(
                 : undefined,
             confidentiality:
               (a.confidentiality as Draft["context"]["confidentiality"]) ??
-              (meta.tribunalBound ? "private_and_confidential" : "public"),
+              // Disciplinary and other high-risk letters are marked "Private
+              // and confidential" by default (UK practice, mock f1).
+              (meta.tribunalBound || meta.riskClass === "high" ? "private_and_confidential" : "public"),
             withoutPrejudice: meta.withoutPrejudiceDefault ?? false,
             protectedCharacteristics: Array.isArray(a.protectedCharacteristics)
               ? (a.protectedCharacteristics as Draft["context"]["protectedCharacteristics"])
@@ -705,6 +708,7 @@ export const useDraftStore = create<Store>()(
             legalName: (a.employerLegalName as string) ?? "",
             address: (a.employerAddress as string) ?? "",
             registrationNumber: a.employerRegNumber as string | undefined,
+            phone: (a.employerPhone as string | undefined) || undefined,
             hasLetterhead: Boolean(a.hasLetterhead),
             letterheadDataUrl: isSafeImageRef(a.letterheadDataUrl)
               ? a.letterheadDataUrl
@@ -744,6 +748,10 @@ export const useDraftStore = create<Store>()(
           timeline: [
             timelineEvent("created", `Created ${meta.shortTitle}`, {
               createdAt: now,
+              // Who started it, so the audit record and Activity name the
+              // letter's real author rather than whoever later opens or
+              // sends it.
+              actorName: currentUserName(),
               detail: `${resolvedMode === "employer" ? "HR" : "Employee"} letter · ${draftJurisdictionLabel(
                 (a.jurisdiction as "UK" | "US") ?? "UK",
                 a.ukRegion as Draft["context"]["ukRegion"],
@@ -959,8 +967,8 @@ export const useDraftStore = create<Store>()(
             inlineDiffed = sanitizeLetterHtml(
               diffHtmlAsSuggestion(canonicalHtml, change.proposedHtml, {
                 // Human reviewer suggestions carry their name (set by the
-                // review rail); AI proposals fall back to "Claude AI".
-                author: change.authorName ?? "Claude AI",
+                // review rail); DraftHR proposals fall back to "DraftHR".
+                author: change.authorName ?? "DraftHR",
                 body: change.instruction,
               }),
             );
@@ -1990,6 +1998,12 @@ if (_isDualWriteEnabled()) {
 
 // Re-export so callers (App.tsx backfill) can avoid duplicating imports.
 export const __dualWrite = { syncDraft: _dualWriteSyncDraft };
+
+/** The signed-in person's name from their profile, if they have given one. */
+function currentUserName(): string | undefined {
+  const personal = useProfileStore.getState().profile.personal;
+  return personal.preferredName?.trim() || personal.legalName?.trim() || undefined;
+}
 
 function timelineEvent(
   kind: DraftTimelineEvent["kind"],

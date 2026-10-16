@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { Loader2, MailCheck } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
-import { AuthShell, ErrorAlert, PrimaryButton, TextField } from "@/routes/sign-in/AuthShell";
+import { AuthShell, ErrorAlert, PrimaryButton, TextField, emailProblem } from "@/routes/sign-in/AuthShell";
 
 type Stage = "form" | "sent";
 
@@ -27,6 +27,7 @@ export function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,6 +41,13 @@ export function ForgotPassword() {
     e.preventDefault();
     if (submitting) return;
     if (!email.trim()) return;
+    // Say what to do before sending, rather than "If jo matches an account…".
+    const bad = emailProblem(email);
+    setEmailError(bad);
+    if (bad) {
+      emailRef.current?.focus();
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -57,7 +65,7 @@ export function ForgotPassword() {
         // 200 even when WorkOS errors. The only cases that legitimately
         // 4xx are bad-shape input (invalid email) or rate-limit.
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Could not send reset link (HTTP ${res.status})`);
+        throw new Error(data.error ?? "Couldn't send the reset link. Try again in a minute.");
       }
       setStage("sent");
     } catch (err) {
@@ -74,8 +82,8 @@ export function ForgotPassword() {
           <MailCheck className="mt-0.5 size-5 text-[var(--ds-muted)]" aria-hidden />
           <div className="text-[13.5px] leading-relaxed text-[var(--ds-body)]">
             If <span className="font-semibold text-[var(--ds-ink)]">{email.trim()}</span> matches
-            an account, a password-reset link is on its way. The link expires in a few minutes —
-            check your inbox now.
+            an account, a password-reset link is on its way. The link expires in a few minutes,
+            so check your inbox now.
           </div>
         </div>
         <p className="mt-6 text-center text-[12.5px] text-[var(--ds-body)]">
@@ -102,12 +110,19 @@ export function ForgotPassword() {
           autoComplete="email"
           inputMode="email"
           value={email}
-          onChange={setEmail}
+          onChange={(v) => {
+            setEmail(v);
+            if (emailError && !emailProblem(v)) setEmailError(null);
+          }}
+          onBlur={() => {
+            if (email.trim()) setEmailError(emailProblem(email));
+          }}
           required
           disabled={submitting}
+          error={emailError}
         />
 
-        {error && <ErrorAlert message={error} />}
+        {error && <ErrorAlert title="Couldn't send the link" message={error} />}
 
         <PrimaryButton disabled={submitting || !email.trim()}>
           {submitting ? (

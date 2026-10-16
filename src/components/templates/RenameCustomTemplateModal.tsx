@@ -1,21 +1,14 @@
 import { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { useDraftStore } from "@/lib/store";
 import type { CustomTemplate } from "@/lib/letters/types";
+import { Field, KitDialogContent, KitDialogFooter } from "@/components/wizard/kit";
 
-/**
- * Rename + edit-description modal for a saved custom template.
- */
+/** Rename a firm template and edit its description. */
 export function RenameCustomTemplateModal({
   template,
   open,
@@ -44,18 +37,28 @@ export function RenameCustomTemplateModal({
       name: trimmed,
       description: description.trim() || undefined,
     });
+    toast.success("Template saved", {
+      description: `It now shows as "${trimmed}" in Your templates.`,
+    });
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <KitDialogContent>
         <DialogHeader>
           <DialogTitle>Rename template</DialogTitle>
+          <DialogDescription>Change how this template shows in Your templates.</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 py-2">
-          <div className="grid gap-1.5">
-            <Label htmlFor="rename-tpl-name">Name</Label>
+        <form
+          id="rename-template-form"
+          className="grid gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit();
+          }}
+        >
+          <Field label="Name" htmlFor="rename-tpl-name" required>
             <Input
               id="rename-tpl-name"
               value={name}
@@ -63,9 +66,8 @@ export function RenameCustomTemplateModal({
               autoFocus
               maxLength={120}
             />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="rename-tpl-desc">Description</Label>
+          </Field>
+          <Field label="Description" htmlFor="rename-tpl-desc" aside="Optional">
             <Textarea
               id="rename-tpl-desc"
               value={description}
@@ -73,17 +75,17 @@ export function RenameCustomTemplateModal({
               rows={3}
               maxLength={500}
             />
-          </div>
-        </div>
-        <DialogFooter>
+          </Field>
+        </form>
+        <KitDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!name.trim()}>
+          <Button type="submit" form="rename-template-form" disabled={!name.trim()}>
             Save changes
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </KitDialogFooter>
+      </KitDialogContent>
     </Dialog>
   );
 }

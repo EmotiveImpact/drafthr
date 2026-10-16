@@ -167,6 +167,8 @@ export type EmployerDetails = {
   legalName: string;
   address: string;
   registrationNumber?: string;
+  /** Phone number printed in the letterhead's address block (optional). */
+  phone?: string;
   hasLetterhead: boolean;
   /**
    * Optional letterhead image as a data URL (base64). Rendered at the top

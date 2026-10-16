@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Command,
   CommandDialog,
@@ -14,7 +14,9 @@ import {
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode } from "@/lib/letters/catalog";
-import { briefTitleFor } from "@/lib/letters/display";
+import { briefTitleFor, sentenceCaseTitle } from "@/lib/letters/display";
+import { paletteFilter } from "@/components/searchPaletteFilter";
+import { resetTour } from "@/lib/onboarding";
 import {
   History,
   PlusCircle,
@@ -24,11 +26,77 @@ import {
   FileDown,
   Activity as ActivityIcon,
   Bell,
-  LayoutDashboard,
+  House,
   ScrollText,
   FileText,
+  Files,
+  Folder,
+  Users,
+  LibraryBig,
+  Scale,
+  Inbox,
+  ChartColumn,
+  ClipboardCheck,
+  Layers,
+  UserCog,
+  Compass,
   MessageSquare,
 } from "lucide-react";
+
+/** Letters listed at most; the heading says when more match. */
+const MAX_LETTER_ROWS = 8;
+
+type PageLink = { href: string; label: string; Icon: typeof House; keywords: string[] };
+
+/** Every page in the app frame for the current role, so each stays reachable. */
+function pagesFor(role: "employer" | "employee" | null | undefined, consultant: boolean): PageLink[] {
+  const shared: PageLink[] = [
+    { href: "/calendar", label: "Calendar", Icon: CalendarDays, keywords: ["deadlines"] },
+    { href: "/notifications", label: "Notifications", Icon: Bell, keywords: ["alerts", "deadlines"] },
+    { href: "/activity", label: "Activity", Icon: ActivityIcon, keywords: ["audit", "history"] },
+    // The old Exported page is the Sent tab of Letters now (/exported redirects there).
+    { href: "/letters?tab=sent", label: "Sent letters", Icon: FileDown, keywords: ["sent", "exported", "downloads"] },
+    { href: "/settings", label: "Settings and profile", Icon: Settings, keywords: ["profile", "role", "account"] },
+    { href: "/privacy", label: "Privacy and data", Icon: ShieldCheck, keywords: ["data"] },
+    { href: "/terms", label: "Terms of service", Icon: FileText, keywords: ["legal"] },
+    { href: "/pick-role", label: "Role picker", Icon: ScrollText, keywords: ["role", "switch"] },
+  ];
+  if (consultant) {
+    return [
+      { href: "/c", label: "Home", Icon: House, keywords: ["dashboard", "requests"] },
+      { href: "/c/profile", label: "My profile", Icon: UserCog, keywords: ["card", "marketplace"] },
+      { href: "/consultants", label: "Marketplace", Icon: Scale, keywords: ["experts"] },
+      ...shared,
+    ];
+  }
+  if (role === "employer") {
+    return [
+      { href: "/hr", label: "Home", Icon: House, keywords: ["dashboard"] },
+      { href: "/hr/new", label: "New letter", Icon: PlusCircle, keywords: ["new", "browse"] },
+      { href: "/letters", label: "Letters", Icon: Files, keywords: ["drafts", "all letters"] },
+      { href: "/matters", label: "Matters", Icon: Folder, keywords: ["cases"] },
+      { href: "/employees", label: "Employees", Icon: Users, keywords: ["people", "directory"] },
+      { href: "/hr/new", label: "Templates", Icon: LibraryBig, keywords: ["letter types"] },
+      { href: "/consultants", label: "Experts", Icon: Scale, keywords: ["marketplace", "review"] },
+      { href: "/bookings", label: "My bookings", Icon: Inbox, keywords: ["experts", "reviews"] },
+      { href: "/reports", label: "Reports", Icon: ChartColumn, keywords: ["compliance", "risk"] },
+      { href: "/approvals", label: "Needs approval", Icon: ClipboardCheck, keywords: ["approvals", "sign off", "review"] },
+      { href: "/bulk", label: "Bulk letters", Icon: Layers, keywords: ["csv", "batch", "bulk operations"] },
+      ...shared,
+    ].filter((p, i, all) => all.findIndex((q) => q.href === p.href && q.label === p.label) === i);
+  }
+  if (role === "employee") {
+    return [
+      { href: "/me", label: "Home", Icon: House, keywords: ["dashboard"] },
+      { href: "/me/new", label: "New letter", Icon: PlusCircle, keywords: ["new", "browse"] },
+      { href: "/letters", label: "Letters", Icon: Files, keywords: ["drafts"] },
+      { href: "/matters", label: "Matters", Icon: Folder, keywords: ["cases"] },
+      { href: "/me/new", label: "Templates", Icon: LibraryBig, keywords: ["letter types"] },
+      ...shared,
+    ];
+  }
+  return shared;
+}
 
 /**
  * Cmd+K command palette. Searches across:
@@ -40,6 +108,8 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const role = useProfileStore((s) => s.profile.role);
+  const loc = useLocation();
+  const consultant = loc.pathname === "/c" || loc.pathname.startsWith("/c/");
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -118,6 +188,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
       commentId: string;
       draftTitle: string;
       author: string;
+      body: string;
       snippet: string;
     }> = [];
     for (const d of Object.values(drafts)) {
@@ -131,6 +202,8 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
           commentId: c.id,
           draftTitle,
           author: c.authorName,
+          // The whole comment, so a match past the snippet still lists it.
+          body: c.body,
           snippet: c.body.length > 90 ? c.body.slice(0, 90).trim() + "…" : c.body,
         });
         if (out.length >= 6) return out;
@@ -143,29 +216,60 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
     if (!role) return [];
     return letterCatalogByMode(role).map((l) => ({
       id: l.id,
-      title: l.title,
+      // Sentence case, like every other list in the app (RULE-X6).
+      title: sentenceCaseTitle(l.title),
       shortTitle: l.shortTitle,
-      keywords: `${l.title} ${l.shortTitle} ${l.description} ${l.id} ${l.riskClass}`,
+      keywords: `${l.shortTitle} ${l.title} ${l.description} ${l.id} ${l.riskClass}`,
     }));
   }, [role]);
 
+  // The letters that match what was typed, with the palette's own filter, so
+  // the heading counts what is listed (FOUNDATION-X2) and a match older than
+  // the eight most recent letters is still found.
+  const matchingDrafts = useMemo(
+    () => draftRows.filter((d) => paletteFilter(d.id, query, [d.keywords]) > 0),
+    [draftRows, query]
+  );
+  const shownDrafts = matchingDrafts.slice(0, MAX_LETTER_ROWS);
+  const lettersHeading =
+    matchingDrafts.length > shownDrafts.length
+      ? `Letters (${shownDrafts.length} of ${matchingDrafts.length})`
+      : `Letters (${matchingDrafts.length})`;
+
   const prefix = role === "employer" ? "/hr" : role === "employee" ? "/me" : "";
+
+  const pages = useMemo(() => pagesFor(role, consultant), [role, consultant]);
 
   const go = (href: string) => {
     onOpenChange(false);
     nav(href);
   };
 
+  // A query that starts a page name ("Calendar", "Approvals") puts Pages
+  // first, so Enter opens the page and not a letter type (HOME-15).
+  const q = query.trim().toLowerCase();
+  const pageHit = q.length > 0 && pages.some((pg) => pg.label.toLowerCase().startsWith(q));
+  const pagesGroup = (
+    <CommandGroup heading="Pages">
+      {pages.map((pg) => (
+        <CommandItem key={`${pg.href}-${pg.label}`} value={`page-${pg.label}`} onSelect={() => go(pg.href)} keywords={[pg.label, ...pg.keywords]}>
+          <pg.Icon /> {pg.label}
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title="Search" description="Find a draft, letter type, or page">
-      <Command>
+    <CommandDialog open={open} onOpenChange={onOpenChange} title="Search" description="Find a letter, letter type or page">
+      <Command filter={paletteFilter}>
         <CommandInput
-          placeholder="Search drafts, letter types, or pages…"
+          placeholder="Search letters, letter types or pages"
           value={query}
           onValueChange={setQuery}
         />
         <CommandList>
-        <CommandEmpty>No results for "{query}".</CommandEmpty>
+        <CommandEmpty>Nothing matches "{query}".</CommandEmpty>
+        {pageHit && pagesGroup}
 
         {sectionMatches.length > 0 && (
           <>
@@ -173,7 +277,11 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
               {sectionMatches.map((s) => (
                 <CommandItem
                   key={`sec-${s.draftId}-${s.sectionId}`}
-                  value={`section-${s.draftId}-${s.sectionId}`}
+                  // The query is part of the value: cmdk only re-reads an item's
+                  // keywords when its value changes, and the snippet moves with
+                  // each keystroke. Without it a row matched for "se" was hidden
+                  // for "sent" while the heading still counted it.
+                  value={`section-${s.draftId}-${s.sectionId}-${q}`}
                   keywords={[s.snippet, s.draftTitle, s.sectionTitle]}
                   onSelect={() => {
                     onOpenChange(false);
@@ -184,12 +292,12 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                     });
                   }}
                 >
-                  <FileText className="size-4" />
+                  <FileText />
                   <div className="flex flex-col min-w-0">
                     <span className="truncate text-[13px]">
-                      {s.draftTitle} · {s.sectionTitle}
+                      {s.draftTitle}: {s.sectionTitle}
                     </span>
-                    <span className="truncate text-[11px] text-muted-foreground">{s.snippet}</span>
+                    <span className="truncate text-[12px] text-[var(--ds-muted)]">{s.snippet}</span>
                   </div>
                 </CommandItem>
               ))}
@@ -204,8 +312,8 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
               {commentMatches.map((c) => (
                 <CommandItem
                   key={`cmt-${c.commentId}`}
-                  value={`comment-${c.commentId}`}
-                  keywords={[c.snippet, c.draftTitle, c.author]}
+                  value={`comment-${c.commentId}-${q}`}
+                  keywords={[c.snippet, c.draftTitle, c.author, c.body]}
                   onSelect={() => {
                     onOpenChange(false);
                     nav(`/editor/${c.draftId}`);
@@ -215,12 +323,12 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                     });
                   }}
                 >
-                  <MessageSquare className="size-4" />
+                  <MessageSquare />
                   <div className="flex flex-col min-w-0">
                     <span className="truncate text-[13px]">
                       {c.author} on {c.draftTitle}
                     </span>
-                    <span className="truncate text-[11px] text-muted-foreground">{c.snippet}</span>
+                    <span className="truncate text-[12px] text-[var(--ds-muted)]">{c.snippet}</span>
                   </div>
                 </CommandItem>
               ))}
@@ -229,20 +337,20 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
           </>
         )}
 
-        {draftRows.length > 0 && (
+        {shownDrafts.length > 0 && (
           <>
-            <CommandGroup heading={`Drafts (${draftRows.length})`}>
-              {draftRows.slice(0, 8).map((d) => (
+            <CommandGroup heading={lettersHeading}>
+              {shownDrafts.map((d) => (
                 <CommandItem
                   key={d.id}
                   value={d.id}
                   keywords={[d.keywords]}
                   onSelect={() => go(`/editor/${d.id}`)}
                 >
-                  <History className="size-4" />
+                  <History />
                   <span className="truncate">{d.title}</span>
                   {d.recipient && (
-                    <span className="text-xs text-muted-foreground truncate">· {d.recipient}</span>
+                    <span className="truncate text-[12.5px] text-[var(--ds-muted)]">{d.recipient}</span>
                   )}
                   <CommandShortcut>{d.jurisdiction}</CommandShortcut>
                 </CommandItem>
@@ -262,9 +370,9 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                   keywords={[l.keywords]}
                   onSelect={() => go(`${prefix}/new/${l.id}`)}
                 >
-                  <PlusCircle className="size-4" />
+                  <PlusCircle />
                   <span className="truncate">{l.shortTitle}</span>
-                  <span className="text-xs text-muted-foreground truncate">· {l.title}</span>
+                  <span className="truncate text-[12.5px] text-[var(--ds-muted)]">{l.title}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -272,39 +380,25 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
           </>
         )}
 
-        <CommandGroup heading="Pages">
-          {prefix && (
-            <>
-              <CommandItem onSelect={() => go(prefix)} keywords={["dashboard", "home"]}>
-                <LayoutDashboard className="size-4" /> Home
+        {!pageHit && pagesGroup}
+        {prefix && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Help">
+              <CommandItem
+                value="help-tour"
+                keywords={["Replay the guided tour", "help", "tour", "guide", "onboarding"]}
+                onSelect={() => {
+                  onOpenChange(false);
+                  resetTour();
+                  window.location.assign(prefix);
+                }}
+              >
+                <Compass /> Replay the guided tour
               </CommandItem>
-              <CommandItem onSelect={() => go(`${prefix}/new`)} keywords={["new", "browse", "letters"]}>
-                <PlusCircle className="size-4" /> New letter
-              </CommandItem>
-            </>
-          )}
-          <CommandItem onSelect={() => go("/calendar")} keywords={["deadlines", "calendar"]}>
-            <CalendarDays className="size-4" /> Calendar
-          </CommandItem>
-          <CommandItem onSelect={() => go("/exported")} keywords={["sent", "exported"]}>
-            <FileDown className="size-4" /> Exported
-          </CommandItem>
-          <CommandItem onSelect={() => go("/activity")} keywords={["activity", "audit"]}>
-            <ActivityIcon className="size-4" /> Activity
-          </CommandItem>
-          <CommandItem onSelect={() => go("/notifications")} keywords={["notifications", "alerts", "deadlines"]}>
-            <Bell className="size-4" /> Notifications
-          </CommandItem>
-          <CommandItem onSelect={() => go("/settings")} keywords={["settings", "profile", "role"]}>
-            <Settings className="size-4" /> Settings & profile
-          </CommandItem>
-          <CommandItem onSelect={() => go("/privacy")} keywords={["privacy", "data"]}>
-            <ShieldCheck className="size-4" /> Privacy & data
-          </CommandItem>
-          <CommandItem onSelect={() => go("/pick-role")} keywords={["role", "switch", "picker"]}>
-            <ScrollText className="size-4" /> Role picker
-          </CommandItem>
-        </CommandGroup>
+            </CommandGroup>
+          </>
+        )}
         </CommandList>
       </Command>
     </CommandDialog>

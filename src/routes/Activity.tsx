@@ -1,32 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Badge, Box, Flex, Text } from "@radix-ui/themes";
+import { Link } from "react-router-dom";
 import {
+  Activity as ActivityIcon,
   Bot,
   Calendar as CalendarIcon,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  FilePlus2,
-  FileEdit,
-  FileText,
-  RotateCw,
-  ShieldCheck,
+  ClipboardCheck,
   FileDown,
-  Activity as ActivityIcon,
+  FileEdit,
+  FilePlus2,
   MessageSquare,
-  UserPlus,
-  Users,
+  RotateCw,
   Search,
+  ShieldCheck,
+  UserPlus,
   X,
 } from "lucide-react";
-import { PageHeader, EmptyState } from "@/components/ds";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { EmptyState, Pill, PillTabs } from "@/components/ds";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import type { Draft, Mode } from "@/lib/letters/types";
+import type { Mode } from "@/lib/letters/types";
 import {
   buildDraftTimeline,
   timelineCategoryFor,
@@ -34,10 +35,16 @@ import {
   type TimelineCategory,
 } from "@/lib/timeline";
 import { cn } from "@/lib/utils";
+import { Band, HomeBand, OverviewLede } from "@/components/home/HomeBand";
+import { letterName, personFor, useHomeData } from "@/components/home/homeData";
+import { PageThumb } from "@/components/home/letterArt";
+import { ListPlaceholder } from "@/components/home/HomeParts";
+import { useLettersLoading } from "@/components/home/loadState";
 
 type Event = DraftTimelineItem & {
   draftId: string;
   draftLabel: string;
+  person: string;
   mode: Mode;
   category: TimelineCategory;
 };
@@ -45,30 +52,23 @@ type Event = DraftTimelineItem & {
 type DraftGroup = {
   draftId: string;
   draftLabel: string;
+  person: string;
   mode: Mode;
   events: Event[];
   firstEvent: Event;
   lastEvent: Event;
   counts: Record<TimelineCategory, number>;
+  created: boolean;
 };
 
 /* ----------------------------------------------------------------------------
- * Activity v2 — day-pinned, draft-grouped, category-filtered audit trail.
- *
- * v1 problems we're fixing:
- *   - Every section generation was its own row, so creating a draft with
- *     8 sections produced 8 near-identical lines and drowned the page.
- *   - No way to see "what happened on draft X" without scanning the day.
- *   - The native date input was full-width and ugly.
- *
- * v2 model:
- *   - Group events by draft within each day. Each draft becomes ONE card
- *     with a category-summary (e.g. "Created · 7 AI sections · 2 comments
- *     · Exported"). Card expands to show the full event timeline.
- *   - Filter chips (All / Drafts / AI / Comments / Reviews / Exports /
- *     People) hide categories the user doesn't care about right now.
- *   - Compact date pill button opens a Popover with a custom month
- *     grid — narrow, styled to match the app, no native input ugliness.
+ * Activity (a Home tab for HR): the audit trail, one day at a time and
+ * grouped by letter. Category pills (All, Drafts, AI, Comments, Reviews,
+ * Exports, People) hide what you do not need; search narrows by letter,
+ * person or event; the date pill opens a month grid; previous and next
+ * jump to the nearest day with activity. Each letter is one card with a
+ * summary ("Created · 7 AI sections · 2 comments · Exported") that opens
+ * to show every event with its time and who did it.
  * --------------------------------------------------------------------------*/
 
 const CATEGORY_FILTERS: { id: TimelineCategory | "all"; label: string }[] = [
@@ -81,10 +81,18 @@ const CATEGORY_FILTERS: { id: TimelineCategory | "all"; label: string }[] = [
   { id: "people", label: "People" },
 ];
 
+const DAY_BTN =
+  "inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)] disabled:cursor-not-allowed disabled:opacity-30";
+
 export function Activity() {
-  const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const role = useProfileStore((s) => s.profile.role);
+  const me = useProfileStore(
+    (s) => s.profile.personal.preferredName?.trim() || s.profile.personal.legalName?.trim() || "",
+  );
+  const home = useHomeData("employer");
+  const loading = useLettersLoading();
+  const prefix = role === "employee" ? "/me" : "/hr";
 
   /* Flatten every draft's timeline into a single chronological list. */
   const events = useMemo<Event[]>(() => {
@@ -93,20 +101,25 @@ export function Activity() {
       .filter((d) => !d.isTemplateSource)
       .filter((d) => (role ? d.mode === role : true));
     for (const d of list) {
-      const label = safeMeta(d.letterType)?.shortTitle ?? d.letterType.replace(/_/g, " ");
+      const label = letterName(d);
+      const person = personFor(d);
+      // Who sends a letter for approval: its owner, else you.
+      const sender =
+        d.collaborators?.find((c) => c.role === "owner")?.name?.trim() || me || undefined;
       for (const event of buildDraftTimeline(d)) {
         out.push({
-          ...event,
+          ...asLogged(event, sender),
           draftId: d.id,
           draftLabel: label,
+          person,
           mode: d.mode,
-          category: timelineCategoryFor(event.kind),
+          category: activityCategory(event.kind),
         });
       }
     }
     out.sort((a, b) => b.createdAt - a.createdAt);
     return out;
-  }, [drafts, role]);
+  }, [drafts, role, me]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
@@ -127,14 +140,13 @@ export function Activity() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  // Auto-follow the newest day (e.g. as drafts hydrate, or a new event arrives)
-  // only while the user is still sitting on the previously-newest day. If they
-  // have scrubbed back to an older day, an incoming event must not yank them
-  // back to the top.
+  // Follow the newest day (as drafts hydrate, or a new event arrives) only
+  // while the person is still on the previously newest day; an incoming
+  // event must not pull them back from an older day.
   const prevMostRecentDay = useRef(mostRecentDay);
   useEffect(() => {
     setSelectedDay((current) =>
-      current === prevMostRecentDay.current ? mostRecentDay : current
+      current === prevMostRecentDay.current ? mostRecentDay : current,
     );
     prevMostRecentDay.current = mostRecentDay;
   }, [mostRecentDay]);
@@ -146,7 +158,7 @@ export function Activity() {
     return list.filter((e) => e.category === filter);
   }, [eventsByDay, selectedDay, filter]);
 
-  /* Group the selected day's events by draft. */
+  /* Group the selected day's events by letter, then search. */
   const draftGroups = useMemo<DraftGroup[]>(() => {
     const groups = new Map<string, DraftGroup>();
     for (const e of dayEvents) {
@@ -154,16 +166,19 @@ export function Activity() {
       if (g) {
         g.events.push(e);
         g.counts[e.category] = (g.counts[e.category] ?? 0) + 1;
+        if (e.kind === "created") g.created = true;
         if (e.createdAt < g.firstEvent.createdAt) g.firstEvent = e;
         if (e.createdAt > g.lastEvent.createdAt) g.lastEvent = e;
       } else {
         groups.set(e.draftId, {
           draftId: e.draftId,
           draftLabel: e.draftLabel,
+          person: e.person,
           mode: e.mode,
           events: [e],
           firstEvent: e,
           lastEvent: e,
+          created: e.kind === "created",
           counts: {
             changes: 0,
             ai: 0,
@@ -176,25 +191,32 @@ export function Activity() {
         });
       }
     }
-    /* Sort drafts by most-recent activity in the day, then filter by search. */
-    let sorted = [...groups.values()].sort((a, b) => b.lastEvent.createdAt - a.lastEvent.createdAt);
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      sorted = sorted.filter((g) => g.draftLabel.toLowerCase().includes(q));
+    let sorted = [...groups.values()].sort(
+      (a, b) => b.lastEvent.createdAt - a.lastEvent.createdAt,
+    );
+    const q = searchTerm.trim().toLowerCase();
+    if (q) {
+      sorted = sorted.filter(
+        (g) =>
+          g.draftLabel.toLowerCase().includes(q) ||
+          g.person.toLowerCase().includes(q) ||
+          g.events.some(
+            (e) =>
+              e.title.toLowerCase().includes(q) ||
+              (e.actorName ?? "").toLowerCase().includes(q),
+          ),
+      );
     }
     return sorted;
   }, [dayEvents, searchTerm]);
 
-  /* Active days (newest first) for the strip and prev/next navigation. */
+  /* Active days (newest first) for the strip and previous or next. */
   const recentDays = useMemo(
     () => [...eventsByDay.keys()].sort((a, b) => (a < b ? 1 : -1)),
     [eventsByDay],
   );
-  // recentDays is newest-first. "Prev" navigates to an OLDER day, "Next" to a
-  // NEWER day. selectedDay may not be in recentDays — the calendar popover lets
-  // the user pick any day, including ones with zero activity — so resolve the
-  // neighbours by date rather than assuming an in-list index (a -1 index made
-  // "Previous" jump to the newest day and disabled "Next").
+  // selectedDay may have no activity (the month grid can pick any day), so
+  // find the neighbours by date rather than by index.
   const idxInRecent = recentDays.indexOf(selectedDay);
   const olderDay =
     idxInRecent >= 0
@@ -204,14 +226,6 @@ export function Activity() {
     idxInRecent >= 0
       ? recentDays[idxInRecent - 1]
       : [...recentDays].reverse().find((d) => d > selectedDay);
-  const canPrev = !!olderDay;
-  const canNext = !!newerDay;
-  const goPrev = () => {
-    if (olderDay) setSelectedDay(olderDay);
-  };
-  const goNext = () => {
-    if (newerDay) setSelectedDay(newerDay);
-  };
 
   const toggleExpanded = (draftId: string) => {
     setExpanded((prev) => {
@@ -222,106 +236,93 @@ export function Activity() {
     });
   };
 
-  /* Smooth scroll to activity section when day changes */
-  useEffect(() => {
-    const el = document.querySelector('[data-activity-section]');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [selectedDay]);
+  const visibleEvents = draftGroups.reduce((n, g) => n + g.events.length, 0);
+
+  const band =
+    role === "employer" ? (
+      <HomeBand
+        active="activity"
+        approvals={home.waiting.length}
+        lede={
+          <OverviewLede
+            inProgress={home.summary.inProgress}
+            needYou={home.summary.needYou}
+          />
+        }
+      />
+    ) : (
+      <Band
+        crumbs={[
+          { label: "Home", href: role === "employee" ? "/me" : "/c" },
+          { label: "Activity" },
+        ]}
+        title="Activity"
+        lede="Every draft, regeneration, comment, review and export, grouped by letter and pinned to one day."
+      />
+    );
 
   return (
-    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8" data-activity-section>
-      <PageHeader
-        crumbs={[{ label: "Activity" }]}
-        title="Audit trail"
-        lede="Every draft, regeneration, comment, review, and export — grouped by letter, pinned to one day. Use the picker, prev/next, or chips to scrub."
-      />
-
-      {events.length === 0 ? (
-        <EmptyState
-          icon={ActivityIcon}
-          title="No activity yet"
-          body="Start drafting a letter and the audit trail builds itself — every regenerate, export, and attestation is logged here."
-          primary={{ label: "Start a letter", to: "/" }}
-        />
-      ) : (
-        <>
-          {/* ── Toolbar: search + filters + day nav ── */}
-          <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] mb-5">
-            {/* Row 1: Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--ds-muted)] pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search drafts, people, events…"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-9 h-10 rounded-t-lg bg-transparent text-[13px] placeholder:text-[var(--ds-muted)] focus:outline-none transition border-b border-[var(--ds-line)]"
+    <div className="min-w-0">
+      {band}
+      <div className="max-w-[1000px] px-4 pt-5 pb-12 md:px-12 md:pt-[26px]">
+        {loading ? (
+          <ListPlaceholder rows={4} label="Loading activity" />
+        ) : events.length === 0 ? (
+          <div className="rounded-[16px] border border-[var(--ds-line)]">
+            <EmptyState
+              icon={ActivityIcon}
+              title="No activity yet"
+              body="Start drafting a letter and the audit trail builds itself: every regenerate, export and attestation is logged here."
+              primary={
+                role === "employer" || role === "employee"
+                  ? { label: "Start a letter", to: `${prefix}/new` }
+                  : undefined
+              }
+            />
+          </div>
+        ) : (
+          <>
+            {/* Filters, search and day navigation */}
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2.5">
+              <PillTabs
+                className="mt-0"
+                tabs={CATEGORY_FILTERS.map((f) => ({
+                  id: f.id,
+                  label: f.label,
+                }))}
+                activeTab={filter}
+                onTabChange={(id) => setFilter(id as TimelineCategory | "all")}
               />
-              {searchTerm && (
+
+              <div className="ml-auto flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
-                  aria-label="Clear search"
-                >
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Row 2: Filter chips + day nav */}
-            <div className="flex items-center gap-2 px-3 py-2">
-              {/* Chips */}
-              <div className="flex items-center gap-1 overflow-x-auto">
-                {CATEGORY_FILTERS.map((f) => {
-                  const active = filter === f.id;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setFilter(f.id)}
-                      className={cn(
-                        "shrink-0 inline-flex items-center h-6 px-2.5 rounded-full text-[11px] font-medium transition",
-                        active
-                          ? "bg-[var(--ds-ink)] text-white"
-                          : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]",
-                      )}
-                    >
-                      {f.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Spacer */}
-              <div className="flex-1" />
-
-              {/* Day navigation */}
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={goPrev}
-                  disabled={!canPrev}
-                  className="inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] disabled:opacity-30 disabled:cursor-not-allowed hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
+                  onClick={() => olderDay && setSelectedDay(olderDay)}
+                  disabled={!olderDay}
+                  className={DAY_BTN}
                   aria-label="Previous active day"
                 >
-                  <ChevronLeft className="size-3.5" />
+                  <ChevronLeft className="size-4" aria-hidden />
                 </button>
-
                 <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1.5 h-6 px-2 rounded text-[12px] font-medium tabular-nums hover:bg-[var(--ds-line-2)] transition"
+                      data-date-pill
+                      className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13px] font-medium text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)]"
                     >
-                      <CalendarIcon className="size-3 text-[var(--ds-muted)]" />
+                      <CalendarIcon
+                        className="size-3.5 text-[var(--ds-subtle)]"
+                        aria-hidden
+                      />
                       <span>{prettyDay(selectedDay)}</span>
-                      <ChevronDown className="size-3 text-[var(--ds-muted)]" />
+                      <ChevronDown
+                        className="size-3.5 text-[var(--ds-subtle)]"
+                        aria-hidden
+                      />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent align="end" className="p-0 w-auto">
+                  <PopoverContent align="end" className="w-auto p-0">
                     <MonthGrid
                       selectedDay={selectedDay}
                       todayIso={today}
@@ -333,182 +334,215 @@ export function Activity() {
                     />
                   </PopoverContent>
                 </Popover>
-
                 <button
                   type="button"
-                  onClick={goNext}
-                  disabled={!canNext}
-                  className="inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] disabled:opacity-30 disabled:cursor-not-allowed hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
+                  onClick={() => newerDay && setSelectedDay(newerDay)}
+                  disabled={!newerDay}
+                  className={DAY_BTN}
                   aria-label="Next active day"
                 >
-                  <ChevronRight className="size-3.5" />
+                  <ChevronRight className="size-4" aria-hidden />
                 </button>
               </div>
             </div>
 
-            {/* Row 3: Recent days strip */}
-            {recentDays.length > 1 && (
-              <div className="flex items-center gap-1 px-3 pb-2.5 overflow-x-auto">
-                {recentDays.slice(0, 10).map((day) => {
-                  const active = day === selectedDay;
-                  const count = eventsByDay.get(day)?.length ?? 0;
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => setSelectedDay(day)}
-                      className={cn(
-                        "shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[11px] font-medium tabular-nums transition",
-                        active
-                          ? "bg-[var(--ds-ink)] text-white"
-                          : "bg-[var(--ds-line-2)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]",
-                      )}
-                    >
-                      <span>{relDayLabel(day, today)}</span>
-                      <span className={cn("opacity-60", active && "opacity-80")}>{count}</span>
-                    </button>
-                  );
-                })}
-                <span className="ml-auto text-[11px] tabular-nums text-[var(--ds-muted)] shrink-0 pl-2">
-                  {draftGroups.length} {draftGroups.length === 1 ? "letter" : "letters"}
-                  {" · "}
-                  {dayEvents.length} {dayEvents.length === 1 ? "event" : "events"}
+            {/* Search and recent active days */}
+            <div className="mb-5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2.5 sm:flex-nowrap">
+              <label className="relative flex h-9 w-full min-w-0 items-center sm:w-[300px] sm:shrink-0">
+                <Search
+                  className="pointer-events-none absolute left-3 size-4 text-[var(--ds-subtle)]"
+                  aria-hidden
+                />
+                <input
+                  type="text"
+                  placeholder="Search drafts, people, events"
+                  aria-label="Search activity"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-9 w-full rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] pr-8 pl-[34px] text-[14px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] placeholder:text-[var(--ds-subtle)] hover:border-[var(--ds-line-strong)] focus-visible:border-[var(--ds-ink)]"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-1.5 grid size-6 place-items-center rounded-[6px] text-[var(--ds-subtle)] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)]"
+                    aria-label="Clear search"
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                )}
+              </label>
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                {recentDays.length > 1 && (
+                  <div className="no-scrollbar flex min-w-0 items-center gap-1.5 overflow-x-auto">
+                    {recentDays.slice(0, 10).map((day) => {
+                      const active = day === selectedDay;
+                      const count = eventsByDay.get(day)?.length ?? 0;
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => setSelectedDay(day)}
+                          aria-pressed={active}
+                          className={cn(
+                            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors duration-[120ms]",
+                            active
+                              ? "bg-[var(--ds-accent)] text-[var(--ds-on-accent)]"
+                              : "bg-[var(--ds-chip)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]",
+                          )}
+                        >
+                          <span>{relDayLabel(day, today)}</span>
+                          <span className="ds-mono text-[11px]">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <span className="ml-auto shrink-0 pl-2 text-[12.5px] text-[var(--ds-muted)]">
+                  {draftGroups.length}{" "}
+                  {draftGroups.length === 1 ? "letter" : "letters"},{" "}
+                  {visibleEvents} {visibleEvents === 1 ? "event" : "events"}
                 </span>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Draft groups for the selected day */}
-          {draftGroups.length === 0 ? (
-            <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] py-10 text-center">
-              <ActivityIcon className="size-6 mx-auto text-[var(--ds-muted)] mb-2" />
-              <Text size="2" color="gray">
-                {filter === "all"
-                  ? `Nothing logged on ${prettyDay(selectedDay)}.`
-                  : `No ${labelFor(filter)} on ${prettyDay(selectedDay)}.`}
-              </Text>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {draftGroups.map((g) => (
-                <DraftGroupCard
-                  key={g.draftId}
-                  group={g}
-                  expanded={expanded.has(g.draftId)}
-                  onToggle={() => toggleExpanded(g.draftId)}
-                  onOpen={() => nav(`/editor/${g.draftId}`)}
+            {draftGroups.length === 0 ? (
+              <div className="rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] py-10 text-center">
+                <ActivityIcon
+                  className="mx-auto mb-2 size-5 text-[var(--ds-subtle)]"
+                  aria-hidden
                 />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </Box>
+                <p className="m-0 text-[13.5px] text-[var(--ds-muted)]">
+                  {searchTerm.trim()
+                    ? `Nothing matching "${searchTerm.trim()}" ${onDay(selectedDay)}.`
+                    : filter === "all"
+                      ? `Nothing logged ${onDay(selectedDay)}.`
+                      : `No ${labelFor(filter)} ${onDay(selectedDay)}.`}
+                </p>
+              </div>
+            ) : (
+              // Rows fade in together when the day or filter changes.
+              <div
+                key={`${selectedDay}:${filter}`}
+                className="flex flex-col gap-2.5 animate-in fade-in-0 duration-200 motion-reduce:animate-none"
+              >
+                {draftGroups.map((g) => (
+                  <DraftGroupCard
+                    key={g.draftId}
+                    group={g}
+                    expanded={expanded.has(g.draftId)}
+                    onToggle={() => toggleExpanded(g.draftId)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
 /* ============================================================================
- * Draft group card — collapsible summary of one draft's events on a day.
+ * One letter's events on a day: a summary that opens to every event.
  * ==========================================================================*/
 function DraftGroupCard({
   group,
   expanded,
   onToggle,
-  onOpen,
 }: {
   group: DraftGroup;
   expanded: boolean;
   onToggle: () => void;
-  onOpen: () => void;
 }) {
-  const summaryParts = buildSummaryParts(group.counts);
+  const summary = summaryText(group);
+  const first = formatTime(group.firstEvent.createdAt);
+  const last = formatTime(group.lastEvent.createdAt);
   return (
-    <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-      {/* Card header — click to expand, separate button to open editor */}
-      <div className="flex items-start gap-3 p-3">
-        <div className="mt-0.5 grid place-items-center size-8 rounded-md bg-[var(--ds-line-2)] text-[var(--ds-ink)] shrink-0">
-          <FileText className="size-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onOpen}
-              className="text-[14px] font-medium text-[var(--ds-ink)] truncate hover:underline text-left"
+    <div className="overflow-hidden rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)]">
+      <div className="flex items-start gap-3 px-4 py-3.5">
+        <span className="mt-0.5 hidden shrink-0 sm:block">
+          <PageThumb />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <Link
+              to={`/editor/${group.draftId}`}
+              className="min-w-0 truncate rounded-[4px] text-[14.5px] font-medium text-[var(--ds-ink)] underline-offset-[3px] hover:underline"
             >
               {group.draftLabel}
-            </button>
-            <Badge color="gray" variant="soft">
-              {group.mode === "employer" ? "HR" : "employee"}
-            </Badge>
-          </div>
-          {summaryParts.length > 0 && (
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[var(--ds-muted)]">
-              {summaryParts.map((p) => (
-                <span key={p.key} className="inline-flex items-center gap-1">
-                  {p.icon}
-                  <span className="tabular-nums">{p.text}</span>
+              {group.person && (
+                <span className="font-normal text-[var(--ds-muted)]">
+                  {" "}
+                  · {group.person}
                 </span>
-              ))}
-              <span className="text-[var(--ds-subtle)]">·</span>
-              <span className="tabular-nums">{formatTime(group.lastEvent.createdAt)}</span>
-            </div>
-          )}
+              )}
+            </Link>
+            <Pill tone="grey" dot={false}>
+              {group.mode === "employer" ? "HR" : "Employee"}
+            </Pill>
+          </div>
+          <p className="m-0 mt-1 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+            {summary}
+            <span aria-hidden className="text-[var(--ds-faint)]">
+              {" "}
+              ·{" "}
+            </span>
+            <span className="ds-mono text-[12px]">
+              {first === last ? last : `${first} to ${last}`}
+            </span>
+          </p>
         </div>
         <button
           type="button"
           onClick={onToggle}
-          className="shrink-0 inline-flex items-center justify-center size-7 rounded-md text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)]"
           aria-label={expanded ? "Collapse events" : "Expand events"}
           aria-expanded={expanded}
         >
-          {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          {expanded ? (
+            <ChevronUp className="size-4" aria-hidden />
+          ) : (
+            <ChevronDown className="size-4" aria-hidden />
+          )}
         </button>
       </div>
 
-      {/* Expanded event list */}
       {expanded && (
-        <div className="border-t border-[var(--ds-line-2)] bg-[var(--ds-line-2)]/30">
+        <ul className="m-0 list-none border-t border-[var(--ds-line-2)] bg-[var(--ds-surface-2)] p-0 animate-in fade-in-0 duration-150 motion-reduce:animate-none">
           {group.events
             .slice()
             .sort((a, b) => b.createdAt - a.createdAt)
             .map((e, i) => (
-              <Flex
+              <li
                 key={i}
-                px="4"
-                py="2"
-                align="start"
-                gap="3"
-                className="border-b border-[var(--ds-line-2)] last:border-b-0"
+                className="flex items-start gap-3 border-b border-[var(--ds-line-2)] px-4 py-2.5 last:border-b-0"
               >
-                <Box mt="1">{iconFor(e.kind)}</Box>
-                <Box className="flex-1 min-w-0">
-                  <Text size="2" as="div" className="text-[var(--ds-ink)]">
+                <span className="mt-0.5">{iconFor(e.kind)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] text-[var(--ds-ink)]">
                     {e.title}
-                  </Text>
+                  </span>
                   {e.detail && (
-                    <Text size="1" color="gray" as="div" className="mt-0.5">
+                    <span className="mt-0.5 block text-[12.5px] text-[var(--ds-muted)]">
                       {e.detail}
-                    </Text>
+                    </span>
                   )}
-                </Box>
-                <Text size="1" color="gray" className="tabular-nums shrink-0">
-                  {formatTime(e.createdAt)}
-                </Text>
-              </Flex>
+                </span>
+                <span className="shrink-0 text-right text-[12px] text-[var(--ds-subtle)]">
+                  <span className="ds-mono">{formatTime(e.createdAt)}</span>
+                  {e.actorName && <span className="block">{e.actorName}</span>}
+                </span>
+              </li>
             ))}
-        </div>
+        </ul>
       )}
     </div>
   );
 }
 
 /* ============================================================================
- * MonthGrid — minimal calendar popover.
- *
- * One month at a time, navigable, with dots under days that have activity
- * so the user can jump straight to a productive day. Selected day gets the
- * --ds-ink chip. No external dep — keeps the app's design surface uniform.
+ * The date pill's month grid: days with activity carry a dot.
  * ==========================================================================*/
 function MonthGrid({
   selectedDay,
@@ -523,11 +557,9 @@ function MonthGrid({
 }) {
   const [cursor, setCursor] = useState(() => parseLocalIso(selectedDay));
 
-  /* Build the 6×7 day cells for the cursor's month, starting Monday. */
   const cells = useMemo(() => {
     const firstOfMonth = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-    // 0 = Mon, 6 = Sun (UK / European convention). JS getDay: 0 = Sun.
-    const dow = (firstOfMonth.getDay() + 6) % 7;
+    const dow = (firstOfMonth.getDay() + 6) % 7; // Monday first
     const start = new Date(firstOfMonth);
     start.setDate(firstOfMonth.getDate() - dow);
     const out: { iso: string; inMonth: boolean }[] = [];
@@ -542,51 +574,51 @@ function MonthGrid({
     return out;
   }, [cursor]);
 
-  const monthLabel = cursor.toLocaleDateString(undefined, {
+  const monthLabel = cursor.toLocaleDateString("en-GB", {
     month: "long",
     year: "numeric",
   });
   const weekdays = ["M", "T", "W", "T", "F", "S", "S"];
-
   const stepMonth = (delta: number) => {
     const next = new Date(cursor);
+    next.setDate(1);
     next.setMonth(cursor.getMonth() + delta);
     setCursor(next);
   };
 
   return (
     <div className="w-[260px] p-2.5">
-      <div className="flex items-center justify-between mb-2">
+      <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
           onClick={() => stepMonth(-1)}
-          className="inline-flex items-center justify-center size-7 rounded-md text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
+          className={cn(DAY_BTN, "size-7")}
           aria-label="Previous month"
         >
-          <ChevronLeft className="size-4" />
+          <ChevronLeft className="size-4" aria-hidden />
         </button>
-        <span className="text-[13px] font-semibold text-[var(--ds-ink)]">{monthLabel}</span>
+        <span className="text-[13px] font-semibold text-[var(--ds-ink)]">
+          {monthLabel}
+        </span>
         <button
           type="button"
           onClick={() => stepMonth(1)}
-          className="inline-flex items-center justify-center size-7 rounded-md text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
+          className={cn(DAY_BTN, "size-7")}
           aria-label="Next month"
         >
-          <ChevronRight className="size-4" />
+          <ChevronRight className="size-4" aria-hidden />
         </button>
       </div>
-
-      <div className="grid grid-cols-7 gap-0.5 mb-1">
+      <div className="mb-1 grid grid-cols-7 gap-0.5">
         {weekdays.map((w, i) => (
           <div
             key={i}
-            className="text-[10px] text-[var(--ds-muted)] text-center tabular-nums uppercase tracking-wide"
+            className="text-center text-[10px] tracking-wide text-[var(--ds-subtle)] uppercase"
           >
             {w}
           </div>
         ))}
       </div>
-
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map((c) => {
           const isSelected = c.iso === selectedDay;
@@ -598,18 +630,25 @@ function MonthGrid({
               key={c.iso}
               type="button"
               onClick={() => onPick(c.iso)}
+              aria-label={`${parseLocalIso(c.iso).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}${hasActivity ? ", has activity" : ""}`}
+              aria-pressed={isSelected}
               className={cn(
-                "relative size-8 rounded-md text-[12px] tabular-nums transition",
+                "relative size-8 rounded-[7px] text-[12px] tabular-nums transition-colors duration-[120ms]",
                 !c.inMonth && "text-[var(--ds-subtle)]",
-                c.inMonth && !isSelected && "text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60",
-                isSelected && "bg-[var(--ds-ink)] text-white font-semibold",
-                isToday && !isSelected && "ring-1 ring-[var(--ds-ink)] ring-inset",
+                c.inMonth &&
+                  !isSelected &&
+                  "text-[var(--ds-ink)] hover:bg-[var(--ds-hover)]",
+                isSelected &&
+                  "bg-[var(--ds-accent)] font-semibold text-[var(--ds-on-accent)]",
+                isToday &&
+                  !isSelected &&
+                  "ring-1 ring-[var(--ds-ink)] ring-inset",
               )}
             >
               {day}
               {hasActivity && !isSelected && (
                 <span
-                  className="absolute left-1/2 -translate-x-1/2 bottom-1 size-1 rounded-full bg-[var(--ds-ink)]"
+                  className="absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full bg-[var(--ds-ink)]"
                   aria-hidden
                 />
               )}
@@ -625,55 +664,111 @@ function MonthGrid({
  * Helpers
  * ==========================================================================*/
 
-function buildSummaryParts(counts: Record<TimelineCategory, number>) {
-  const parts: { key: string; icon: React.ReactNode; text: string }[] = [];
-  const push = (
-    key: TimelineCategory,
-    icon: React.ReactNode,
-    singular: string,
-    plural: string,
-  ) => {
-    const n = counts[key];
-    if (!n) return;
-    parts.push({
-      key,
-      icon,
-      text: `${n} ${n === 1 ? singular : plural}`,
-    });
+/**
+ * Activity's own grouping: approval steps (sent for approval, approved,
+ * changes asked for, withdrawn) are reviews, not draft changes.
+ */
+function activityCategory(kind: Event["kind"]): TimelineCategory {
+  if (kind.startsWith("review_")) return "reviews";
+  return timelineCategoryFor(kind);
+}
+
+/**
+ * The store records a submission with the approver as its actor
+ * ("Submitted for review to Ruth"); the log shows who sent it, and to whom.
+ */
+function asLogged(event: DraftTimelineItem, sender: string | undefined): DraftTimelineItem {
+  if (event.kind !== "review_submitted") return event;
+  const to = event.actorName?.trim();
+  return {
+    ...event,
+    title: to && !/^workspace reviewer$/i.test(to) ? `Sent for approval to ${to}` : "Sent for approval",
+    actorName: sender,
   };
-  push("changes", <FileEdit className="size-3" />, "change", "changes");
-  push("ai", <Bot className="size-3" />, "AI section", "AI sections");
-  push("comments", <MessageSquare className="size-3" />, "comment", "comments");
-  push("reviews", <ShieldCheck className="size-3" />, "review", "reviews");
-  push("exports", <FileDown className="size-3" />, "export", "exports");
-  push("people", <Users className="size-3" />, "collaborator", "collaborators");
-  return parts;
+}
+
+const REVIEW_WORDS: Partial<Record<Event["kind"], [string, string]>> = {
+  review_submitted: ["Sent for approval", "Sent for approval {n} times"],
+  review_approved: ["Approved", "Approved {n} times"],
+  review_changes_requested: ["Changes asked for", "Changes asked for {n} times"],
+  review_withdrawn: ["Withdrawn from approval", "Withdrawn from approval {n} times"],
+  counsel_review: ["Counsel review", "{n} counsel reviews"],
+};
+
+/** "Created · 7 AI sections · 2 comments · Sent for approval · Exported" */
+function summaryText(g: DraftGroup): string {
+  const parts: string[] = [];
+  const n = (k: TimelineCategory) => g.counts[k] ?? 0;
+  const plural = (c: number, one: string, many: string) =>
+    `${c} ${c === 1 ? one : many}`;
+  if (g.created) parts.push("Created");
+  const changes = n("changes") - (g.created ? 1 : 0);
+  if (changes > 0) parts.push(plural(changes, "change", "changes"));
+  if (n("ai")) parts.push(plural(n("ai"), "AI section", "AI sections"));
+  if (n("comments")) parts.push(plural(n("comments"), "comment", "comments"));
+  // Name each approval step, in the order they happened.
+  const seen = new Map<Event["kind"], number>();
+  for (const e of [...g.events].sort((a, b) => a.createdAt - b.createdAt)) {
+    if (e.category !== "reviews") continue;
+    seen.set(e.kind, (seen.get(e.kind) ?? 0) + 1);
+  }
+  for (const [kind, count] of seen) {
+    // An employee's own letter has no approver: its approval is their sign-off (FOUNDATION-X5).
+    const words =
+      kind === "review_approved" && g.mode === "employee"
+        ? (["Signed off", "Signed off {n} times"] as [string, string])
+        : REVIEW_WORDS[kind];
+    if (!words) parts.push(plural(count, "review event", "review events"));
+    else parts.push(count === 1 ? words[0] : words[1].replace("{n}", String(count)));
+  }
+  if (n("exports"))
+    parts.push(
+      n("exports") === 1 ? "Exported" : `Exported ${n("exports")} times`,
+    );
+  if (n("people"))
+    parts.push(plural(n("people"), "collaborator", "collaborators"));
+  return parts.join(" · ") || plural(g.events.length, "event", "events");
 }
 
 function iconFor(kind: Event["kind"]) {
-  const cls = "size-4 text-[var(--gray-9)]";
-  if (kind === "created") return <FilePlus2 className={cls} />;
-  if (kind === "section_generated") return <RotateCw className={cls} />;
-  if (kind === "exported") return <FileDown className={cls} />;
-  if (kind === "counsel_review") return <ShieldCheck className="size-4 text-[var(--green-11)]" />;
-  if (kind.startsWith("comment_")) return <MessageSquare className={cls} />;
-  if (kind.startsWith("ai_")) return <Bot className={cls} />;
-  if (kind.startsWith("collaborator_")) return <UserPlus className={cls} />;
-  if (kind.endsWith("_updated")) return <FileEdit className={cls} />;
-  return <ActivityIcon className={cls} />;
+  const cls = "size-4 text-[var(--ds-subtle)]";
+  if (kind === "created") return <FilePlus2 className={cls} aria-hidden />;
+  if (kind === "section_generated")
+    return <RotateCw className={cls} aria-hidden />;
+  if (kind === "exported") return <FileDown className={cls} aria-hidden />;
+  if (kind === "counsel_review")
+    return (
+      <ShieldCheck className="size-4 text-[var(--ds-green-fg)]" aria-hidden />
+    );
+  if (kind.startsWith("comment_"))
+    return <MessageSquare className={cls} aria-hidden />;
+  if (kind.startsWith("ai_")) return <Bot className={cls} aria-hidden />;
+  if (kind.startsWith("collaborator_"))
+    return <UserPlus className={cls} aria-hidden />;
+  if (kind.endsWith("_updated"))
+    return <FileEdit className={cls} aria-hidden />;
+  if (kind.startsWith("review_"))
+    return <ClipboardCheck className={cls} aria-hidden />;
+  return <ActivityIcon className={cls} aria-hidden />;
 }
 
-function safeMeta(id: string): { shortTitle: string } | null {
-  try {
-    return getLetterMeta(id as Parameters<typeof getLetterMeta>[0]);
-  } catch {
-    return null;
-  }
-}
+/**
+ * What a filter shows, for the empty line "No <phrase> today.". Each filter
+ * has its own phrase, so labels like "AI" keep their capitals and read as
+ * a sentence ("No AI drafting today.", not "No ai today.").
+ */
+const EMPTY_PHRASE: Record<TimelineCategory | "all", string> = {
+  all: "events",
+  changes: "draft changes",
+  ai: "AI drafting",
+  comments: "comments",
+  reviews: "review activity",
+  exports: "exports",
+  people: "people changes",
+};
 
 function labelFor(c: TimelineCategory | "all"): string {
-  if (c === "all") return "events";
-  return CATEGORY_FILTERS.find((f) => f.id === c)?.label.toLowerCase() ?? "events";
+  return EMPTY_PHRASE[c] ?? "events";
 }
 
 function isoDay(ts: number): string {
@@ -692,31 +787,35 @@ function prettyDay(iso: string): string {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000);
+  const diffDays = Math.round((today.getTime() - target.getTime()) / 86400000);
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays > 0 && diffDays < 7)
-    return d.toLocaleDateString(undefined, { weekday: "long" });
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: d.getFullYear() === today.getFullYear() ? undefined : "numeric",
-  });
+    return d.toLocaleDateString("en-GB", { weekday: "long" });
+  const wd = d.toLocaleDateString("en-GB", { weekday: "short" });
+  const mon = d.toLocaleDateString("en-GB", { month: "short" });
+  return `${wd} ${d.getDate()} ${mon}${d.getFullYear() === today.getFullYear() ? "" : ` ${d.getFullYear()}`}`;
+}
+
+/** "today", "yesterday", "on Monday", "on Mon 12 Oct": for a sentence. */
+function onDay(iso: string): string {
+  const p = prettyDay(iso);
+  if (p === "Today" || p === "Yesterday") return p.toLowerCase();
+  return `on ${p}`;
 }
 
 function relDayLabel(iso: string, todayIso: string): string {
   const d = parseLocalIso(iso);
   const today = parseLocalIso(todayIso);
-  const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
+  const diffDays = Math.round((today.getTime() - d.getTime()) / 86400000);
   if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yest";
-  if (diffDays < 7) return d.toLocaleDateString(undefined, { weekday: "short" });
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return d.toLocaleDateString("en-GB", { weekday: "short" });
+  return `${d.getDate()} ${d.toLocaleDateString("en-GB", { month: "short" })}`;
 }
 
 function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString(undefined, {
+  return new Date(ts).toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -726,5 +825,3 @@ function parseLocalIso(iso: string): Date {
   const [y, m, d] = iso.split("-").map((n) => Number(n));
   return new Date(y, (m ?? 1) - 1, d ?? 1);
 }
-
-export type { Draft as _Draft };

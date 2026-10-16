@@ -45,7 +45,7 @@ export function diffHtmlAsSuggestion(
   // Word-level Myers diff (whitespace-preserving variant so runs of spaces
   // don't register as phantom changes). Newlines ride along inside common
   // runs and become paragraph breaks when we rebuild below.
-  const runs = diffWordsWithSpace(oldText, newText);
+  const runs = coalesce(diffWordsWithSpace(oldText, newText));
 
   const paragraphs: string[] = [];
   let cur = "";
@@ -55,6 +55,20 @@ export function diffHtmlAsSuggestion(
   };
 
   for (const run of runs) {
+    if (run.kind === "phrase") {
+      // A rewritten phrase: the old words struck through as one run, then
+      // the new words as one run, so the sentence still reads.
+      const lead = sharedEdge(run.old, run.new, "start");
+      const tail = sharedEdge(run.old.slice(lead.length), run.new.slice(lead.length), "end");
+      const oldMid = run.old.slice(lead.length, run.old.length - tail.length);
+      const newMid = run.new.slice(lead.length, run.new.length - tail.length);
+      cur += escapeHtml(lead);
+      if (oldMid.trim()) cur += renderMark("deletion", oldMid, attrs, createdAt);
+      else cur += escapeHtml(oldMid);
+      if (newMid.trim()) cur += renderMark("insertion", newMid, attrs, createdAt);
+      cur += escapeHtml(tail);
+      continue;
+    }
     if (run.added || run.removed) {
       // A changed run spanning a paragraph break is rare — flatten the break
       // to a space so the mark stays a single inline element.
@@ -93,6 +107,76 @@ export function diffHtmlAsSuggestion(
 /* ----------------------------------------------------------------------------
  * Internals
  * --------------------------------------------------------------------------*/
+
+type WordRun = { value: string; added?: boolean; removed?: boolean };
+type Run = (WordRun & { kind?: undefined }) | { kind: "phrase"; old: string; new: string };
+
+/** Common words between two changes that still count as one rewrite. */
+const MAX_BRIDGE_WORDS = 2;
+
+/**
+ * Join changes that sit a word or two apart into one rewritten phrase. A
+ * plain word diff of a reworded clause interleaves struck and inserted
+ * fragments ("aredo not yet completemeet ..."), which cannot be read; the
+ * reader wants the old phrase struck through, then the new one. A single
+ * changed word ("31" to "29") and changes far apart stay as they are, and a
+ * paragraph break always ends a phrase.
+ */
+function coalesce(runs: WordRun[]): Run[] {
+  const out: Run[] = [];
+  const changed = (r: WordRun | undefined) => Boolean(r && (r.added || r.removed));
+  const bridge = (r: WordRun) =>
+    !r.added && !r.removed && !r.value.includes("\n") && (r.value.match(/\S+/g)?.length ?? 0) <= MAX_BRIDGE_WORDS;
+  let i = 0;
+  while (i < runs.length) {
+    if (!changed(runs[i])) {
+      out.push(runs[i]);
+      i += 1;
+      continue;
+    }
+    // Grow the cluster: changed runs, and short common runs between changes.
+    let j = i;
+    let end = i;
+    while (j < runs.length) {
+      const r = runs[j];
+      if (changed(r)) {
+        // A change across a paragraph break stays on its own.
+        if (r.value.includes("\n")) {
+          if (j === i) end = j;
+          break;
+        }
+        end = j;
+        j += 1;
+      } else if (bridge(r) && changed(runs[j + 1])) {
+        j += 1;
+      } else break;
+    }
+    const cluster = runs.slice(i, end + 1);
+    const hasDel = cluster.some((r) => r.removed && r.value.trim());
+    const hasIns = cluster.some((r) => r.added && r.value.trim());
+    if (cluster.length === 1 || !(hasDel && hasIns)) {
+      // A lone change, or only one side changed: keep the word runs.
+      out.push(...cluster);
+    } else {
+      out.push({
+        kind: "phrase",
+        old: cluster.filter((r) => !r.added).map((r) => r.value).join(""),
+        new: cluster.filter((r) => !r.removed).map((r) => r.value).join(""),
+      });
+    }
+    i = end + 1;
+  }
+  return out;
+}
+
+/** The whitespace both strings share at their start (or end). */
+function sharedEdge(a: string, b: string, side: "start" | "end"): string {
+  const re = side === "start" ? /^\s*/ : /\s*$/;
+  const wa = a.match(re)?.[0] ?? "";
+  const wb = b.match(re)?.[0] ?? "";
+  const n = Math.min(wa.length, wb.length);
+  return side === "start" ? wa.slice(0, n) : wa.slice(wa.length - n);
+}
 
 function renderMark(
   kind: "insertion" | "deletion",

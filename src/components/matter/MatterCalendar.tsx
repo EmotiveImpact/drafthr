@@ -1,11 +1,17 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { CalendarDays, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import type { EventKind, MatterEvent } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { formatDateOnly, parseDateOnly } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Pill, type PillTone } from "@/components/ds";
+import { CardLink, SectionCard } from "./cards";
+import { KitSelect } from "./KitSelect";
+import { DatePicker } from "@/components/wizard/DatePicker";
+
+/** Quarter-hour times in 24-hour UK style, "00:00" to "23:45". */
+const TIMES = Array.from({ length: 96 }, (_, i) => `${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`);
 
 const EVENT_KIND_LABEL: Record<EventKind, string> = {
   meeting: "Meeting",
@@ -14,64 +20,45 @@ const EVENT_KIND_LABEL: Record<EventKind, string> = {
   review: "Review",
 };
 
-const EVENT_KIND_TONE: Record<EventKind, string> = {
-  meeting: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-  hearing: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-  deadline: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]",
-  review: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
+const EVENT_KINDS: EventKind[] = ["meeting", "hearing", "deadline", "review"];
+
+const EVENT_KIND_TONE: Record<EventKind, PillTone> = {
+  meeting: "blue",
+  hearing: "amber",
+  deadline: "red",
+  review: "green",
 };
 
-/**
- * Render an ISO datetime as "18 May 10:00". Falls back to date-only when
- * the time component is missing.
- */
+/** "18 May 2026, 10:00", or the date alone when there is no time. */
 function formatEventWhen(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const hasTime = iso.includes("T") || iso.includes(":");
   if (!hasTime) {
-    // Bare "YYYY-MM-DD" parses as UTC midnight via new Date(), so
-    // toLocaleDateString renders the prior day west of UTC. Use the
-    // local-parse helper which constructs the date from local components.
-    return formatDateOnly(iso, { day: "2-digit", month: "short" });
+    // A bare date parses as UTC midnight; format it from local parts.
+    return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" }, "en-GB");
   }
-  return `${d.toLocaleDateString(undefined, {
-    day: "2-digit",
-    month: "short",
-  })} ${d.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
+  return `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-export function MatterCalendar({
-  matterId,
-  events,
-}: {
-  matterId: string;
-  events: MatterEvent[];
-}) {
+/** Matter events (meetings, hearings, deadlines, reviews) with add and delete. */
+export function MatterCalendar({ matterId, events }: { matterId: string; events: MatterEvent[] }) {
   const createEvent = useDraftStore((s) => s.createEvent);
   const deleteEvent = useDraftStore((s) => s.deleteEvent);
 
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<EventKind>("meeting");
-  const [when, setWhen] = useState("");
+  const [day, setDay] = useState("");
+  const [time, setTime] = useState("");
   const [detail, setDetail] = useState("");
 
   const now = Date.now();
   const upcoming = events
     .filter((e) => {
-      // A bare "YYYY-MM-DD" whenISO (allowed by MatterEvent) parses as UTC
-      // midnight via new Date(), which is in the past all day west of UTC and
-      // would wrongly hide today's all-day events. Parse date-only values in
-      // local time (as formatEventWhen already does) and give them a full-day
-      // lookback so an all-day event stays visible for its whole day.
+      // A date-only value counts for its whole local day.
       const isDateOnly = !e.whenISO.includes("T") && !e.whenISO.includes(":");
-      const t = isDateOnly
-        ? (parseDateOnly(e.whenISO)?.getTime() ?? NaN)
-        : new Date(e.whenISO).getTime();
+      const t = isDateOnly ? (parseDateOnly(e.whenISO)?.getTime() ?? NaN) : new Date(e.whenISO).getTime();
       const threshold = isDateOnly ? now - 24 * 60 * 60 * 1000 : now - 60 * 60 * 1000;
       return !Number.isNaN(t) && t >= threshold;
     })
@@ -80,160 +67,126 @@ export function MatterCalendar({
   const resetForm = () => {
     setLabel("");
     setKind("meeting");
-    setWhen("");
+    setDay("");
+    setTime("");
     setDetail("");
     setAdding(false);
   };
-
   const onSave = () => {
     const trimmed = label.trim();
-    if (!trimmed || !when) return;
-    createEvent({
-      matterId,
-      kind,
-      label: trimmed,
-      whenISO: when,
-      detail: detail.trim() || undefined,
-    });
+    if (!trimmed || !day) return;
+    // A date alone is a whole-day event; with a time it is "YYYY-MM-DDTHH:mm".
+    const whenISO = time ? `${day}T${time}` : day;
+    createEvent({ matterId, kind, label: trimmed, whenISO, detail: detail.trim() || undefined });
     resetForm();
   };
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut", delay: 0.15 }}
-      className="mb-5"
+    <SectionCard
+      title="Events"
+      action={
+        <span className="flex items-center gap-3">
+          <span className="text-[12.5px] text-[var(--ds-subtle)]">{upcoming.length} upcoming</span>
+          {!adding && <CardLink onClick={() => setAdding(true)}>Add event</CardLink>}
+        </span>
+      }
     >
-      <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--ds-line-2)]">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 flex items-center gap-1.5">
-            <CalendarDays className="size-3" /> Calendar
-            <span className="text-[var(--ds-muted)] font-mono ml-1">
-              {upcoming.length} upcoming
-            </span>
-          </h2>
-          {!adding && (
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
-            >
-              <Plus className="size-3" /> Add event
-            </button>
-          )}
-        </div>
-
-        {events.length === 0 && !adding ? (
-          <div className="px-4 py-6 text-center">
-            <p className="text-[13px] text-[var(--ds-muted)] m-0 mb-2">
-              No upcoming events
-            </p>
-            <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-              <Plus className="size-3.5" /> Add event
-            </Button>
-          </div>
-        ) : upcoming.length === 0 && !adding ? (
-          <div className="px-4 py-6 text-center">
-            <p className="text-[13px] text-[var(--ds-muted)] m-0 mb-2">
-              No upcoming events — all past
-            </p>
-            <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-              <Plus className="size-3.5" /> Add event
-            </Button>
-          </div>
-        ) : (
-          <ul className="m-0 p-0 list-none">
-            {upcoming.map((ev) => (
-              <li
-                key={ev.id}
-                className="flex items-center gap-3 px-4 py-2.5 border-t border-[var(--ds-line-2)] first:border-t-0 group"
-              >
-                <span
-                  className={cn(
-                    "text-[10px] px-1.5 py-[1px] rounded-full font-medium shrink-0",
-                    EVENT_KIND_TONE[ev.kind]
-                  )}
-                >
-                  {EVENT_KIND_LABEL[ev.kind]}
-                </span>
-                <span className="text-[11px] font-mono text-[var(--ds-muted)] tabular-nums shrink-0 min-w-[105px]">
-                  {formatEventWhen(ev.whenISO)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] text-[var(--ds-ink)] truncate">
-                    {ev.label}
-                  </div>
-                  {ev.detail && (
-                    <div className="text-[11px] text-[var(--ds-muted)] truncate">
-                      {ev.detail}
-                    </div>
-                  )}
+      {events.length === 0 && !adding ? (
+        <EmptyLine text="No upcoming events" onAdd={() => setAdding(true)} />
+      ) : upcoming.length === 0 && !adding ? (
+        <EmptyLine text="No upcoming events. Every event is in the past." onAdd={() => setAdding(true)} />
+      ) : (
+        <ul className="m-0 list-none p-0">
+          {upcoming.map((ev) => (
+            <li key={ev.id} className="flex min-h-[47px] items-center gap-3 border-t border-[var(--ds-line-2)] py-2.5 first:border-t-0">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="truncate text-[13.5px] font-medium text-[var(--ds-ink)]">{ev.label}</span>
+                  <Pill tone={EVENT_KIND_TONE[ev.kind]}>{EVENT_KIND_LABEL[ev.kind]}</Pill>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => deleteEvent(ev.id)}
-                  className="text-[var(--ds-muted)] hover:text-[var(--ds-red-fg)] opacity-0 group-hover:opacity-100 transition shrink-0"
-                  title="Delete event"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {adding && (
-          <div className="border-t border-[var(--ds-line-2)] px-4 py-3 bg-[var(--ds-surface-2)]">
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
-              <input
-                autoFocus
-                type="text"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Event title (e.g. Witness interview)"
-                className="text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:ring-2 focus:ring-[var(--ds-line)]"
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") resetForm();
-                }}
-              />
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as EventKind)}
-                className="text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
-              >
-                <option value="meeting">Meeting</option>
-                <option value="hearing">Hearing</option>
-                <option value="deadline">Deadline</option>
-                <option value="review">Review</option>
-              </select>
-              <input
-                type="datetime-local"
-                value={when}
-                onChange={(e) => setWhen(e.target.value)}
-                className="text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
-              />
-            </div>
-            <div className="mt-2 flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={detail}
-                onChange={(e) => setDetail(e.target.value)}
-                placeholder="Optional detail (location, participants…)"
-                className="flex-1 text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:ring-2 focus:ring-[var(--ds-line)]"
-              />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={onSave} disabled={!label.trim() || !when}>
-                  Save
-                </Button>
-                <Button variant="outline" size="sm" onClick={resetForm}>
-                  Cancel
-                </Button>
+                <div className="mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
+                  {formatEventWhen(ev.whenISO)}
+                  {ev.detail && <>, {ev.detail}</>}
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => deleteEvent(ev.id)}
+                title="Delete event"
+                aria-label={`Delete event ${ev.label}`}
+                className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-subtle)] outline-none transition-[color,background-color] duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-red-fg)] focus-visible:shadow-[var(--ds-focus-ring)]"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {adding && (
+        <div className="mb-3.5 mt-1 grid gap-2 rounded-[10px] bg-[var(--ds-surface-2)] p-3">
+          <Input
+            autoFocus
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Event title, for example Witness interview"
+            aria-label="Event title"
+            className="h-9 text-[14px]"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") resetForm();
+            }}
+          />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)_minmax(0,0.8fr)]">
+            <KitSelect
+              compact
+              ariaLabel="Kind"
+              value={kind}
+              onChange={(v) => setKind(v as EventKind)}
+              options={EVENT_KINDS.map((k) => ({ value: k, label: EVENT_KIND_LABEL[k] }))}
+            />
+            <div className="min-w-0 max-sm:order-last max-sm:col-span-2">
+              <DatePicker value={day} onChange={(v) => setDay(v ?? "")} required ariaLabel="Date" placeholder="Date" className="h-9" />
+            </div>
+            <KitSelect
+              compact
+              ariaLabel="Time"
+              value={time}
+              onChange={setTime}
+              emptyLabel="No time"
+              options={TIMES.map((t) => ({ value: t, label: t }))}
+            />
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+              placeholder="Optional detail (location, participants)"
+              aria-label="Detail"
+              className="h-9 flex-1 text-[14px]"
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={onSave} disabled={!label.trim() || !day}>
+                Save
+              </Button>
+              <Button variant="outline" size="sm" onClick={resetForm}>
+                Cancel
+              </Button>
             </div>
           </div>
-        )}
-      </div>
-    </motion.section>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function EmptyLine({ text, onAdd }: { text: string; onAdd: () => void }) {
+  return (
+    <div className="mb-3.5 rounded-[10px] bg-[var(--ds-surface-2)] px-4 py-5 text-center">
+      <p className="m-0 mb-3 text-[13px] text-[var(--ds-muted)]">{text}</p>
+      <Button variant="outline" size="sm" onClick={onAdd}>
+        <Plus />
+        Add event
+      </Button>
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BrandMark, Wordmark } from "@/components/ds";
 
 /**
  * Receives WorkOS's redirect at /auth/callback?code=...&state=...
@@ -29,7 +30,7 @@ export function AuthCallback() {
     const code = params.get("code");
     const state = params.get("state");
     if (!code) {
-      setError("Missing authorization code in callback URL.");
+      setError("The sign-in link is missing its authorisation code. Start again from the sign-in page.");
       return;
     }
 
@@ -43,7 +44,7 @@ export function AuthCallback() {
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}) as { error?: string });
-          throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);
+          throw new Error(data.error ?? "Sign-in didn't finish. Go back and try again.");
         }
         // Force a fresh session fetch (don't coalesce onto a stale background
         // refresh — see AuthProvider).
@@ -108,25 +109,36 @@ export function AuthCallback() {
   }, [params, navigate, refresh]);
 
   return (
-    <div className="min-h-screen grid place-items-center px-6">
-      <div className="w-full max-w-md space-y-4 text-center">
+    <div data-page-main className="grid min-h-screen place-items-center bg-[var(--ds-canvas)] px-4 py-10">
+      <div className="flex w-full max-w-[440px] flex-col items-center gap-6">
+        <span className="inline-flex items-center gap-2.5" aria-hidden>
+          <BrandMark size={40} />
+          <Wordmark size={24} />
+        </span>
         {error ? (
-          <>
-            <h1 className="text-lg font-semibold">Couldn't complete sign-in</h1>
-            <p className="text-sm text-muted-foreground">{error}</p>
+          <section
+            aria-labelledby="callback-title"
+            className="w-full rounded-[var(--ds-r-xl)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-7 py-8 shadow-[var(--ds-shadow-m)] sm:px-9"
+          >
+            <p className="m-0 text-[13px] text-[var(--ds-muted)]">Sign in</p>
+            <h1 id="callback-title" className="ds-title m-0 mt-2 text-[30px] leading-[1.12]">
+              Couldn't complete sign-in
+            </h1>
+            <p role="alert" className="m-0 mt-3 text-[14px] leading-relaxed text-[var(--ds-body)]">
+              {error}
+            </p>
             <Link
               to="/sign-in"
-              className="inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
+              className="mt-6 inline-flex h-[42px] w-full items-center justify-center rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] px-4 text-[14px] font-medium text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)]"
             >
-              Try again
+              Back to sign in
             </Link>
-          </>
+          </section>
         ) : (
-          <>
-            <Skeleton className="h-6 w-2/3 mx-auto" />
-            <Skeleton className="h-4 w-full" />
-            <p className="text-sm text-muted-foreground">Signing you in…</p>
-          </>
+          <div role="status" className="flex w-full flex-col items-center gap-3">
+            <p className="m-0 text-[14px] text-[var(--ds-muted)]">Signing you in…</p>
+            <Skeleton className="h-2 w-48 rounded-full" />
+          </div>
         )}
       </div>
     </div>

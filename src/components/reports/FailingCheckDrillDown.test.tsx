@@ -7,6 +7,7 @@ import {
   HEALTH_CHECKS,
   failingDraftsForCheck,
 } from "@/lib/reports/check-predicates";
+import { runHealthChecks } from "@/lib/finalize/healthChecks";
 
 /* ============================================================================
  * Tests for FailingCheckDrillDown — /reports/checks/:checkId
@@ -207,6 +208,46 @@ describe("HEALTH_CHECKS predicates", () => {
     expect(reason).toMatch(/employee_name|date/);
   });
 
+  it("unresolved-placeholders agrees with the letter health score, blanks with spaces included (HOME-X40)", () => {
+    const withBody = (id: string, body: string) =>
+      makeDraft({
+        id,
+        sections: [
+          {
+            id: "sec_1",
+            sectionId: "opening",
+            title: "Intro",
+            html:
+              `<p>${body} ` +
+              "Filler text to push word-count past the lower bound ".repeat(20) +
+              "</p><hr/><p>Confidential and without prejudice.</p>",
+            required: true,
+            status: "ready",
+            versions: [],
+          },
+        ] as Draft["sections"],
+      });
+    const pred = HEALTH_CHECKS.find((c) => c.id === "unresolved-placeholders")!.predicate;
+    const cases: [string, boolean][] = [
+      ["We will meet on [date of review meeting].", true],
+      ["Outcome: [TBD: hearing outcome].", true],
+      ["Dear {{ employee_name }},", true],
+      ["Dear [employee_name],", true],
+      ["As held in [2023] ICR 1, the employer [sic] acted fairly.", false],
+      ["See the notes [See Fig 1] and [See Attachments].", false],
+      ["No blanks at all.", false],
+    ];
+    for (const [body, fails] of cases) {
+      const draft = withBody(`ph-${body.length}`, body);
+      const scorer = runHealthChecks(draft).find((c) => c.id === "placeholders")!;
+      expect(scorer.severity !== "pass", `scorer on: ${body}`).toBe(fails);
+      expect(Boolean(pred(draft)), `reports on: ${body}`).toBe(fails);
+    }
+    expect(pred(withBody("ph-spaces", "We will meet on [date of review meeting]."))).toBe(
+      "1 unresolved placeholder in body: date of review meeting"
+    );
+  });
+
   it("pii-leak predicate trips an NI-number body", () => {
     const draft = makeDraft({
       id: "pii",
@@ -341,14 +382,15 @@ describe("FailingCheckDrillDown", () => {
 
     renderAt("/reports/checks/unapproved-7d");
 
-    expect(screen.getByText("Unapproved >7d")).toBeInTheDocument();
+    expect(screen.getByText("Not approved for over 7 days")).toBeInTheDocument();
     expect(screen.getByTestId("failing-count")).toHaveTextContent("1 failing");
     expect(screen.getByText("Stale letter")).toBeInTheDocument();
     expect(screen.queryByText("Clean letter")).not.toBeInTheDocument();
     // Matter name is shown in the row.
     expect(screen.getByText("Acme grievance")).toBeInTheDocument();
-    // The "Reason this letter is failing" column contains a non-empty reason.
-    expect(screen.getByText(/no approval recorded/i)).toBeInTheDocument();
+    // The "Reason this letter is failing" column gives the reason in plain words.
+    expect(screen.getByText(/^Not approved\. Last edited .+, \d+ days ago$/)).toBeInTheDocument();
+    expect(screen.queryByText(/no approval recorded/i)).not.toBeInTheDocument();
   });
 
   it("shows the 'no failures' empty state when nothing is failing", () => {
@@ -384,6 +426,25 @@ describe("FailingCheckDrillDown", () => {
     expect(screen.getByText("Real stale")).toBeInTheDocument();
     expect(screen.queryByText("Template stale")).not.toBeInTheDocument();
     expect(screen.getByTestId("failing-count")).toHaveTextContent("1 failing");
+  });
+
+  it("an advisory rule is not shown in red, and a letter with no matter says so as on Letters", () => {
+    storeMock.drafts = {
+      stale: makeDraft({
+        id: "stale",
+        title: "Loose letter",
+        reviewStatus: "draft",
+        updatedAt: Date.now() - 20 * 24 * 60 * 60 * 1000,
+      }),
+    };
+    renderAt("/reports/checks/unapproved-7d");
+    const pill = screen.getByTestId("failing-count").firstElementChild as HTMLElement;
+    expect(pill).toHaveTextContent("1 failing");
+    expect(pill.className).not.toMatch(/ds-red/);
+    const reason = screen.getByText(/^Not approved\. Last edited/);
+    expect(reason.className).not.toMatch(/ds-red/);
+    expect(screen.getByText("No matter")).toBeInTheDocument();
+    expect(screen.queryByText("Unfiled")).not.toBeInTheDocument();
   });
 
   it("navigates to /editor/:id when a row is clicked", () => {

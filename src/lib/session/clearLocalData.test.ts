@@ -87,11 +87,19 @@ describe("clearTenantScopedLocalData (shared-browser PII leak — SA-01/SE-02)",
     expect(window.localStorage.getItem("scribehr-profile-v1")).toBeNull();
   });
 
-  it("keeps the key list in sync with the four known tenant-scoped stores", () => {
+  it("keeps the key list in sync with the known tenant-scoped stores", () => {
     // A guard so a newly-added persisted PII store is a conscious decision:
     // if you add a store that holds tenant data, add its key here too.
     expect([...TENANT_SCOPED_PERSIST_KEYS].sort()).toEqual(
-      ["drafthr.bookings.v1", "drafthr.consultant", "scribehr-profile-v1", "scribehr-store-v1"].sort(),
+      [
+        "drafthr.bookings.v1",
+        "drafthr.consultant",
+        "drafthr.letters.archived.v1",
+        "drafthr.reviews.v1",
+        "drafthr.trusted-reviewers.v1",
+        "scribehr-profile-v1",
+        "scribehr-store-v1",
+      ].sort(),
     );
   });
 });

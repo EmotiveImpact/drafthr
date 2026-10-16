@@ -1,990 +1,1122 @@
-import { useMemo, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
-  Check,
-  AlertTriangle,
-  FileText,
-  FileDown,
-  Package,
-  FileType2,
-  Send,
-  ShieldCheck,
   ArrowRight,
-  X,
+  CalendarCheck,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+  CornerDownLeft,
+  Download,
+  File,
+  FileText,
+  FileType2,
+  Package,
+  Scale,
+  ScrollText,
+  ShieldCheck,
 } from "lucide-react";
 
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
-import { toDateOnly } from "@/lib/date-only";
+import { formatDateOnly, todayDateOnly, toDateOnly } from "@/lib/date-only";
 import type { Draft } from "@/lib/letters/types";
 import { recipientNameFor } from "@/lib/letters/display";
-import { Button } from "@/components/ui/button";
-import { BrandMark } from "@/components/ds/BrandMark";
-import { Wordmark } from "@/components/ds/Wordmark";
-import { cn } from "@/lib/utils";
+import { isOwnLetter, useJourney } from "@/lib/journey/stage";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { PageHeader, type Crumb } from "@/components/ds/PageHeader";
 import {
-  runHealthChecks,
-  computeHealthScore,
-  type HealthCheck,
-} from "@/lib/finalize/healthChecks";
-import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
-import { WizardChrome } from "@/components/editor/WizardChrome";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { runHealthChecks, computeHealthScore, type HealthCheck } from "@/lib/finalize/healthChecks";
+import { PlanStep, PlanSteps, Pill } from "@/components/finalize/Plan";
 import { sanitizeLetterHtmlForExport } from "@/lib/sanitize";
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
+import { useSendFlow, useSingleDownload, type SendFlow } from "@/components/journey/send/useSendFlow";
+import {
+  BlockLine,
+  CheckBox,
+  DateGivenField,
+  EmailErrorBox,
+  GivenByField,
+  SendButton,
+  WayCards,
+} from "@/components/journey/send/parts";
+import {
+  appealCloseDate,
+  appealWorkingDays,
+  dateGivenOf,
+  fmtShortDayYear,
+  getSentRecord,
+  sentBannerText,
+} from "@/components/journey/send/record";
+import type { ExportFormat } from "@/components/journey/send/exports";
 
 /**
- * Finalise — Option H layout.
+ * Finalise and send, the full page (mock as-full-c), opened from the Send
+ * step's "Open full page" or the letter's overflow menu.
  *
- * Sidebar: WizardChrome + thumbnail + ship checklist + export 2×2 + sticky Mark-as-sent CTA.
- * Canvas: CounselAttestation (if required) + 3-card consultant marketplace + trust line + skip row.
+ * Header band: Letters › matter › letter, "Finalise and send", the lede and
+ * Back to the letter (plus the Export menu: every format on its own, without
+ * marking the letter as sent). Left: the letter as exported, scaled, with
+ * Approved by, checks and Health chips and what you're sending. Right: three
+ * numbered cards (how they get it, what to download with the evidence items
+ * and a covering note, how it was given), then the counsel sign-off for
+ * high-risk letters, the ready-to-send checklist, and the second-opinion
+ * offer. A footer bar holds Cancel and "Download and mark as sent", which
+ * goes back to the letter where the Sent moment plays.
+ *
+ * Uses the same saved choices and the same send as the Send step
+ * (components/journey/send), so the two always agree.
  */
 
-const BAND_LABEL: Record<"strong" | "adequate" | "weak", string> = {
-  strong: "Strong",
-  adequate: "Adequate",
-  weak: "Weak",
-};
+const FORMAT_ITEMS: Array<{
+  id: ExportFormat;
+  label: string;
+  ext: string;
+  hint: string;
+  icon: typeof FileText;
+  iconCls: string;
+}> = [
+  { id: "pdf", label: "PDF", ext: ".pdf", hint: "Print-ready", icon: FileText, iconCls: "text-[var(--ds-red-fg)]" },
+  { id: "docx", label: "Word", ext: ".docx", hint: "Editable", icon: FileText, iconCls: "text-[var(--ds-blue-fg)]" },
+  { id: "txt", label: "Plain text", ext: ".txt", hint: "No formatting", icon: FileType2, iconCls: "text-[var(--ds-muted)]" },
+  {
+    id: "pack",
+    label: "Evidence pack",
+    ext: ".zip",
+    hint: "Letter, evidence, summary and audit file",
+    icon: Package,
+    iconCls: "text-[var(--ds-violet-fg)]",
+  },
+  {
+    id: "audit",
+    label: "Audit record",
+    ext: ".txt",
+    hint: "Who drafted, checked and approved it",
+    icon: ScrollText,
+    iconCls: "text-[var(--ds-blue-fg)]",
+  },
+];
+
+function approvedBy(draft: Draft): string | null {
+  if (draft.reviewStatus !== "approved" && !(draft.exports ?? []).some((e) => e.format === "marked-sent")) return null;
+  const entry = (draft.approvals ?? []).filter((a) => a.decision === "approved").pop();
+  const name = entry?.reviewerName?.trim();
+  return name && !/^workspace reviewer$/i.test(name) ? name : "";
+}
+
+/**
+ * The editor layout locks the page to the window and hides overflow; the
+ * normal layout scrolls the window. Scroll this page itself only when it
+ * sits in a box that does not scroll, so the sticky preview and footer work
+ * either way.
+ */
+function useSelfScroll(ref: React.RefObject<HTMLElement | null>): boolean {
+  const [self, setSelf] = useState(false);
+  useLayoutEffect(() => {
+    let el = ref.current?.parentElement ?? null;
+    while (el && el !== document.body) {
+      const s = getComputedStyle(el);
+      if (s.overflowY === "hidden" || s.overflow === "hidden") {
+        setSelf(true);
+        return;
+      }
+      el = el.parentElement;
+    }
+  }, [ref]);
+  return self;
+}
 
 export function Finalize() {
   const { draftId } = useParams<{ draftId: string }>();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
-  const recordExport = useDraftStore((s) => s.recordExport);
-  const updateAnswers = useDraftStore((s) => s.updateAnswers);
-  const profile = useProfileStore((s) => s.profile);
-  // "Drafted by Jane Doe" line in the hero. Falls back gracefully when the
-  // user hasn't filled out their profile yet.
-  const draftedBy =
-    profile.personal.preferredName ||
-    profile.personal.legalName ||
-    "you";
+  const matter = useDraftStore((s) => (draft?.matterId ? s.matters[draft.matterId] : undefined));
+  const journey = useJourney(draftId);
+  const flow = useSendFlow(draftId ?? "", "page");
+  const exportsHook = useSingleDownload(draft);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selfScroll = useSelfScroll(rootRef);
 
-  const [busyFormat, setBusyFormat] = useState<string | null>(null);
-  const [showConfetti, setShowConfetti] = useState(false);
-  // Counsel attestation: who reviewed it and when. Seeded from the Editor's
-  // "Mark reviewed by counsel" record so an attestation made there carries
-  // through. Never defaults to the drafter: the drafter is not counsel.
-  const storedCounsel = (draft?.answers as Record<string, unknown> | undefined)?._counselReview as
-    | { reviewedBy?: string; reviewedOn?: string }
-    | undefined;
-  const [counselName, setCounselName] = useState(storedCounsel?.reviewedBy ?? "");
-  const [counselDate, setCounselDate] = useState(storedCounsel?.reviewedOn ?? toDateOnly(new Date()));
-  const [counselConfirmed, setCounselConfirmed] = useState(
-    Boolean(storedCounsel?.reviewedBy && storedCounsel?.reviewedOn),
-  );
-
-  const checks = useMemo<HealthCheck[]>(
-    () => (draft ? runHealthChecks(draft) : []),
-    [draft],
-  );
+  const checks = useMemo<HealthCheck[]>(() => (draft ? runHealthChecks(draft) : []), [draft]);
   const scoreData = useMemo(() => computeHealthScore(checks), [checks]);
 
-  if (!draft || !draftId) {
+  if (!draft || !draftId || !flow || !journey) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <p className="text-sm text-[var(--ds-muted)]">Draft not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => nav("/")}>
-          <ArrowLeft className="size-4 mr-1" /> Back home
+      <div className="mx-auto w-full max-w-3xl px-6 py-12">
+        <p className="m-0 text-[14.5px] text-[var(--ds-muted)]">Draft not found.</p>
+        <Button variant="outline" className="mt-4" onClick={() => nav("/")}>
+          <ArrowLeft className="size-4" /> Back home
         </Button>
       </div>
     );
   }
 
   const meta = getLetterMeta(draft.letterType);
+  const letterTitle = draft.title ?? meta.title;
+  const approver = approvedBy(draft);
+  const isSent = journey.stage === "sent";
+  const counselMissing = flow.counselRequired && !flow.attestation;
+  const backHref = `/editor/${draft.id}`;
+  const first = flow.recipient.short;
 
-  const counselGateRequired = exportRequiresCounselGate(draft);
-  const counselComplete = counselConfirmed && counselName.trim() !== "" && counselDate !== "";
-  const counselAttested = !counselGateRequired || counselComplete;
+  const crumbs: Crumb[] = [
+    { label: "Letters", href: "/letters" },
+    ...(matter ? [{ label: matter.name, href: `/matters/${matter.id}` }] : []),
+    { label: letterTitle, href: backHref },
+  ];
 
-  const readyToShip = scoreData.failCount === 0 && scoreData.band === "strong";
-  const shipBlocked = scoreData.failCount > 0 || !counselAttested;
+  // Only letters with a right of appeal have an appeal window (SEND-X1).
+  const appealNote = appealWorkingDays(draft) !== null ? " DraftHR records the date for the appeal window." : "";
+  const lede: ReactNode = isSent ? (
+    <>
+      <b>Sent.</b> {first ? `${first} has` : "They have"} this letter. The exports stay here if you need them again.
+    </>
+  ) : approver !== null ? (
+    <>
+      {/* An employee's own letter has no approver: they signed it off (FOUNDATION-X5). */}
+      {isOwnLetter(draft) ? "Signed off." : approver ? `Approved by ${approver}.` : "Approved."} Choose how {first || "they"} {first ? "gets" : "get"} it
+      and what to keep with it.{appealNote}
+    </>
+  ) : (
+    <>
+      Not approved yet ({journey.statusLabel.toLowerCase()}). Choose how {first || "they"} {first ? "gets" : "get"} it
+      and what to keep with it.{appealNote}
+    </>
+  );
 
-  /* ---------------------------- Exports ---------------------------- */
+  const exportedFormats = new Set<string>((draft.exports ?? []).map((e) => e.format));
+  const auditDone = (draft.timeline ?? []).some((t) => (t.meta as Record<string, unknown> | undefined)?.format === "audit");
 
-  const downloadBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
+  const exportMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className={buttonVariants({ variant: "outline" })} aria-label="Export">
+          <Download className="size-4" />
+          <span className="hidden sm:inline">Export</span>
+          <ChevronDown className="size-4 text-[var(--ds-subtle)]" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[280px]">
+        <DropdownMenuLabel className="text-[12px] font-normal text-[var(--ds-muted)]">
+          {counselMissing ? "Add the counsel sign-off to export" : "Download this letter as"}
+        </DropdownMenuLabel>
+        {FORMAT_ITEMS.map((a) => {
+          const done = a.id === "audit" ? auditDone : exportedFormats.has(a.id);
+          return (
+            <DropdownMenuItem
+              key={a.id}
+              disabled={counselMissing || exportsHook.busy !== null}
+              // The pack holds what this page chose: the evidence ticked
+              // below and the covering note (SEND-X4).
+              onSelect={() =>
+                exportsHook.download(
+                  a.id,
+                  a.id === "pack"
+                    ? { excludeEvidence: flow.prefs.excludedEvidence, coverNote: flow.prefs.coverNote }
+                    : undefined
+                )
+              }
+              className="gap-2.5 py-2"
+            >
+              <a.icon className={cn("size-4", a.iconCls)} />
+              <span className="flex min-w-0 flex-col">
+                <span className="text-[13px] text-[var(--ds-ink)]">{a.label}</span>
+                <span className="truncate text-[11.5px] text-[var(--ds-muted)]">{a.hint}</span>
+              </span>
+              <span className="ml-auto flex items-center gap-1.5">
+                {done && <Check aria-label="Downloaded" className="size-3.5 text-[var(--ds-green-fg)]" />}
+                <span className="ds-mono text-[11px] text-[var(--ds-subtle)]">{a.ext}</span>
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
-  const guardCounsel = (): boolean => {
-    if (counselGateRequired && !counselComplete) {
-      alert("Please enter who reviewed this letter as counsel, and when, before exporting it.");
-      return false;
-    }
-    return true;
-  };
-
-  // The attestation to stamp into the export artifact + the export record.
-  // Only when this letter actually required counsel review AND the user
-  // confirmed it — otherwise undefined (no review claimed). reviewedOn is a
-  // local-calendar date (legal records read in the user's locale).
-  const exportAttestation = ():
-    | { reviewedBy: string; reviewedOn: string }
-    | undefined => {
-    if (!counselGateRequired || !counselComplete) return undefined;
-    return { reviewedBy: counselName.trim(), reviewedOn: counselDate };
-  };
-
-  const onExportPdf = async () => {
-    if (!guardCounsel()) return;
-    setBusyFormat("pdf");
-    try {
-      const { renderLetterPdfBlob, filenameFor } = await import("@/lib/export/pdf");
-      const att = exportAttestation();
-      const blob = await renderLetterPdfBlob(draft, att);
-      downloadBlob(blob, filenameFor(draft));
-      recordExport(draft.id, { format: "pdf", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
-    } catch (err) {
-      alert(`PDF export failed: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      setBusyFormat(null);
-    }
-  };
-
-  const onExportDocx = async () => {
-    if (!guardCounsel()) return;
-    setBusyFormat("docx");
-    try {
-      const { renderLetterDocxBlob, docxFilenameFor } = await import("@/lib/export/docx");
-      const blob = await renderLetterDocxBlob(draft);
-      downloadBlob(blob, docxFilenameFor(draft));
-      const att = exportAttestation();
-      recordExport(draft.id, { format: "docx", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
-    } catch (err) {
-      alert(`DOCX export failed: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      setBusyFormat(null);
-    }
-  };
-
-  const onExportTxt = () => {
-    if (!guardCounsel()) return;
-    setBusyFormat("txt");
-    try {
-      // Route through the DOM so HTML entities are DECODED, not left as raw
-      // "&amp;"/"&lt;" tokens in the .txt (bug #11). innerHTML strips tags AND
-      // decodes entities in one step, matching the PDF/DOCX textContent paths.
-      // TipTap's HTML has no whitespace between blocks, so textContent alone
-      // ran paragraphs together ("Dear Jane,We write..."). Break lines at
-      // <br> and paragraph-level blocks first.
-      const htmlToPlain = (html: string): string => {
-        const el = document.createElement("div");
-        el.innerHTML = html ?? "";
-        el.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
-        el.querySelectorAll("li").forEach((li) => li.prepend("- "));
-        el.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, blockquote, div, tr").forEach((b) =>
-          b.append("\n\n"),
-        );
-        return (el.textContent ?? "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-      };
-      // Resolve inline AI suggestions the same way the PDF/DOCX/pack sinks do
-      // (mergeAcceptedSuggestionsHtml → sanitizeLetterHtmlForExport) BEFORE
-      // flattening to text. On raw s.html, an unresolved suggestion carries both
-      // a <del>(original) and an <ins>(proposed) run, so textContent would
-      // concatenate BOTH → doubled/contradictory sentences in the .txt.
-      const plain = draft.sections
-        .map((s) =>
-          htmlToPlain(
-            sanitizeLetterHtmlForExport(
-              mergeAcceptedSuggestionsHtml(s.html ?? "", { forExport: true }),
-            ),
-          ),
-        )
-        .filter(Boolean)
-        .join("\n\n");
-      const blob = new Blob([plain], { type: "text/plain;charset=utf-8" });
-      const slug = (draft.title ?? meta.title)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-      downloadBlob(blob, `${slug || "letter"}.txt`);
-      const att = exportAttestation();
-      recordExport(draft.id, { format: "txt", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
-    } catch (err) {
-      alert(`TXT export failed: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      setBusyFormat(null);
-    }
-  };
-
-  const onExportZip = async () => {
-    if (!guardCounsel()) return;
-    setBusyFormat("zip");
-    try {
-      const { exportLetterPack } = await import("@/lib/export/pack");
-      const attestation = exportAttestation();
-      await exportLetterPack(draft, attestation);
-      recordExport(draft.id, {
-        format: "pack",
-        reviewedBy: attestation?.reviewedBy,
-        reviewedOn: attestation?.reviewedOn,
-      });
-    } catch (err) {
-      alert(`ZIP export failed: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      setBusyFormat(null);
-    }
-  };
-
-  /* --------------------- Mark as sent + confetti -------------------- */
-
-  const onMarkAsSent = () => {
-    if (!guardCounsel()) return;
-    if (scoreData.failCount > 0) return;
-    setShowConfetti(true);
-    const att = exportAttestation();
-    recordExport(draft.id, { format: "marked-sent", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
-    setTimeout(() => nav("/activity"), 1600);
-  };
-
-  /* -------------------------- Render -------------------------- */
+  const goBack = () => nav(backHref);
+  const onSent = () => nav(backHref);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      {showConfetti && <ConfettiBurst onDone={() => setShowConfetti(false)} />}
+    <div
+      ref={rootRef}
+      data-slot="finalise-page"
+      className={cn("flex w-full min-w-0 flex-col bg-[var(--ds-surface)]", selfScroll && "min-h-0 flex-1 overflow-y-auto")}
+    >
+      <div className="px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[34px]">
+        <PageHeader
+          crumbs={crumbs}
+          title="Finalise and send"
+          lede={lede}
+          className="mb-0"
+          actions={
+            <>
+              <Link to={backHref} className={buttonVariants({ variant: "outline" })}>
+                <ArrowLeft className="size-4" />
+                Back to the letter
+              </Link>
+              {exportMenu}
+            </>
+          }
+        />
+      </div>
 
-      {/* Branded sticky header */}
-      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
-        <Link
-          to="/"
-          aria-label="Home"
-          className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10 mr-2"
-        >
-          <BrandMark size={36} />
-          <Wordmark size={16} className="hidden sm:inline" />
-        </Link>
-        <span className="text-[13px] font-medium text-[var(--ds-ink)]">Finalise</span>
-        <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
-          · {draft.title ?? meta.title}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => nav(`/editor/${draft.id}/review`)}
-          >
-            <ArrowLeft className="size-3.5 mr-1.5" />
-            Review
-          </Button>
-        </div>
-      </header>
+      <div className="grid grid-cols-1 items-start gap-6 px-4 pb-[120px] pt-7 sm:px-8 lg:grid-cols-[400px_minmax(0,1fr)] lg:gap-9 lg:px-12">
+        <PreviewPanel
+          draft={draft}
+          approver={approver}
+          checks={checks}
+          healthScore={scoreData.score}
+        />
 
-      {/* 2-column layout: 300px sidebar + scrollable body */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
-
-        {/* ── Sidebar ── */}
-        <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
-          <WizardChrome draftId={draft.id} mode={draft.mode} current="finalize" />
-
-          <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3 min-h-0">
-            {/* What you're sending */}
-            <SectionLabel>What you're sending</SectionLabel>
-            <ThumbnailBlock draft={draft} />
-
-            {/* Ready to ship checklist */}
-            <SectionLabel right={`${scoreData.score} · ${BAND_LABEL[scoreData.band]}`}>
-              Ready to ship
-            </SectionLabel>
-            <ShipChecklist
-              draft={draft}
-              counselAttested={counselAttested}
-              onFixClick={() => nav(`/editor/${draft.id}/review`)}
-            />
-
-            {/* Export 2×2 grid */}
-            <SectionLabel>Export</SectionLabel>
-            <div className="grid grid-cols-2 gap-1.5">
-              <FormatTile
-                compact
-                title="PDF"
-                desc="Print-ready"
-                primary
-                busy={busyFormat === "pdf"}
-                onClick={onExportPdf}
-                disabled={!counselAttested}
-                icon={<FileText className="size-3.5" />}
-              />
-              <FormatTile
-                compact
-                title="DOCX"
-                desc="Editable"
-                busy={busyFormat === "docx"}
-                onClick={onExportDocx}
-                disabled={!counselAttested}
-                icon={<FileText className="size-3.5" />}
-              />
-              <FormatTile
-                compact
-                title="TXT"
-                desc="Plain"
-                busy={busyFormat === "txt"}
-                onClick={onExportTxt}
-                disabled={!counselAttested}
-                icon={<FileType2 className="size-3.5" />}
-              />
-              <FormatTile
-                compact
-                title="ZIP"
-                desc="Pack"
-                busy={busyFormat === "zip"}
-                onClick={onExportZip}
-                disabled={!counselAttested}
-                icon={<Package className="size-3.5" />}
-              />
-            </div>
-          </div>
-
-          {/* Sticky Mark-as-sent CTA */}
-          <button
-            type="button"
-            onClick={onMarkAsSent}
-            disabled={shipBlocked}
-            className="shrink-0 bg-[var(--ds-ink)] text-white text-[13px] font-bold py-3 flex items-center justify-center gap-2 hover:opacity-90 disabled:bg-[var(--ds-line)] disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed transition"
-          >
-            <Send className="size-3.5" /> Mark as sent
-          </button>
-        </aside>
-
-        {/* ── Canvas / Body ── */}
-        <main className="min-h-0 overflow-y-auto">
-          <div className="mx-auto max-w-[1000px] px-4 py-7 sm:px-6 sm:py-10 pb-24 lg:pb-10">
-
-            {/* Counsel attestation gate — only for high-risk letters */}
-            {counselGateRequired && (
-              <CounselAttestation
-                confirmed={counselConfirmed}
-                reviewerName={counselName}
-                reviewedOn={counselDate}
-                onReviewerNameChange={setCounselName}
-                onReviewedOnChange={setCounselDate}
-                onToggle={() => {
-                  const next = !counselConfirmed;
-                  setCounselConfirmed(next);
-                  // Persist so the attestation survives leaving Finalize and
-                  // matches what the Editor and Review step show.
-                  const answers = { ...draft.answers } as Record<string, unknown>;
-                  if (next && counselName.trim() && counselDate) {
-                    answers._counselReview = {
-                      reviewedBy: counselName.trim(),
-                      reviewedOn: counselDate,
-                      attestedAt: Date.now(),
-                    };
-                  } else {
-                    delete answers._counselReview;
-                  }
-                  updateAnswers(draft.id, answers as typeof draft.answers);
-                }}
-              />
-            )}
-
-            {/* Document hero + honest specialist-review CTA. No fabricated
-             * stats, testimonials, or seed cards — the real marketplace
-             * (/consultants) owns listing, loading, and empty states. */}
-            <DocumentHero
-              letterTitle={draft.title ?? meta.title}
-              draftedBy={draftedBy}
-              recipient={recipientNameFor(draft) ?? "HR Officer"}
-              onSeeSpecialists={() => nav(`/consultants?draft=${draft.id}`)}
-            />
-
-            {/* Skip row */}
-            <div className="mt-3 text-center text-[11.5px] text-[var(--ds-muted)] p-3 border border-dashed border-[var(--ds-line)] rounded-lg">
-              Or skip —{" "}
+        <section aria-label="Finalise" className="order-1 min-w-0 lg:order-none">
+          {/* Needed: first, it holds the send. Signed off: after the steps. */}
+          {counselMissing && !isSent && <CounselAttestation draft={draft} />}
+          {isSent ? (
+            <SentCard draft={draft} matterName={matter?.name} />
+          ) : (
+            <>
+              <Section n={1} title={first ? `How will ${first} get this letter?` : "How will they get this letter?"}>
+                <WayCards flow={flow} variant="page" />
+                <EmailErrorBox flow={flow} />
+              </Section>
+              {flow.prefs.way === "self" && <DownloadSection flow={flow} />}
+              <Section n={flow.prefs.way === "self" ? 3 : 2} title="Record how it was given">
+                <GivenSection flow={flow} />
+              </Section>
+            </>
+          )}
+          {flow.counselRequired && (isSent || !counselMissing) && <CounselAttestation draft={draft} />}
+          <ChecklistCard draft={draft} counselMissing={counselMissing} scoreData={scoreData} />
+          <ExpertsCard onSeeSpecialists={() => nav(`/consultants?draft=${draft.id}`)} />
+          {!isSent && (
+            <p className="m-0 mt-3 px-1 text-center text-[12.5px] text-[var(--ds-muted)]">
+              Or skip,{" "}
               <button
                 type="button"
-                onClick={onMarkAsSent}
-                disabled={!readyToShip}
-                className="text-[var(--ds-ink)] font-semibold underline disabled:no-underline disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed"
+                onClick={() => {
+                  if (!counselMissing) flow.send({ onSent });
+                }}
+                disabled={!!flow.block || flow.working || counselMissing}
+                className="rounded-[4px] font-medium text-[var(--ds-ink)] underline underline-offset-[3px] outline-none focus-visible:shadow-[var(--ds-focus-ring)] disabled:cursor-not-allowed disabled:text-[var(--ds-subtle)] disabled:no-underline"
               >
                 mark as sent
               </button>{" "}
               without a second opinion
-            </div>
-
-            {/* MOBILE-ONLY ship surface — the desktop sidebar (checklist +
-             * export + Mark-as-sent) is hidden below lg, so mirror those
-             * essentials here so mobile users can actually ship. The viewport-
-             * fixed Mark-as-sent button outside the main element handles
-             * thumb-reach for the primary action. */}
-            <div className="lg:hidden mt-8 pt-6 border-t border-[var(--ds-line)] flex flex-col gap-3">
-              <SectionLabel right={`${scoreData.score} · ${BAND_LABEL[scoreData.band]}`}>
-                Ready to ship
-              </SectionLabel>
-              <ShipChecklist
-                draft={draft}
-                counselAttested={counselAttested}
-                onFixClick={() => nav(`/editor/${draft.id}/review`)}
-              />
-
-              <SectionLabel>Export</SectionLabel>
-              <div className="grid grid-cols-2 gap-2">
-                <FormatTile
-                  compact
-                  title="PDF"
-                  desc="Print-ready"
-                  primary
-                  busy={busyFormat === "pdf"}
-                  onClick={onExportPdf}
-                  disabled={!counselAttested}
-                  icon={<FileText className="size-3.5" />}
-                />
-                <FormatTile
-                  compact
-                  title="DOCX"
-                  desc="Editable"
-                  busy={busyFormat === "docx"}
-                  onClick={onExportDocx}
-                  disabled={!counselAttested}
-                  icon={<FileText className="size-3.5" />}
-                />
-                <FormatTile
-                  compact
-                  title="TXT"
-                  desc="Plain"
-                  busy={busyFormat === "txt"}
-                  onClick={onExportTxt}
-                  disabled={!counselAttested}
-                  icon={<FileType2 className="size-3.5" />}
-                />
-                <FormatTile
-                  compact
-                  title="ZIP"
-                  desc="Pack"
-                  busy={busyFormat === "zip"}
-                  onClick={onExportZip}
-                  disabled={!counselAttested}
-                  icon={<Package className="size-3.5" />}
-                />
-              </div>
-            </div>
-
-          </div>
-        </main>
+            </p>
+          )}
+        </section>
       </div>
 
-      {/* Mobile-only viewport-fixed Mark-as-sent CTA. The desktop equivalent
-       * lives inside the sidebar at the bottom of the left column. Below lg
-       * the sidebar is hidden, so we anchor the primary ship action to the
-       * viewport bottom — always reachable without scrolling. */}
-      <button
-        type="button"
-        onClick={onMarkAsSent}
-        disabled={shipBlocked}
-        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[var(--ds-ink)] text-white text-[14px] font-bold py-3.5 flex items-center justify-center gap-2 hover:opacity-90 disabled:bg-[var(--ds-line)] disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed shadow-[0_-4px_12px_rgba(0,0,0,0.10)] transition"
+      <footer
+        data-slot="finalise-footer"
+        className="sticky bottom-0 z-20 mt-auto flex min-h-[72px] flex-wrap items-center gap-2.5 border-t border-[var(--ds-line)] bg-[var(--ds-surface)]/95 px-4 py-3 backdrop-blur-[6px] sm:px-8 lg:px-12"
       >
-        <Send className="size-4" /> Mark as sent
-      </button>
+        {isSent ? (
+          <>
+            <span className="hidden items-center gap-2 text-[13.5px] text-[var(--ds-muted)] sm:inline-flex">
+              <CircleCheck aria-hidden className="size-4 text-[var(--ds-green-solid)]" />
+              <b className="font-medium text-[var(--ds-ink)]">Sent</b>
+              {dateGivenOf(draft) ? ` on ${fmtShortDayYear(dateGivenOf(draft) as string)}` : ""}
+            </span>
+            <span className="hidden flex-1 sm:block" />
+            <Button className="w-full sm:w-auto" onClick={goBack}>
+              Back to the letter
+            </Button>
+          </>
+        ) : (
+          <>
+            <span className="hidden items-center gap-2 text-[13.5px] text-[var(--ds-muted)] sm:inline-flex">
+              <CornerDownLeft aria-hidden className="size-4" />
+              Afterwards: <b className="font-medium text-[var(--ds-ink)]">back to the letter, with what's next</b>
+            </span>
+            <span className="hidden flex-1 sm:block" />
+            {(flow.block || counselMissing) && (
+              <div className="w-full text-[12.5px] text-[var(--ds-muted)] sm:w-auto sm:max-w-[360px] sm:text-right">
+                {flow.block ? (
+                  <BlockLine block={flow.block} className="mt-0" />
+                ) : (
+                  <p className="m-0">Add the counsel sign-off to mark this as sent.</p>
+                )}
+              </div>
+            )}
+            <Button variant="outline" className="hidden sm:inline-flex" onClick={goBack} disabled={flow.working}>
+              Cancel
+            </Button>
+            <SendButton
+              flow={flow}
+              size="page"
+              blocked={counselMissing}
+              onSent={onSent}
+              className="h-11 w-full sm:h-[38px] sm:w-auto"
+            />
+          </>
+        )}
+      </footer>
+      {flow.gate}
+      {exportsHook.gate}
     </div>
   );
 }
 
 /* ============================================================================
- * Subcomponents
+ * Parts
  * ==========================================================================*/
 
-/**
- * Document hero + social-proof upsell.
- *
- * Three vertically stacked sections inside one bordered card:
- *   1. Letter title (Playfair display serif) + "drafted by X · ready for Y"
- *      subtitle, with a Fluent Emoji 3D page icon on the left.
- *   2. Violet-tinted social-proof block: avatar stack (4 recent bookers) +
- *      "412 people had a specialist review..." sentence + "See specialists ↓"
- *      CTA that smooth-scrolls to the consultant grid below.
- *   3. Italic testimonial quote with the customer's name + resolution date.
- *
- * The 412 number and testimonial are placeholder copy — wire to a real
- * bookings API + permissioned customer testimonials before promoting this
- * to production marketing channels.
- *
- * Icons use Microsoft Fluent Emoji 3D (open source, CDN-hosted) so the
- * page/paperclip/etc render identically across macOS, Windows, Linux,
- * iOS, and Android — instead of falling back to the platform emoji font.
- */
-function DocumentHero({
-  letterTitle,
-  draftedBy,
-  recipient,
-  onSeeSpecialists,
-}: {
-  letterTitle: string;
-  draftedBy: string;
-  recipient: string;
-  onSeeSpecialists: () => void;
-}) {
+function Section({ n, title, aside, children }: { n: number; title: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-      className="mt-2 rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:p-6 flex flex-col gap-3"
-      aria-labelledby="finalise-hero-title"
+    <section
+      aria-labelledby={`fin-sec-${n}`}
+      className="mb-4 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 py-5 sm:px-[22px]"
     >
-      {/* Title row.
-       *
-       * The page icon is the raw Unicode `📄` (Page Facing Up) character. On
-       * macOS/iOS it renders as Apple Color Emoji — the warm white document
-       * with horizontal lines that the design mockup used. Windows users
-       * see Segoe UI Emoji; Android users see Noto Color Emoji. We accept
-       * the platform drift in exchange for the warmth Apple's emoji has
-       * (Microsoft Fluent Emoji 3D was tried and rejected — it renders as
-       * a purple Microsoft-house-style document that doesn't match the
-       * mockup's softness). */}
-      <div className="flex items-start gap-3">
-        <div
+      <div className="mb-3.5 flex items-center gap-3">
+        <span
           aria-hidden
-          className="text-[36px] leading-none shrink-0 select-none"
-          style={{ fontFamily: 'apple color emoji, "segoe ui emoji", "noto color emoji", emoji, system-ui, sans-serif' }}
+          className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--ds-ink)] text-[12px] font-semibold text-[var(--ds-on-accent)]"
         >
-          📄
-        </div>
-        <div className="flex-1 min-w-0">
-          <h2
-            id="finalise-hero-title"
-            className="m-0 font-display text-[22px] sm:text-[24px] font-semibold tracking-[-.005em] leading-[1.15] text-[var(--ds-ink)]"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            {letterTitle}
-          </h2>
-          <p className="text-[12.5px] text-[var(--ds-muted)] mt-1 m-0">
-            UK · drafted by {draftedBy} · ready for {recipient}
-          </p>
-        </div>
+          {n}
+        </span>
+        <h2 id={`fin-sec-${n}`} className="ds-title m-0 min-w-0 text-[21px] leading-[1.2]">
+          <span className="sr-only">{n}. </span>
+          {title}
+        </h2>
+        {aside && <span className="ml-auto shrink-0 text-[12.5px] text-[var(--ds-subtle)]">{aside}</span>}
       </div>
-
-      {/* Optional specialist review — an honest CTA into the real marketplace.
-       * No fabricated stats or testimonials; pricing/availability live on the
-       * specialists' actual profiles. */}
-      <div className="mt-1 rounded-xl border border-[var(--ds-violet-bd,#ddd6fe)] bg-gradient-to-br from-[var(--ds-violet-bg,#f5f3ff)] to-white p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-        <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-[var(--ds-body)]">
-          <strong className="text-[var(--ds-ink)] font-semibold">
-            Want a second opinion before you send?
-          </strong>{" "}
-          Book a qualified employment-law specialist to review this letter — most
-          reviews come back within 24 hours.
-        </div>
-
-        <button
-          type="button"
-          onClick={onSeeSpecialists}
-          className="shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition whitespace-nowrap"
-        >
-          See specialists
-          <ArrowRight className="size-3.5" />
-        </button>
-      </div>
-    </motion.section>
+      {children}
+    </section>
   );
 }
 
-/** Tiny uppercase section label with optional right-aligned secondary text. */
-function SectionLabel({
-  children,
-  right,
+/** The letter as exported, scaled into the grey stage (as-full-c `.stage`). */
+function PreviewPanel({
+  draft,
+  approver,
+  checks,
+  healthScore,
 }: {
-  children: React.ReactNode;
-  right?: string;
+  draft: Draft;
+  approver: string | null;
+  checks: HealthCheck[];
+  healthScore: number;
+}) {
+  const total = checks.length;
+  const passing = checks.filter((c) => c.severity === "pass").length;
+  const failing = checks.some((c) => c.severity === "fail");
+  const healthTone =
+    healthScore >= 85
+      ? "text-[var(--ds-health-good)]"
+      : healthScore >= 70
+        ? "text-[var(--ds-health-mid)]"
+        : "text-[var(--ds-health-low)]";
+  // The number is small text: the darker status ink keeps it above 4.5:1 (RULE-057).
+  const healthInk =
+    healthScore >= 85
+      ? "text-[var(--ds-green-fg)]"
+      : healthScore >= 70
+        ? "text-[var(--ds-amber-fg)]"
+        : "text-[var(--ds-red-fg)]";
+  const chip = "inline-flex items-center gap-1.5 rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-[9px] py-[3px] text-[12.5px] text-[var(--ds-body)]";
+
+  return (
+    <div className="order-2 flex flex-col items-center rounded-[16px] bg-[var(--ds-canvas)] pt-[22px] lg:sticky lg:top-6 lg:order-none">
+      <div className="h-[470px] w-[352px] max-w-full overflow-hidden rounded-[3px] shadow-[var(--ds-shadow-paper)]">
+        <div className="w-[640px] origin-top-left scale-[.55]">
+          <LetterPage draft={draft} />
+        </div>
+      </div>
+      <div className="flex w-full flex-wrap justify-center gap-1.5 px-[18px] pb-[18px] pt-3.5">
+        {approver !== null && (
+          <span className={chip}>
+            <CircleCheck aria-hidden className="size-[13px] text-[var(--ds-green-solid)]" />
+            {isOwnLetter(draft) ? "Signed off" : approver ? `Approved by ${approver}` : "Approved"}
+          </span>
+        )}
+        <span className={chip}>
+          {failing ? (
+            <CircleAlert aria-hidden className="size-[13px] text-[var(--ds-red-fg)]" />
+          ) : (
+            <CircleCheck aria-hidden className="size-[13px] text-[var(--ds-green-solid)]" />
+          )}
+          {passing} of {total} checks
+        </span>
+        <span className={chip}>
+          <CircleCheck aria-hidden className={cn("size-[13px]", healthTone)} />
+          Health <b className={cn("font-medium tabular-nums", healthInk)}>{healthScore}</b>
+        </span>
+      </div>
+      <SendingFacts draft={draft} />
+    </div>
+  );
+}
+
+/** "What you're sending": title, jurisdiction, who drafted it, who it is for, evidence. */
+function SendingFacts({ draft }: { draft: Draft }) {
+  const profile = useProfileStore((s) => s.profile);
+  const draftedBy = profile.personal.preferredName || profile.personal.legalName || "you";
+  const meta = getLetterMeta(draft.letterType);
+  const recipient = recipientNameFor(draft) ?? "the recipient";
+  const evidenceCount = draft.evidence?.length ?? 0;
+  return (
+    <section
+      aria-label="What you're sending"
+      className="w-full border-t border-[var(--ds-line)] px-[18px] py-3.5 text-[12.5px] text-[var(--ds-muted)]"
+    >
+      <div className="text-[11.5px] uppercase tracking-[.06em] text-[var(--ds-muted)]">What you're sending</div>
+      <div className="mt-1 truncate text-[14px] font-medium text-[var(--ds-ink)]">{draft.title ?? meta.title}</div>
+      <div className="mt-0.5">
+        {draft.context?.jurisdiction ?? "UK"}, drafted by {draftedBy}, for {recipient}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        <Pill>{evidenceCount > 0 ? `${evidenceCount} evidence file${evidenceCount === 1 ? "" : "s"}` : "No evidence"}</Pill>
+      </div>
+    </section>
+  );
+}
+
+/** The letter itself, as it will be exported, on a white page. */
+function LetterPage({ draft }: { draft: Draft }) {
+  const issued = draft.context?.issueDate
+    ? formatDateOnly(draft.context.issueDate, { day: "numeric", month: "long", year: "numeric" }, "en-GB")
+    : "";
+  const html = useMemo(() => {
+    const parts = draft.sections
+      .map((s) => ({
+        sid: s.sectionId,
+        html: sanitizeLetterHtmlForExport(mergeAcceptedSuggestionsHtml(s.html ?? "", { forExport: true })),
+      }))
+      .filter((p) => p.html.replace(/<[^>]+>/g, "").trim().length > 0);
+    if (parts.length === 0) return "";
+    // The issue date sits under the recipient's address, as on the export.
+    const dateLine = issued ? `<p class="final-date">${issued.replace(/[<>&]/g, "")}</p>` : "";
+    const at = parts.findIndex((p) => p.sid === "recipient_block");
+    const out = parts.map((p) => p.html);
+    if (dateLine) out.splice(at >= 0 ? at + 1 : 0, 0, dateLine);
+    return out.join("");
+  }, [draft.sections, issued]);
+  const name = draft.employer?.legalName?.trim() ?? "";
+  const address = (draft.employer?.address ?? "")
+    .split(/,|\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const confidential = draft.context?.confidentiality;
+  return (
+    <article aria-label="Letter preview" className="min-h-[855px] bg-[var(--ds-surface)] px-[60px] py-14">
+      {(name || address.length > 0) && (
+        <header className="mb-6 flex items-start justify-between gap-6 border-b border-[var(--ds-line)] pb-4">
+          <div className="font-serif text-[19px] leading-tight text-[var(--ds-ink)]">{name}</div>
+          {address.length > 0 && (
+            <address className="text-right font-serif text-[12px] not-italic leading-[1.5] text-[var(--ds-muted)]">
+              {address.map((l) => (
+                <div key={l}>{l}</div>
+              ))}
+            </address>
+          )}
+        </header>
+      )}
+      {(confidential === "private_and_confidential" || confidential === "confidential") && (
+        <p className="m-0 mb-1.5 font-serif text-[12px] uppercase tracking-[0.06em] text-[var(--ds-muted)]">
+          {confidential === "private_and_confidential" ? "Private and confidential" : "Confidential"}
+        </p>
+      )}
+      {html ? (
+        <div className="final-letter" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <p className="m-0 text-[13px] text-[var(--ds-muted)]">This letter has no content yet. Go back to the letter to write it.</p>
+      )}
+      <style>{finalLetterStyles}</style>
+    </article>
+  );
+}
+
+const finalLetterStyles = `
+.final-letter { font-family: var(--font-serif); font-size: 15.5px; line-height: 1.62; color: var(--ds-ink); overflow-wrap: anywhere; }
+.final-letter p { margin: 0 0 0.9em; }
+.final-letter h1, .final-letter h2, .final-letter h3 { font-weight: 600; line-height: 1.3; margin: 1.3em 0 0.5em; }
+.final-letter h1 { font-size: 1.25rem; } .final-letter h2 { font-size: 1.12rem; } .final-letter h3 { font-size: 1rem; }
+.final-letter ul, .final-letter ol { margin: 0 0 0.9em 1.3em; padding: 0; }
+.final-letter li { margin: 0 0 0.3em; }
+.final-letter table { width: 100%; border-collapse: collapse; margin: 0.75em 0; font-size: 0.95em; }
+.final-letter th, .final-letter td { border: 1px solid var(--ds-line); padding: 6px 10px; text-align: left; }
+.final-letter img { max-width: 100%; height: auto; }
+.final-letter a { color: inherit; }
+`;
+
+/* ---------- 2. What to download ---------- */
+
+function evidenceName(item: NonNullable<Draft["evidence"]>[number]): string {
+  const raw = item.filename || item.figureLabel || item.parsedSummary || item.content || "";
+  const s = raw.replace(/\s+/g, " ").trim();
+  if (!s) return item.kind.charAt(0).toUpperCase() + item.kind.slice(1);
+  return s.length > 60 ? `${s.slice(0, 57)}...` : s;
+}
+
+function sectionLabel(draft: Draft, ids: string[] | undefined): string {
+  if (!ids || ids.length === 0) return "General";
+  const idx = draft.sections.findIndex((s) => s.id === ids[0] || s.sectionId === ids[0]);
+  return idx >= 0 ? `Section ${idx + 1}` : "General";
+}
+
+function Row({
+  checked,
+  onChange,
+  disabled,
+  tile,
+  name,
+  meta,
+  sub,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  tile: ReactNode;
+  name: ReactNode;
+  meta?: ReactNode;
+  sub?: boolean;
+  label: string;
 }) {
   return (
-    <div className="text-[10px] font-bold uppercase tracking-[.08em] text-[var(--ds-muted)] mt-1 select-none">
-      {children}
-      {right && (
-        <span className="float-right text-[var(--ds-subtle,var(--ds-muted))] font-medium normal-case tracking-normal">
-          {right}
+    <div
+      className={cn(
+        "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-[var(--ds-line-2)] py-2.5 text-[14px] text-[var(--ds-ink)] first:border-t-0 first:pt-0",
+        sub && "py-2 pl-[30px]",
+        disabled && "opacity-[.55]"
+      )}
+    >
+      {/* The label keeps a usable width; a hint that does not fit beside
+          it drops to its own line under the name (SEND-131, RULE-X1). */}
+      <label
+        className={cn(
+          "flex min-w-0 flex-[1_1_200px] items-center gap-3 rounded-[6px] has-[input:focus-visible]:shadow-[var(--ds-focus-ring)]",
+          disabled ? "cursor-default" : "cursor-pointer"
+        )}
+      >
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={checked}
+          disabled={disabled}
+          aria-label={label}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <CheckBox on={checked} size={18} />
+        {tile}
+        <span className="min-w-0 break-words">{name}</span>
+      </label>
+      {meta && (
+        <span
+          className={cn(
+            "ml-auto min-w-0 text-[12.5px] text-[var(--ds-subtle)] max-sm:ml-0 max-sm:basis-full",
+            sub ? "max-sm:pl-[66px]" : "max-sm:pl-[72px]"
+          )}
+        >
+          {meta}
         </span>
       )}
     </div>
   );
 }
 
-/** Mini letter thumbnail + meta rows (pages, recipient, evidence). */
-function ThumbnailBlock({ draft }: { draft: Draft }) {
-  const recipient = recipientNameFor(draft) ?? "HR Officer";
-  const evidenceCount = draft.evidence?.length ?? 0;
+function Tile({ tone, children, small }: { tone: "red" | "amber" | "blue" | "grey"; children: ReactNode; small?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "grid shrink-0 place-items-center",
+        small ? "size-6 rounded-[6px]" : "size-[30px] rounded-[8px]",
+        tone === "red" && "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]",
+        tone === "amber" && "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
+        tone === "blue" && "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
+        tone === "grey" && "bg-[var(--ds-surface-2)] text-[var(--ds-muted)]"
+      )}
+    >
+      {children}
+    </span>
+  );
+}
 
-  // Pull first section text for the mini paper preview
-  const firstSectionText = (draft.sections[0]?.html ?? "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 260);
+function FormatSwitch({ flow }: { flow: SendFlow }) {
+  const opts: Array<{ v: SendFlow["prefs"]["letterFormat"]; label: string }> = [
+    { v: "pdf", label: "PDF" },
+    { v: "docx", label: "Word" },
+    { v: "txt", label: "Plain text" },
+  ];
+  const disabled = flow.working || !flow.canSend || !flow.prefs.includeLetter;
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Letter format"
+      className="ml-auto inline-flex rounded-[9px] bg-[var(--ds-surface-2)] p-[3px]"
+    >
+      {opts.map((o) => {
+        const on = flow.prefs.letterFormat === o.v;
+        return (
+          <label
+            key={o.v}
+            className={cn(
+              "relative rounded-[7px] px-2.5 py-1 text-[12.5px] transition-colors duration-[120ms] has-[input:focus-visible]:shadow-[var(--ds-focus-ring)]",
+              on ? "bg-[var(--ds-surface)] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]" : "text-[var(--ds-muted)]",
+              disabled ? "cursor-default opacity-[.6]" : "cursor-pointer hover:text-[var(--ds-ink)]"
+            )}
+          >
+            <input
+              type="radio"
+              name="letter-format"
+              className="sr-only"
+              checked={on}
+              disabled={disabled}
+              onChange={() => flow.update({ letterFormat: o.v })}
+            />
+            {o.label}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function CoverNote({ flow }: { flow: SendFlow }) {
+  const [value, setValue] = useState(flow.prefs.coverNote);
+  const saved = useRef(flow.prefs.coverNote);
+  const update = flow.update;
+  useEffect(() => {
+    if (value === saved.current) return;
+    const t = window.setTimeout(() => {
+      saved.current = value;
+      update({ coverNote: value });
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [value, update]);
+  return (
+    <div className="mt-3.5">
+      <label htmlFor="fin-cover-note" className="sr-only">
+        Covering note for the file
+      </label>
+      <textarea
+        id="fin-cover-note"
+        value={value}
+        disabled={flow.working || !flow.canSend}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          if (value !== saved.current) {
+            saved.current = value;
+            update({ coverNote: value });
+          }
+        }}
+        rows={2}
+        placeholder="Add a covering note for the file (optional)"
+        className="block min-h-16 w-full resize-y rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-2.5 text-[13.5px] text-[var(--ds-ink)] outline-none transition-[border-color,box-shadow] duration-[120ms] placeholder:text-[var(--ds-subtle)] hover:border-[var(--ds-line-hover)] focus-visible:border-[var(--ds-ink)] focus-visible:shadow-[var(--ds-focus-ring)] disabled:bg-[var(--ds-surface-2)]"
+      />
+      {value.trim() && (
+        <p className="m-0 mt-1 text-[12px] text-[var(--ds-subtle)]">Saved on the letter and added to the evidence pack's summary.</p>
+      )}
+    </div>
+  );
+}
+
+function DownloadSection({ flow }: { flow: SendFlow }) {
+  const { draft, prefs } = flow;
+  const evidence = draft.evidence ?? [];
+  const excluded = new Set(prefs.excludedEvidence);
+  const included = evidence.filter((e) => !excluded.has(e.id)).length;
+  const files = (prefs.includeLetter ? 1 : 0) + (prefs.downloads.pack ? 1 : 0) + (prefs.downloads.audit ? 1 : 0);
+  const locked = flow.working || !flow.canSend;
+  const setDownloads = (patch: Partial<SendFlow["prefs"]["downloads"]>) =>
+    flow.update({ downloads: { ...prefs.downloads, ...patch } });
 
   return (
-    <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-lg p-2.5 flex items-start gap-2.5">
-      {/* Mini paper */}
-      <div
-        className="shrink-0 w-14 h-20 bg-white border border-[var(--ds-line)] rounded-sm shadow-sm overflow-hidden p-1.5"
-        style={{ fontFamily: '"Source Serif 4", Georgia, serif' }}
-        aria-hidden="true"
-      >
-        <p
-          className="text-[var(--ds-muted)] leading-tight"
-          style={{ fontSize: "3.5px", lineHeight: 1.3 }}
-        >
-          {firstSectionText || "Dear HR,\n\nI formally request…"}
-        </p>
-      </div>
-
-      {/* Meta rows */}
-      <div className="flex-1 min-w-0">
-        <div className="text-[11.5px] font-semibold text-[var(--ds-ink)] mb-1 truncate">
-          {draft.title ?? "Letter"}
+    <Section n={2} title="What to download" aside={`${files} ${files === 1 ? "file" : "files"}`}>
+      <div className="flex flex-col">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 py-2.5 pt-0 text-[14px] text-[var(--ds-ink)]">
+          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[6px] has-[input:focus-visible]:shadow-[var(--ds-focus-ring)]">
+            <input
+              type="checkbox"
+              className="sr-only"
+              checked={prefs.includeLetter}
+              disabled={locked}
+              aria-label="The letter"
+              onChange={(e) => flow.update({ includeLetter: e.target.checked })}
+            />
+            <CheckBox on={prefs.includeLetter} size={18} />
+            <Tile tone="red">
+              <FileText className="size-4" />
+            </Tile>
+            <span>The letter</span>
+          </label>
+          <FormatSwitch flow={flow} />
         </div>
-        <MetaRow label="Pages" value="2 · A4" />
-        <MetaRow label="To" value={recipient} />
-        <MetaRow
-          label="Evidence"
-          value={evidenceCount > 0 ? `${evidenceCount} file${evidenceCount === 1 ? "" : "s"}` : "None"}
+        <Row
+          label="Evidence pack"
+          checked={prefs.downloads.pack}
+          disabled={locked}
+          onChange={(v) => setDownloads({ pack: v })}
+          tile={
+            <Tile tone="amber">
+              <Package className="size-4" />
+            </Tile>
+          }
+          name="Evidence pack"
+          meta={
+            evidence.length > 0
+              ? `${included} of ${evidence.length} ${evidence.length === 1 ? "file" : "files"}, in one .zip`
+              : "Letter, summary and audit file, in one .zip"
+          }
+        />
+        {evidence.map((item) => (
+          <Row
+            key={item.id}
+            sub
+            label={`Include ${evidenceName(item)}`}
+            checked={prefs.downloads.pack && !excluded.has(item.id)}
+            disabled={locked || !prefs.downloads.pack}
+            onChange={(v) => {
+              const next = new Set(prefs.excludedEvidence);
+              if (v) next.delete(item.id);
+              else next.add(item.id);
+              flow.update({ excludedEvidence: [...next] });
+            }}
+            tile={
+              <Tile tone="grey" small>
+                <File className="size-[13px]" />
+              </Tile>
+            }
+            name={evidenceName(item)}
+            meta={sectionLabel(draft, item.sectionIds)}
+          />
+        ))}
+        <Row
+          label="Audit record"
+          checked={prefs.downloads.audit}
+          disabled={locked}
+          onChange={(v) => setDownloads({ audit: v })}
+          tile={
+            <Tile tone="blue">
+              <ScrollText className="size-4" />
+            </Tile>
+          }
+          name="Audit record"
+          meta="Who drafted, checked and approved it"
         />
       </div>
-    </div>
+      <CoverNote flow={flow} />
+    </Section>
   );
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
+/* ---------- 3. Record how it was given ---------- */
+
+function StaticField({ label, children, tone }: { label: string; children: ReactNode; tone?: "green" }) {
   return (
-    <div className="flex items-center gap-1.5 mt-0.5">
-      <span
-        className="text-[var(--ds-muted)] font-semibold uppercase tracking-[.04em] shrink-0"
-        style={{ fontSize: "9px", minWidth: "44px" }}
+    <div className="min-w-0">
+      <div className="mb-1 text-[13px] font-medium text-[var(--ds-ink)]">{label}</div>
+      <div
+        className={cn(
+          "flex h-10 min-w-0 items-center gap-1.5 rounded-[9px] border px-2.5 text-[14px]",
+          tone === "green"
+            ? "border-[var(--ds-green-bd)] bg-[var(--ds-green-soft)] text-[var(--ds-green-ink)]"
+            : "border-[var(--ds-line)] bg-[var(--ds-surface-2)] text-[var(--ds-body)]"
+        )}
       >
-        {label}
-      </span>
-      <span className="text-[10px] text-[var(--ds-muted)] truncate">{value}</span>
+        {children}
+      </div>
     </div>
   );
 }
 
-/** 5-item ship checklist with ✓ / ✗ / ○ visual states. */
-function ShipChecklist({
+function GivenSection({ flow }: { flow: SendFlow }) {
+  const email = flow.prefs.way === "email";
+  const dateGiven = email ? todayDateOnly() : flow.prefs.dateGiven;
+  const close = flow.draft.mode === "employee" ? null : appealCloseDate(flow.draft, dateGiven);
+  return (
+    <div className={cn("grid grid-cols-1 gap-3", close ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+      {email ? (
+        <>
+          <StaticField label="Given by">Email from DraftHR</StaticField>
+          <StaticField label="Date given">
+            <CalendarCheck aria-hidden className="size-[15px] text-[var(--ds-subtle)]" />
+            Today, {fmtShortDayYear(dateGiven)}
+          </StaticField>
+        </>
+      ) : (
+        <>
+          <GivenByField flow={flow} variant="page" />
+          <DateGivenField flow={flow} variant="page" />
+        </>
+      )}
+      {close && (
+        <StaticField label="Appeal window closes" tone="green">
+          <CalendarCheck aria-hidden className="size-[15px] shrink-0" />
+          <span className="truncate">{fmtShortDayYear(close)}</span>
+        </StaticField>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Sent ---------- */
+
+function SentCard({ draft, matterName }: { draft: Draft; matterName?: string }) {
+  const banner = sentBannerText(draft, { matterName });
+  const rec = getSentRecord(draft);
+  const to = recipientNameFor(draft);
+  return (
+    <section
+      aria-label="Sent"
+      className="mb-4 flex items-start gap-3 rounded-[16px] border border-[var(--ds-green-bd)] bg-[var(--ds-green-soft)] px-4 py-5 text-[var(--ds-green-ink)] sm:px-[22px]"
+    >
+      <CircleCheck aria-hidden className="mt-0.5 size-5 shrink-0 text-[var(--ds-green-solid)]" />
+      <div className="min-w-0 text-[14px] leading-[1.5]">
+        <h2 className="ds-title m-0 text-[21px] leading-[1.2] text-[var(--ds-ink)]">
+          {to ? `Sent to ${to}` : "Sent"}
+        </h2>
+        {banner && (
+          <p className="m-0 mt-1.5">
+            <b className="font-medium">{banner.title}</b> {banner.detail}
+          </p>
+        )}
+        {rec?.downloaded?.length === 0 && rec.way === "self" && (
+          <p className="m-0 mt-1 text-[13px]">No files were downloaded with it. Use Export above if you need a copy.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- The checklist, counsel sign-off and experts ---------- */
+
+function ChecklistCard({
   draft,
-  counselAttested,
-  onFixClick,
+  counselMissing,
+  scoreData,
 }: {
   draft: Draft;
-  counselAttested: boolean;
-  onFixClick: () => void;
+  counselMissing: boolean;
+  scoreData: ReturnType<typeof computeHealthScore>;
 }) {
+  const nav = useNavigate();
+  const counselRequired = (draft.context?.counselReviewRequired ?? false) || counselMissing;
   const evidenceCount = draft.evidence?.length ?? 0;
   const recipient = recipientNameFor(draft);
-
-  const allSectionsReady = draft.sections.every(
-    (s) => (s.html ?? "").replace(/<[^>]+>/g, "").trim().length > 0,
-  );
-
-  type CheckState = "ok" | "fail" | "warn" | "pending";
+  const allSectionsReady = draft.sections.every((s) => (s.html ?? "").replace(/<[^>]+>/g, "").trim().length > 0);
   const answers = draft.answers as Record<string, unknown>;
-  const hasLetterhead = Boolean(
-    answers.hasLetterhead || draft.employer?.letterheadDataUrl || answers.letterheadDataUrl,
-  );
-
-  const items: Array<{
-    state: CheckState;
-    title: string;
-    sub?: string;
-    fixable?: boolean;
-  }> = [
+  const hasLetterhead = Boolean(answers.hasLetterhead || draft.employer?.letterheadDataUrl || answers.letterheadDataUrl);
+  type CheckState = "ok" | "fail" | "warn" | "pending";
+  const items: Array<{ state: CheckState; title: string; sub?: string; fix?: string }> = [
     {
       state: allSectionsReady ? "ok" : "warn",
       title: "All sections written",
-      sub: allSectionsReady
-        ? `${draft.sections.length} of ${draft.sections.length} ready`
-        : "Some sections still empty",
-      fixable: !allSectionsReady,
+      sub: allSectionsReady ? `${draft.sections.length} of ${draft.sections.length} ready` : "Some sections still empty",
+      fix: allSectionsReady ? undefined : `/editor/${draft.id}`,
     },
     {
       state: evidenceCount > 0 ? "ok" : "warn",
       title: "Evidence linked",
-      sub:
-        evidenceCount > 0
-          ? `${evidenceCount} file${evidenceCount === 1 ? "" : "s"}`
-          : "No evidence attached",
+      sub: evidenceCount > 0 ? `${evidenceCount} file${evidenceCount === 1 ? "" : "s"}` : "No evidence attached",
     },
     draft.mode === "employee"
-      ? { state: "ok" as CheckState, title: "Letterhead", sub: "Not needed for an employee letter" }
+      ? { state: "ok", title: "Letterhead", sub: "Not needed for an employee letter" }
       : hasLetterhead
-        ? { state: "ok" as CheckState, title: "Letterhead attached" }
-        : { state: "warn" as CheckState, title: "Letterhead", sub: "No company letterhead added" },
+        ? { state: "ok", title: "Letterhead attached" }
+        : { state: "warn", title: "Letterhead", sub: "No company letterhead added" },
     {
       state: recipient ? "ok" : "fail",
       title: "Recipient details",
-      sub: recipient ? undefined : "Missing — required",
-      fixable: !recipient,
+      sub: recipient ? undefined : "Missing, required",
+      fix: recipient ? undefined : `/editor/${draft.id}`,
     },
     {
-      state: counselAttested ? "ok" : "pending",
+      state: counselMissing ? "pending" : "ok",
       title: "Counsel review",
-      sub: counselAttested ? undefined : "Optional · see canvas",
+      sub: counselMissing ? "Sign off above before export" : counselRequired ? "Signed off" : "Not required for this letter",
     },
   ];
-
-  const stateClasses: Record<CheckState, string> = {
-    ok: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-    warn: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-    fail: "bg-[var(--red-lt,#fef2f2)] text-[var(--red,#dc2626)]",
-    pending: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
-  };
-
-  const stateIcon: Record<CheckState, React.ReactNode> = {
-    ok: <Check className="size-2.5" strokeWidth={3} />,
-    warn: <AlertTriangle className="size-2.5" strokeWidth={2.5} />,
-    fail: <X className="size-2.5" strokeWidth={3} />,
-    pending: <span className="text-[8px] font-bold leading-none">○</span>,
-  };
+  const okCount = items.filter((i) => i.state === "ok").length;
+  const stepState = { ok: "ok", warn: "warn", fail: "fail", pending: "todo" } as const;
+  const failing = scoreData.failCount;
 
   return (
-    <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-lg overflow-hidden">
-      {items.map((item, i) => (
-        <div
-          key={item.title}
-          className={cn(
-            "flex items-start gap-2.5 px-2.5 py-2 text-[11.5px] text-[var(--ds-body,var(--ds-ink))]",
-            i < items.length - 1 && "border-b border-[var(--ds-line-2)]",
-            item.fixable && "cursor-pointer hover:bg-[var(--ds-canvas)]",
-          )}
-          onClick={item.fixable ? onFixClick : undefined}
-          role={item.fixable ? "button" : undefined}
-        >
+    <section
+      aria-labelledby="fin-ready"
+      className="mb-4 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 py-5 sm:px-[22px]"
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id="fin-ready" className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">
+          Ready to send
+        </h2>
+        <span className="text-[12.5px] text-[var(--ds-subtle)]">
+          {failing > 0 ? `${failing} blocking ${failing === 1 ? "check" : "checks"}` : `Health ${scoreData.score} of 100`}
+        </span>
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--ds-line)]">
           <span
-            className={cn(
-              "size-[17px] rounded-full shrink-0 grid place-items-center mt-0.5",
-              stateClasses[item.state],
-            )}
-          >
-            {stateIcon[item.state]}
-          </span>
-          <div className="flex-1 min-w-0">
-            <div
-              className={cn(
-                "font-semibold leading-tight",
-                item.state === "pending" && "text-[var(--ds-muted)] font-medium",
-              )}
-            >
-              {item.title}
-            </div>
-            {item.sub && (
-              <div className="text-[10.5px] text-[var(--ds-muted)] mt-0.5">
-                {item.sub}
-              </div>
-            )}
-          </div>
-          {item.fixable && (
-            <span className="text-[10px] font-semibold text-[var(--ds-ink)] bg-[var(--ds-line-2)] px-1.5 py-0.5 rounded self-center shrink-0">
-              Fix →
-            </span>
-          )}
+            className="block h-full rounded-full bg-[var(--ds-ink)] transition-[width] duration-500"
+            style={{ width: `${(okCount / items.length) * 100}%` }}
+          />
         </div>
-      ))}
-    </div>
+        <span className="ds-mono shrink-0 text-[11.5px] text-[var(--ds-muted)]">
+          {okCount} of {items.length}
+        </span>
+      </div>
+      <PlanSteps>
+        {items.map((item) => (
+          <PlanStep
+            key={item.title}
+            state={stepState[item.state]}
+            sub={item.sub}
+            onClick={item.fix ? () => nav(item.fix as string) : undefined}
+            aside={
+              item.fix ? (
+                <span className="inline-flex h-6 items-center gap-1 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[12px] font-medium text-[var(--ds-ink)]">
+                  Fix
+                  <ArrowRight className="size-3" />
+                </span>
+              ) : undefined
+            }
+          >
+            {item.title}
+          </PlanStep>
+        ))}
+      </PlanSteps>
+    </section>
   );
 }
 
 /**
- * Compact export tile for the 2-col sidebar grid.
- * Supports compact=true (sidebar) and the default large mode (kept for future use).
+ * Counsel-review attestation for high-risk letters. Blocks every export and
+ * marking as sent until filled in and confirmed; confirming saves
+ * answers._counselReview (the record the Send step and the counsel pill use),
+ * unticking clears it.
  */
-function FormatTile({
-  icon,
-  title,
-  desc,
-  busy,
-  primary,
-  disabled,
-  onClick,
-  compact,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  busy: boolean;
-  primary?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  compact?: boolean;
-}) {
-  if (compact) {
-    return (
-      <motion.button
-        type="button"
-        onClick={onClick}
-        disabled={busy || disabled}
-        whileHover={{ scale: disabled ? 1 : 1.02 }}
-        whileTap={{ scale: disabled ? 1 : 0.97 }}
-        transition={{ duration: 0.12 }}
-        className={cn(
-          "flex flex-col gap-0.5 p-2 rounded-md text-left transition disabled:opacity-50 disabled:cursor-not-allowed",
-          primary
-            ? "bg-[var(--ds-ink)] text-white"
-            : "bg-[var(--ds-surface)] border border-[var(--ds-line)] text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]",
-        )}
-      >
-        <div className="flex items-center gap-1">
-          {busy ? (
-            <motion.span
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-              className="inline-flex"
-            >
-              <FileDown className="size-3" />
-            </motion.span>
-          ) : (
-            <span className={primary ? "text-white/80" : "text-[var(--ds-muted)]"}>
-              {icon}
-            </span>
-          )}
-          <span className="text-[11px] font-semibold leading-tight">
-            {busy ? "…" : title}
-          </span>
-        </div>
+function CounselAttestation({ draft }: { draft: Draft }) {
+  const updateAnswers = useDraftStore((s) => s.updateAnswers);
+  const stored = (draft.answers as Record<string, unknown>)?._counselReview as
+    | { reviewedBy?: string; reviewedOn?: string }
+    | undefined;
+  const confirmed = Boolean(stored?.reviewedBy && stored?.reviewedOn);
+  const [reviewerName, setReviewerName] = useState(stored?.reviewedBy ?? "");
+  const [reviewedOn, setReviewedOn] = useState(stored?.reviewedOn ?? toDateOnly(new Date()));
+  const canConfirm = reviewerName.trim() !== "" && reviewedOn !== "";
+  const field =
+    "mt-1 block h-10 w-full rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 text-[14px] font-normal text-[var(--ds-ink)] outline-none transition-[border-color,box-shadow] duration-[120ms] hover:border-[var(--ds-line-hover)] focus-visible:border-[var(--ds-ink)] focus-visible:shadow-[var(--ds-focus-ring)] disabled:bg-[var(--ds-surface-2)] disabled:text-[var(--ds-muted)]";
+
+  const toggle = () => {
+    const fresh = useDraftStore.getState().drafts[draft.id] ?? draft;
+    const answers = { ...fresh.answers } as Record<string, unknown>;
+    if (!confirmed && canConfirm) {
+      answers._counselReview = { reviewedBy: reviewerName.trim(), reviewedOn, attestedAt: Date.now() };
+    } else {
+      delete answers._counselReview;
+    }
+    updateAnswers(draft.id, answers as typeof draft.answers);
+  };
+
+  return (
+    <section
+      aria-labelledby="counsel-signoff-title"
+      className="mb-4 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-4 py-5 sm:px-[22px]"
+    >
+      <div className="mb-3 flex items-start gap-2.5">
         <span
           className={cn(
-            "text-[9px] leading-tight",
-            primary ? "text-white/70" : "text-[var(--ds-muted)]",
+            "grid size-7 shrink-0 place-items-center rounded-full",
+            confirmed ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]" : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
           )}
         >
-          {desc}
+          <ShieldCheck className="size-4" strokeWidth={2} />
         </span>
-      </motion.button>
-    );
-  }
-
-  // Full-size tile (kept for potential future use)
-  return (
-    <div className="flex flex-col items-start gap-2 p-4">
-      <div className="inline-flex items-center justify-center size-8 rounded-lg bg-[var(--ds-line-2)] text-[var(--ds-ink)]">
-        {icon}
+        <div className="min-w-0 flex-1">
+          <h2 id="counsel-signoff-title" className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">
+            Counsel sign-off
+          </h2>
+          <p className="m-0 mt-0.5 text-[13px] text-[var(--ds-muted)]">Required for this letter type before export or send.</p>
+        </div>
+        <Pill tone={confirmed ? "green" : "amber"} round>
+          {confirmed ? "Signed off" : "Needed"}
+        </Pill>
       </div>
-      <div className="flex-1">
-        <h4 className="text-[13px] font-semibold m-0 leading-tight">{title}</h4>
-        <p className="text-[11.5px] text-[var(--ds-muted)] m-0 mt-0.5 leading-snug">{desc}</p>
-      </div>
-      <motion.button
-        type="button"
-        onClick={onClick}
-        disabled={busy || disabled}
-        whileHover={{ scale: disabled ? 1 : 1.02 }}
-        whileTap={{ scale: disabled ? 1 : 0.97 }}
-        transition={{ duration: 0.12 }}
-        className={cn(
-          "mt-1 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed",
-          primary
-            ? "bg-[var(--ds-ink)] text-white hover:opacity-90"
-            : "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]",
-        )}
-      >
-        {busy ? (
-          <motion.span
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-            className="inline-flex"
-          >
-            <FileDown className="size-3.5" />
-          </motion.span>
-        ) : (
-          <FileDown className="size-3.5" />
-        )}
-        {busy ? "…" : "Download"}
-      </motion.button>
-    </div>
-  );
-}
-
-/**
- * Counsel-review attestation gate. Only renders for high-risk letter types.
- */
-function CounselAttestation({
-  confirmed,
-  reviewerName,
-  reviewedOn,
-  onReviewerNameChange,
-  onReviewedOnChange,
-  onToggle,
-}: {
-  confirmed: boolean;
-  reviewerName: string;
-  reviewedOn: string;
-  onReviewerNameChange: (value: string) => void;
-  onReviewedOnChange: (value: string) => void;
-  onToggle: () => void;
-}) {
-  const canConfirm = reviewerName.trim() !== "" && reviewedOn !== "";
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.26, delay: 0.04, ease: [0.32, 0.72, 0, 1] }}
-      className={cn(
-        "rounded-xl border px-4 py-3 mb-5 transition",
-        confirmed
-          ? "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/40"
-          : "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)]/40",
-      )}
-    >
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto] mb-3">
-        <label className="text-[12px] font-medium text-[var(--ds-ink)]">
+      <div className="mb-3 grid gap-2.5 sm:grid-cols-[1fr_170px]">
+        <label className="text-[13px] font-medium text-[var(--ds-ink)]">
           Reviewed by (counsel)
           <input
             type="text"
             value={reviewerName}
-            onChange={(e) => onReviewerNameChange(e.target.value)}
+            onChange={(e) => setReviewerName(e.target.value)}
             disabled={confirmed}
             placeholder="e.g. Priya Shah, Employment Solicitor"
-            className="mt-1 block w-full rounded-md border border-[var(--ds-line)] bg-white px-2.5 py-1.5 text-[13px] font-normal disabled:opacity-70"
+            className={field}
           />
         </label>
-        <label className="text-[12px] font-medium text-[var(--ds-ink)]">
+        <label className="text-[13px] font-medium text-[var(--ds-ink)]">
           Review date
           <input
             type="date"
             value={reviewedOn}
-            onChange={(e) => onReviewedOnChange(e.target.value)}
+            max={todayDateOnly()}
+            onChange={(e) => setReviewedOn(e.target.value)}
             disabled={confirmed}
-            className="mt-1 block w-full rounded-md border border-[var(--ds-line)] bg-white px-2.5 py-1.5 text-[13px] font-normal disabled:opacity-70"
+            className={field}
           />
         </label>
       </div>
       <label
         htmlFor="counsel-attestation"
-        className={cn("flex items-center gap-3 select-none", canConfirm || confirmed ? "cursor-pointer" : "cursor-not-allowed opacity-70")}
-      >
-      <input
-        id="counsel-attestation"
-        type="checkbox"
-        checked={confirmed}
-        disabled={!canConfirm && !confirmed}
-        onChange={onToggle}
-        className="size-4 rounded border-[var(--ds-line)] accent-[var(--ds-ink)] shrink-0"
-      />
-      <span
         className={cn(
-          "inline-flex items-center justify-center size-7 rounded-full shrink-0",
-          confirmed
-            ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-            : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
+          "flex items-center gap-2.5 rounded-[9px] bg-[var(--ds-surface)] px-3 py-2.5 ring-1 ring-[var(--ds-line)] select-none has-[input:focus-visible]:shadow-[var(--ds-focus-ring)]",
+          canConfirm || confirmed ? "cursor-pointer" : "cursor-not-allowed opacity-70"
         )}
       >
-        <ShieldCheck className="size-4" strokeWidth={2.5} />
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="text-[13.5px] font-semibold text-[var(--ds-ink)] leading-tight">
+        <input
+          id="counsel-attestation"
+          type="checkbox"
+          checked={confirmed}
+          disabled={!canConfirm && !confirmed}
+          onChange={toggle}
+          className="size-4 shrink-0 rounded accent-[var(--ds-accent)]"
+        />
+        <span className="text-[13.5px] font-medium leading-snug text-[var(--ds-ink)]">
           I confirm this has been reviewed by counsel
-        </div>
-        <div className="text-[12px] text-[var(--ds-muted)] mt-0.5">
-          Required for this letter type before export or send.
-        </div>
-      </div>
+        </span>
       </label>
-    </motion.div>
+    </section>
   );
 }
 
+/** A second opinion before sending (the real marketplace owns the listing). */
+function ExpertsCard({ onSeeSpecialists }: { onSeeSpecialists: () => void }) {
+  return (
+    <section
+      aria-labelledby="finalise-experts-title"
+      className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 py-4 sm:px-[22px]"
+    >
+      <span
+        aria-hidden
+        className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[var(--ds-lilac-bg)] text-[var(--ds-lilac-fg)]"
+      >
+        <Scale className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1 basis-[240px]">
+        <h2 id="finalise-experts-title" className="m-0 text-[14.5px] font-medium text-[var(--ds-ink)]">
+          Want a second opinion before you send?
+        </h2>
+        <p className="m-0 mt-0.5 text-[13px] leading-relaxed text-[var(--ds-muted)]">
+          Book a qualified employment law specialist to review this letter. Most reviews come back within 24 hours.
+        </p>
+      </div>
+      <Button variant="outline" size="sm" onClick={onSeeSpecialists}>
+        See specialists
+        <ArrowRight className="size-3.5" />
+      </Button>
+    </section>
+  );
+}

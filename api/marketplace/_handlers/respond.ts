@@ -21,6 +21,9 @@
  * Rating: one 1 to 5 rating per completed, paid booking, given either with
  * "complete" or afterwards with "rate".
  *
+ * Priority: delivering a priority booking after its due time refunds the
+ * difference between the priority and standard prices (priority-reviews.ts).
+ *
  * Request body: { bookingId, action, note?, rating? }
  */
 import { and, eq, exists, isNull } from "drizzle-orm";
@@ -40,6 +43,7 @@ import {
   priceSnapshot,
   recomputeConsultantRating,
 } from "../../_utils/marketplace-payments.js";
+import { priorityFields, refundLatePriority, startPriorityClock } from "../../_utils/priority-reviews.js";
 import {
   sendBookingAcceptedEmail,
   sendBookingDeclinedEmail,
@@ -157,6 +161,7 @@ export async function POST(req: Request): Promise<Response> {
       if (booking.status !== "requested")
         return jsonError(`Cannot decline from status '${booking.status}'`, 409);
       update.status = "declined";
+      update.declinedAt = now;
       if (body.note) update.responseNote = body.note.slice(0, 2000);
       break;
     case "deliver":
@@ -219,15 +224,34 @@ export async function POST(req: Request): Promise<Response> {
     )
     .returning();
   if (!next) {
-    return jsonError("Booking already transitioned — please refresh.", 409);
+    return jsonError("This booking has already moved on. Refresh to see where it is now.", 409);
   }
 
   // A booking paid before it was accepted (checkout used to allow it) never
   // got a share link from the webhook, which only opens access on working
   // bookings. Open it now that the booking is accepted.
   let result = next;
+  let refresh = false;
   if (body.action === "accept" && paymentStatus === "paid") {
     await grantDraftAccess(db, next.id, now);
+    await startPriorityClock(db, next.id, now);
+    refresh = true;
+  }
+
+  // A priority review delivered after its due time: the requester gets the
+  // difference back. A failure here is recorded on the booking and logged;
+  // it never undoes the delivery.
+  if (body.action === "deliver" && next.turnaround === "priority") {
+    try {
+      const late = await refundLatePriority(db, next, now);
+      refresh = late !== "not_late";
+    } catch (err) {
+      console.error("[bookings] late priority refund failed", next.id, err);
+      refresh = true;
+    }
+  }
+
+  if (refresh) {
     const [refreshed] = await db
       .select()
       .from(consultantBookings)
@@ -296,5 +320,7 @@ function toClient(row: typeof consultantBookings.$inferSelect, paymentStatus: st
     acceptedAt: row.acceptedAt?.getTime() ?? null,
     deliveredAt: row.deliveredAt?.getTime() ?? null,
     completedAt: row.completedAt?.getTime() ?? null,
+    declinedAt: row.declinedAt?.getTime() ?? null,
+    ...priorityFields(row),
   };
 }

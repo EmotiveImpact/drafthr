@@ -1,0 +1,169 @@
+/**
+ * Booking an expert from the sidebar's Experts page (mk-book). Goes through
+ * the existing bookings flow (recordBooking, then pushBookingCreate for a
+ * server expert, with the letter id mapped to the server's uuid as before),
+ * and, when a letter that is not yet sent is attached, puts that letter into
+ * the Review step
+ * through reviews.ts, exactly as booking from the letter's reviewer dialog
+ * does: an expert review request linked to the booking, with the ask, the
+ * due date from the turnaround and the price.
+ *
+ * Nothing is charged here: checkout only starts once the expert accepts.
+ */
+import type { Consultant } from "./types";
+import type { Draft } from "@/lib/letters/types";
+import { useBookingsStore, type Booking } from "@/lib/bookings";
+import { pushBookingCreate } from "@/lib/marketplaceSync";
+import { toServerUuid } from "@/lib/remote-ids";
+import { letterTitle } from "@/components/consultants/letters";
+import { useReviewStore } from "@/lib/journey/reviews";
+import { letterSnapshot, sharedEvidence, type Me } from "@/components/journey/review/actions";
+import { createReviewLink } from "@/components/journey/review/trusted-api";
+import { getJourney } from "@/lib/journey/stage";
+import { PRIORITY_HOURS, bookingTotals, planHours, priorityPriceOf } from "./market";
+
+export const NEEDS = ["Legal check", "Tone and fairness", "Matches our policy"] as const;
+export type Need = (typeof NEEDS)[number];
+
+/** What you can ask for about a letter that has already been sent: help
+ *  with an appeal against it, not changes to it. */
+export const APPEAL_NEEDS = ["Appeal grounds", "The hearing", "Outcome letter"] as const;
+
+/** The first line of an appeal booking's message, so the expert knows the
+ *  letter is final and what the booking is for. */
+export const APPEAL_PURPOSE = "This letter has been sent. I'd like help preparing for an appeal against it.";
+
+/**
+ * True when the letter has been marked as sent. A sent letter is locked:
+ * booking an expert for it is help with an appeal, and does not put it back
+ * into the Review step (SEND-X35).
+ */
+export function isSentLetter(draft: Draft | null | undefined): boolean {
+  return !!draft && getJourney(draft, null).stage === "sent";
+}
+
+/** The message the expert sees: the purpose (appeal help), the chosen
+ *  checks, then the free text. */
+export function bookingMessage(needs: readonly string[], note: string, purpose?: string): string | undefined {
+  const parts: string[] = [];
+  if (purpose) parts.push(purpose);
+  if (needs.length) parts.push(`What I need: ${needs.join(", ")}.`);
+  if (note.trim()) parts.push(note.trim());
+  return parts.length ? parts.join("\n\n") : undefined;
+}
+
+export type BookResult = { ok: true; booking: Booking | undefined; reviewId?: string } | { ok: false };
+
+export async function bookExpertFromMarketplace({
+  consultant: c,
+  draft,
+  needs,
+  note,
+  asker,
+  turnaround = "standard",
+}: {
+  consultant: Consultant;
+  draft: Draft | null;
+  needs: readonly string[];
+  note: string;
+  /** The person booking (the review's asker), as from useMe(). */
+  asker?: Me;
+  /** "priority": the expert's priority price, back within 24 hours of
+   *  payment. Falls back to standard when the expert doesn't offer it. */
+  turnaround?: "standard" | "priority";
+}): Promise<BookResult> {
+  // A sent letter is final: the booking is appeal help, carried with the
+  // letter so the expert can read it, and no review request is made.
+  const appeal = isSentLetter(draft);
+  const message = bookingMessage(needs, note, appeal ? APPEAL_PURPOSE : undefined);
+  const priorityPrice = turnaround === "priority" ? priorityPriceOf(c) : null;
+  const priority = priorityPrice != null;
+  const price = priorityPrice ?? c.price;
+  // Priority's 24 hours start at payment; until then this is the earliest.
+  const expectedDeliveryAt = Date.now() + (priority ? PRIORITY_HOURS : planHours(c.sla)) * 3600_000;
+  const title = draft ? letterTitle(draft) : undefined;
+  const store = useBookingsStore.getState();
+  const placeholder = store.recordBooking({
+    consultantInitials: c.initials,
+    consultantProfileId: c.profileId,
+    draftId: draft?.id ?? "",
+    localDraftId: draft?.id,
+    matterTitle: title,
+    message,
+    expectedDeliveryAt,
+    messages: [],
+    consultantName: c.name,
+    consultantRole: c.role,
+    consultantPhotoUrl: c.photoUrl || undefined,
+    consultantCurrency: c.currency,
+    consultantPrice: c.price,
+    ...(priority ? { turnaround: "priority" as const } : {}),
+  });
+
+  let booking: Booking | undefined = placeholder;
+  if (c.profileId) {
+    const before = new Set(useBookingsStore.getState().bookings.map((b) => b.id));
+    // AWAIT the create: the expert's inbox is server-driven, so a failed POST
+    // means they never see the request (pushBookingCreate rolls the
+    // optimistic row back on failure).
+    const ok = await pushBookingCreate(
+      {
+        consultantProfileId: c.profileId,
+        draftId: draft ? toServerUuid(draft.id) : null,
+        matterTitle: title,
+        message,
+        expectedDeliveryAt: new Date(expectedDeliveryAt).toISOString(),
+        ...(priority ? { turnaround: "priority" as const } : {}),
+      },
+      placeholder.id,
+      c.initials,
+    );
+    if (!ok) return { ok: false };
+    const all = useBookingsStore.getState().bookings;
+    booking =
+      all
+        .filter((b) => !before.has(b.id) && b.consultantProfileId === c.profileId)
+        .sort((a, b) => b.bookedAt - a.bookedAt)[0] ??
+      all
+        .filter((b) => b.consultantProfileId === c.profileId && (b.localDraftId ?? b.draftId) === (draft?.id ?? ""))
+        .sort((a, b) => b.bookedAt - a.bookedAt)[0];
+  }
+
+  let reviewId: string | undefined;
+  if (draft && !appeal) {
+    reviewId = useReviewStore.getState().createReview({
+      draftId: draft.id,
+      kind: "expert",
+      reviewer: { name: c.name, role: c.role, consultantId: c.profileId },
+      ask: message,
+      dueAt: new Date(expectedDeliveryAt).toISOString(),
+      bookingId: booking?.id,
+      pricePence: bookingTotals(price).totalPence,
+      turnaround: priority ? "priority" : "standard",
+      ...(asker ? { asker: { name: asker.name, email: asker.email, userId: asker.userId } } : {}),
+    });
+    // As when booked from the letter's reviewer dialog: the expert's review
+    // state (rounds, points, messages) lives with the booking on the server,
+    // so their suggestions reach this letter (REVIEW-46, REVIEW-118).
+    const review = useReviewStore.getState().requests[reviewId];
+    if (booking && review && c.profileId) {
+      const id = reviewId;
+      void createReviewLink({
+        kind: "expert",
+        draftId: draft.id,
+        reviewId: id,
+        reviewerName: c.name,
+        bookingId: booking.id,
+        ask: message ?? "",
+        dueAt: review.dueAt,
+        share: review.share,
+        letter: letterSnapshot(draft),
+        evidence: sharedEvidence(draft, review.share),
+        askerName: asker?.name ?? "",
+      }).then((res) => {
+        if (res.ok) useReviewStore.getState().updateReview(id, { trustedLinkId: res.data.linkId });
+      });
+    }
+  }
+  return { ok: true, booking, reviewId };
+}

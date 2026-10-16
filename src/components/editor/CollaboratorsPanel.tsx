@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Badge, Box, Button, Flex, IconButton, Select, Text, TextField } from "@radix-ui/themes";
 import { Copy, Mail, UserPlus, X, Check } from "lucide-react";
 import type { Collaborator, CollaboratorRole, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { Avatar } from "@/components/ds";
+import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ROLE_LABEL: Record<CollaboratorRole, string> = {
   owner: "Owner",
@@ -13,16 +14,22 @@ const ROLE_LABEL: Record<CollaboratorRole, string> = {
 };
 
 const ROLE_HINT: Record<CollaboratorRole, string> = {
-  owner: "Full access — only the draft creator",
-  editor: "Can edit sections and regenerate",
-  reviewer: "Can comment and attest counsel review",
-  viewer: "Read-only — can preview and export",
+  owner: "Full access. Only the person who created the draft.",
+  editor: "Can edit sections and redraft them",
+  reviewer: "Can comment and record counsel review",
+  viewer: "Read only. Can preview and export.",
 };
 
+const field =
+  "h-9 w-full rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-line-strong)] focus-visible:shadow-[var(--ds-focus-ring)]";
+
+const iconBtn =
+  "grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]";
+
 /**
- * Right-rail panel for managing collaborators on a draft. Local-only for now —
- * invitees are stored on the draft and a copyable share link is generated.
- * When auth lands, the invite call will hit /api/invites and notify by email.
+ * Panel for managing the people on a draft: invite by email with a role,
+ * copy the share link, change or remove each person. Invitees are stored on
+ * the draft.
  */
 export function CollaboratorsPanel({ draft }: { draft: Draft }) {
   const invite = useDraftStore((s) => s.inviteCollaborator);
@@ -52,105 +59,84 @@ export function CollaboratorsPanel({ draft }: { draft: Draft }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* noop */
+      /* clipboard refused: nothing to show */
     }
   };
 
   return (
-    <Box className="h-full overflow-auto" p="4">
-      <Flex align="center" gap="2" mb="2">
-        <UserPlus className="size-4 text-[var(--gray-11)]" />
-        <Text size="2" weight="medium">Collaborators</Text>
-      </Flex>
-      <Text size="1" color="gray" as="p" className="leading-relaxed" mb="4">
-        Invite colleagues, counsel, or HR partners to edit, review, or just view this draft.
-      </Text>
+    <div className="h-full overflow-auto p-4 text-[13.5px] text-[var(--ds-body)]">
+      <div className="mb-2 flex items-center gap-2">
+        <UserPlus className="size-4 text-[var(--ds-muted)]" />
+        <span className="font-medium text-[var(--ds-ink)]">People on this letter</span>
+      </div>
+      <p className="m-0 mb-4 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+        Invite colleagues, counsel or HR partners to edit, review or just view this draft.
+      </p>
 
-      {/* Invite form */}
-      <form onSubmit={onInvite}>
-        <Flex direction="column" gap="2" mb="3">
-          <TextField.Root
-            size="2"
-            placeholder="email@company.com"
+      <form onSubmit={onInvite} className="mb-3 flex flex-col gap-2">
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ds-subtle)]" />
+          <input
             type="email"
+            aria-label="Email address"
+            placeholder="email@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-          >
-            <TextField.Slot>
-              <Mail className="size-3.5" />
-            </TextField.Slot>
-          </TextField.Root>
-          <TextField.Root
-            size="2"
-            placeholder="Display name (optional)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            className={cn(field, "pl-8")}
           />
-          <Flex gap="2">
-            <Box className="flex-1">
-              <Select.Root value={role} onValueChange={(v) => setRole(v as CollaboratorRole)}>
-                <Select.Trigger className="w-full" />
-                <Select.Content>
-                  <Select.Item value="editor">{ROLE_LABEL.editor}</Select.Item>
-                  <Select.Item value="reviewer">{ROLE_LABEL.reviewer}</Select.Item>
-                  <Select.Item value="viewer">{ROLE_LABEL.viewer}</Select.Item>
-                </Select.Content>
-              </Select.Root>
-            </Box>
-            <Button type="submit" disabled={!valid} size="2">
-              <UserPlus className="size-3.5" /> Invite
-            </Button>
-          </Flex>
-          <Text size="1" color="gray" className="leading-relaxed">{ROLE_HINT[role]}</Text>
-        </Flex>
+        </div>
+        <input
+          aria-label="Display name (optional)"
+          placeholder="Display name (optional)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={field}
+        />
+        <div className="flex gap-2">
+          <Select value={role} onValueChange={(v) => setRole(v as CollaboratorRole)}>
+            <SelectTrigger size="sm" aria-label="Role" className="h-9 min-w-0 flex-1 px-2.5 text-[13.5px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="z-[60]">
+              <SelectItem value="editor">{ROLE_LABEL.editor}</SelectItem>
+              <SelectItem value="reviewer">{ROLE_LABEL.reviewer}</SelectItem>
+              <SelectItem value="viewer">{ROLE_LABEL.viewer}</SelectItem>
+            </SelectContent>
+          </Select>
+          <button
+            type="submit"
+            disabled={!valid}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[9px] bg-[var(--ds-accent)] px-3.5 text-[13.5px] font-medium text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] disabled:opacity-40 focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+          >
+            <UserPlus className="size-3.5" /> Invite
+          </button>
+        </div>
+        <span className="text-[12px] leading-relaxed text-[var(--ds-muted)]">{ROLE_HINT[role]}</span>
       </form>
 
-      {/* Share link */}
-      <Box
-        p="2"
-        mb="3"
-        style={{
-          background: "var(--gray-2)",
-          border: "1px solid var(--gray-5)",
-          borderRadius: "var(--radius-2)",
-        }}
-      >
-        <Text size="1" color="gray" weight="medium" as="div" mb="1">Share link</Text>
-        <Flex gap="2" align="center">
-          <Text size="1" color="gray" className="truncate flex-1 font-mono">{shareLink}</Text>
-          <IconButton size="1" variant="soft" color="gray" onClick={onCopy} aria-label="Copy share link">
-            {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-          </IconButton>
-        </Flex>
-      </Box>
+      <div className="mb-3 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-2.5">
+        <div className="mb-1 text-[12px] font-medium text-[var(--ds-muted)]">Share link</div>
+        <div className="flex items-center gap-2">
+          <span className="ds-mono min-w-0 flex-1 truncate text-[12px] text-[var(--ds-muted)]">{shareLink}</span>
+          <button type="button" onClick={onCopy} aria-label="Copy share link" className={iconBtn}>
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          </button>
+        </div>
+      </div>
 
-      {/* Owner row */}
-      <Box
-        p="2"
-        mb="2"
-        style={{
-          background: "var(--accent-2)",
-          border: "1px solid var(--accent-6)",
-          borderRadius: "var(--radius-2)",
-        }}
-      >
-        <Flex align="center" gap="2">
-          <Avatar seed="me" initials="YOU" size="lg" />
-          <Box className="flex-1 min-w-0">
-            <Text size="1" weight="medium" as="div">You</Text>
-            <Text size="1" color="gray" as="div">Created this draft</Text>
-          </Box>
-          <Badge color="amber" variant="soft">Owner</Badge>
-        </Flex>
-      </Box>
+      <div className="mb-2 flex items-center gap-2 rounded-[10px] border border-[var(--ds-line)] p-2.5">
+        <Avatar seed="me" initials="YOU" size="lg" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-medium text-[var(--ds-ink)]">You</div>
+          <div className="text-[12px] text-[var(--ds-muted)]">Created this draft</div>
+        </div>
+        <span className="rounded-[6px] bg-[var(--ds-amber-bg)] px-2 py-0.5 text-[12px] font-medium text-[var(--ds-amber-fg)]">Owner</span>
+      </div>
 
-      {/* List */}
       {collaborators.length === 0 ? (
-        <Text size="1" color="gray" as="p" className="text-center py-4">
-          No collaborators yet.
-        </Text>
+        <p className="m-0 py-4 text-center text-[12.5px] text-[var(--ds-muted)]">No one else yet.</p>
       ) : (
-        <Flex direction="column" gap="2">
+        <div className="flex flex-col gap-2">
           {collaborators.map((c) => (
             <CollaboratorRow
               key={c.id}
@@ -159,9 +145,9 @@ export function CollaboratorsPanel({ draft }: { draft: Draft }) {
               onRoleChange={(r) => updateRole(draft.id, c.id, r)}
             />
           ))}
-        </Flex>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -174,52 +160,43 @@ function CollaboratorRow({
   onRemove: () => void;
   onRoleChange: (role: CollaboratorRole) => void;
 }) {
+  const active = collaborator.status === "active";
   return (
-    <Box
-      p="2"
-      style={{
-        border: "1px solid var(--gray-5)",
-        borderRadius: "var(--radius-2)",
-      }}
-    >
-      <Flex align="center" gap="2" mb="1">
-        <Avatar
-          seed={collaborator.email}
-          name={collaborator.name}
-          email={collaborator.email}
-          size="lg"
-        />
-        <Box className="flex-1 min-w-0">
-          <Text size="1" weight="medium" as="div" className="truncate">
-            {collaborator.name ?? collaborator.email}
-          </Text>
-          {collaborator.name && (
-            <Text size="1" color="gray" as="div" className="truncate">
-              {collaborator.email}
-            </Text>
+    <div className="rounded-[10px] border border-[var(--ds-line)] p-2.5">
+      <div className="mb-1.5 flex items-center gap-2">
+        <Avatar seed={collaborator.email} name={collaborator.name} email={collaborator.email} size="lg" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-medium text-[var(--ds-ink)]">{collaborator.name ?? collaborator.email}</div>
+          {collaborator.name && <div className="truncate text-[12px] text-[var(--ds-muted)]">{collaborator.email}</div>}
+        </div>
+        <button type="button" onClick={onRemove} aria-label="Remove" className={iconBtn}>
+          <X className="size-3.5" />
+        </button>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <Select value={collaborator.role} onValueChange={(v) => onRoleChange(v as CollaboratorRole)}>
+          <SelectTrigger
+            size="sm"
+            aria-label={`Role for ${collaborator.name ?? collaborator.email}`}
+            className="h-7 border-transparent bg-transparent px-1.5 text-[12.5px] hover:bg-[var(--ds-hover)]"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start" className="z-[60]">
+            <SelectItem value="editor">{ROLE_LABEL.editor}</SelectItem>
+            <SelectItem value="reviewer">{ROLE_LABEL.reviewer}</SelectItem>
+            <SelectItem value="viewer">{ROLE_LABEL.viewer}</SelectItem>
+          </SelectContent>
+        </Select>
+        <span
+          className={cn(
+            "rounded-[6px] px-2 py-0.5 text-[12px] font-medium",
+            active ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]" : "bg-[var(--ds-surface-2)] text-[var(--ds-muted)]"
           )}
-        </Box>
-        <IconButton size="1" variant="ghost" color="gray" onClick={onRemove} aria-label="Remove">
-          <X className="size-3" />
-        </IconButton>
-      </Flex>
-      <Flex justify="between" align="center" gap="2">
-        <Select.Root
-          value={collaborator.role}
-          onValueChange={(v) => onRoleChange(v as CollaboratorRole)}
-          size="1"
         >
-          <Select.Trigger variant="ghost" />
-          <Select.Content>
-            <Select.Item value="editor">{ROLE_LABEL.editor}</Select.Item>
-            <Select.Item value="reviewer">{ROLE_LABEL.reviewer}</Select.Item>
-            <Select.Item value="viewer">{ROLE_LABEL.viewer}</Select.Item>
-          </Select.Content>
-        </Select.Root>
-        <Badge color={collaborator.status === "active" ? "green" : "gray"} variant="soft">
-          {collaborator.status}
-        </Badge>
-      </Flex>
-    </Box>
+          {active ? "Active" : "Invited"}
+        </span>
+      </div>
+    </div>
   );
 }

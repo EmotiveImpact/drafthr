@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMissingMergeValues, parseCsv, rowToAnswers, sampleCsvFor, sampleHeadersFor } from "./csv";
+import { displayCsvValue, findMissingMergeValues, missingFieldsLabel, parseCsv, rowSummary, rowToAnswers, sampleCsvFor, sampleHeadersFor } from "./csv";
 import { placeholderKeysFor } from "@/lib/bulk/mailmerge";
 
 describe("sampleHeadersFor", () => {
@@ -126,6 +126,42 @@ describe("parseCsv", () => {
     expect(r.rows).toEqual([{ employee_name: "Jane", employee_job_title: "Analyst" }]);
     expect(r.warnings).toHaveLength(1);
     expect(r.warnings[0].rowIndex).toBe(2);
-    expect(r.warnings[0].message).toMatch(/Row 2 missing 'employee_name'/);
+    expect(r.warnings[0].message).toBe("Row 2 has no name, so it will be skipped.");
+    // Plain words: the column key never reaches the screen (LISTS-X28).
+    expect(r.warnings[0].message).not.toMatch(/employee_name/);
+  });
+});
+
+describe("missingFieldsLabel", () => {
+  it("names what a row is missing in plain words, not column keys", () => {
+    expect(missingFieldsLabel(["employee_job_title"])).toBe("no job title");
+    expect(missingFieldsLabel(["employee_job_title", "effective_date"])).toBe("no job title, no effective date");
+    expect(missingFieldsLabel(["employee_job_title", "department"])).not.toMatch(/_/);
+  });
+});
+
+describe("rowSummary", () => {
+  const headers = ["employee_name", "department", "effective_date", "employee_job_title"];
+
+  it("puts the job title first and leaves the name out", () => {
+    const row = { employee_name: "Jordan Hale", department: "Operations", effective_date: "2026-11-01", employee_job_title: "Shift lead" };
+    expect(rowSummary(row, headers)).toBe("Shift lead · Operations · 1 Nov 2026");
+  });
+
+  it("shows the values a row has and names what it is missing", () => {
+    const row = { employee_name: "Priya Shah", department: "Finance", effective_date: "2026-11-01", employee_job_title: "" };
+    expect(rowSummary(row, headers, ["employee_job_title"])).toBe("Finance · 1 Nov 2026 · no job title");
+  });
+
+  it("is empty when the row only has a name", () => {
+    expect(rowSummary({ employee_name: "Sam" }, ["employee_name"])).toBe("");
+  });
+
+  it("writes ISO dates the way the app does and leaves other values as typed", () => {
+    expect(displayCsvValue("2026-11-02")).toBe("2 Nov 2026");
+    expect(displayCsvValue("2026-03-09T09:30:00Z")).toBe("9 Mar 2026");
+    expect(displayCsvValue("2026-02-30")).toBe("2026-02-30");
+    expect(displayCsvValue("02/11/2026")).toBe("02/11/2026");
+    expect(displayCsvValue("Operations")).toBe("Operations");
   });
 });

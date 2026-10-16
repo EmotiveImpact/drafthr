@@ -1,0 +1,395 @@
+/*
+ * Letter workspace (mocks f1 to f8, letter-live, phone-letter): the white
+ * letter page on the grey canvas, its type, the suggested edits on it (green
+ * for DraftHR, lilac for a reviewer), the numbered citation boxes, and the
+ * workspace's quiet and felt motion.
+ *
+ * Every selector is scoped under .lw-root (the workspace), .lw-paper (the
+ * page) or .lw-cite (a marker rendered outside the page) so nothing leaks
+ * into other screens. Colours come only from the --ds-* tokens.
+ */
+
+/* ---------- Letter type on the page ---------- */
+.lw-paper {
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--ds-ink);
+  font-variation-settings: "opsz" 14;
+}
+.lw-paper .ProseMirror,
+.lw-paper .lw-prose {
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--ds-ink);
+  outline: none;
+}
+.lw-paper .ProseMirror p,
+.lw-paper .lw-prose p {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+.lw-paper .ProseMirror p:last-child,
+.lw-paper .lw-prose p:last-child {
+  margin-bottom: 0;
+}
+.lw-paper .ProseMirror h1,
+.lw-paper .ProseMirror h2,
+.lw-paper .ProseMirror h3 {
+  font-family: var(--font-serif);
+  color: var(--ds-ink);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.lw-paper .ProseMirror h1 { font-size: 17px; margin: 0 0 12px; }
+.lw-paper .ProseMirror h2 { font-size: 15px; margin: 16px 0 8px; }
+.lw-paper .ProseMirror h3 { font-size: 14.5px; margin: 14px 0 6px; }
+.lw-paper .ProseMirror strong { font-weight: 600; color: var(--ds-ink); }
+.lw-paper .ProseMirror ul,
+.lw-paper .ProseMirror ol { margin: 0 0 12px; padding-left: 1.4em; }
+.lw-paper .ProseMirror li { margin: 2px 0; }
+/* The base reset clears list markers; a letter's lists show theirs. */
+.lw-paper .ProseMirror ul { list-style: disc outside; }
+.lw-paper .ProseMirror ul ul { list-style-type: circle; }
+.lw-paper .ProseMirror ol { list-style: decimal outside; }
+.lw-paper .ProseMirror li::marker { color: var(--ds-body); }
+.lw-paper .ProseMirror p.is-editor-empty:first-child::before {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--ds-faint);
+}
+/* Prose wrappers from the typography plugin: let the page set the type. */
+.lw-paper .prose {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+.lw-paper .prose :where(p):not(:where([class~="not-prose"] *)) {
+  margin-top: 0;
+}
+
+/* The subject line reads as the letter's heading. */
+.lw-paper .lw-section[data-section-kind="subject"] .ProseMirror,
+.lw-paper .lw-section[data-section-kind="subject"] .ProseMirror strong {
+  font-weight: 600;
+}
+/* One rhythm down the page (mock f1 .paper p, 12px): a paragraph's gap is
+ * the same inside a section and across into the next one. The section's
+ * own 12px bottom padding is that gap; the generic section-node padding
+ * would add 8px more at every boundary (LETTER-X30). */
+.lw-paper .lw-section {
+  scroll-margin-top: 5rem;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* On the phone the subject is the sheet's serif heading (phone-letter). */
+@media (max-width: 767px) {
+  .lw-paper .lw-section[data-section-kind="subject"] .ProseMirror,
+  .lw-paper .lw-section[data-section-kind="subject"] .ProseMirror :is(p, strong) {
+    font-size: 22px;
+    line-height: 1.25;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* The dark toast when an approval lands (letter-live step 3). */
+[data-sonner-toast].lw-toast-dark {
+  background: var(--ds-ink) !important;
+  color: var(--ds-on-accent) !important;
+  border-color: var(--ds-ink) !important;
+}
+[data-sonner-toast].lw-toast-dark .lw-toast-dark-desc,
+[data-sonner-toast].lw-toast-dark [data-description] {
+  color: var(--ds-faint) !important;
+}
+[data-sonner-toast].lw-toast-dark [data-close-button] {
+  background: var(--ds-ink) !important;
+  color: var(--ds-on-accent) !important;
+  border-color: var(--ds-body) !important;
+}
+
+/* ---------- Suggested edits on the page ----------
+ * DraftHR (f1): struck words red on pale red, new words on pale green with a
+ * green underline, a 2px amber bar beside the paragraph.
+ * A reviewer (f5): new words lilac with a lilac underline, struck words in a
+ * lilac strike, a lilac bar beside the paragraph. */
+.lw-paper ins[data-suggestion-id][data-status="pending"] {
+  text-decoration: none;
+  color: var(--ds-lilac-ink);
+  background: var(--ds-lilac-bg);
+  border-bottom: 1.5px solid var(--ds-lilac-ring);
+  border-radius: 2px;
+  padding: 0;
+  transition: background-color 0.42s ease 0.06s, color 0.42s ease 0.06s, border-color 0.42s ease 0.06s;
+}
+.lw-paper del[data-suggestion-id][data-status="pending"] {
+  color: var(--ds-lilac-fg);
+  text-decoration: line-through;
+  text-decoration-color: var(--ds-lilac-line);
+  text-decoration-thickness: 1px;
+  background: var(--ds-lilac-soft);
+  border-radius: 2px;
+  padding: 0;
+  transition: opacity 0.2s ease;
+}
+.lw-paper ins[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i], [data-author=""]) {
+  color: var(--ds-green-ink);
+  background: var(--ds-green-bg);
+  border-bottom-color: var(--ds-green-line);
+}
+.lw-paper del[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i], [data-author=""]) {
+  color: var(--ds-red-fg);
+  text-decoration-color: var(--ds-red-line);
+  background: var(--ds-red-soft);
+}
+.lw-paper ins[data-status="rejected"],
+.lw-paper del[data-status="rejected"] {
+  opacity: 0.4;
+  color: inherit;
+  background: transparent;
+  text-decoration: none;
+  border: 0;
+}
+
+/* The paragraph a suggestion changes: a bar in the left margin. */
+.lw-paper .ProseMirror :is(p, li, h2, h3):has(> [data-suggestion-id][data-status="pending"]),
+.lw-paper .ProseMirror :is(p, li, h2, h3):has(> * > [data-suggestion-id][data-status="pending"]) {
+  position: relative;
+}
+.lw-paper .ProseMirror :is(p, li, h2, h3):has(> [data-suggestion-id][data-status="pending"])::before,
+.lw-paper .ProseMirror :is(p, li, h2, h3):has(> * > [data-suggestion-id][data-status="pending"])::before {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--ds-lilac-line);
+  transition: opacity 0.5s ease;
+}
+.lw-paper .ProseMirror :is(p, li, h2, h3):has(> :is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i])[data-suggestion-id][data-status="pending"])::before {
+  background: var(--ds-amber-dot);
+}
+
+/* Comments on the page: amber highlight with an amber underline (f5). */
+.lw-paper mark[data-comment-id]:not([data-comment-resolved="true"]) {
+  background: var(--ds-amber-bg);
+  border-bottom: 2px solid var(--ds-amber-ring);
+  border-radius: 2px;
+  color: inherit;
+}
+
+/* A failing check that points at a passage (phone-letter .flag). Painted
+ * with the CSS Custom Highlight API so the editor's DOM is never touched. */
+::highlight(lw-flag) {
+  background-color: var(--ds-amber-bg);
+  text-decoration: underline;
+  text-decoration-color: var(--ds-amber-ring);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+::highlight(lw-find) {
+  background-color: var(--ds-amber-bg);
+}
+::highlight(lw-find-current) {
+  background-color: var(--ds-amber-solid);
+  color: var(--ds-ink);
+}
+
+/* ---------- Numbered boxed citation markers ----------
+ * A "[See Fig N]" evidence reference keeps its text for copy, export and
+ * screen readers; on the page it shows as a small numbered box. */
+:is(.lw-paper, .lw-pageview) .figure-ref[data-cite-n] {
+  font-size: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  color: transparent !important;
+  cursor: pointer;
+}
+:is(.lw-paper, .lw-pageview) .figure-ref[data-cite-n]::after,
+.lw-cite {
+  content: attr(data-cite-n);
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  margin: 0 1px 0 2px;
+  border: 1px solid var(--ds-line-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ds-muted);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  font-style: normal;
+  line-height: 1;
+  vertical-align: 2px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+:is(.lw-paper, .lw-pageview) .figure-ref[data-cite-n]:hover::after,
+:is(.lw-paper, .lw-pageview) .figure-ref[data-cite-n].is-open::after,
+.lw-cite:hover,
+.lw-cite[data-state="open"] {
+  color: var(--ds-ink);
+  border-color: var(--ds-muted);
+  background: var(--ds-chip);
+}
+.lw-cite:focus-visible {
+  outline: 2px solid var(--ds-focus);
+  outline-offset: 2px;
+}
+.lw-paper .attachment-ref {
+  background: var(--ds-chip) !important;
+  color: var(--ds-body) !important;
+  font-family: var(--font-sans);
+  font-size: 12px !important;
+  border-radius: 4px !important;
+}
+
+/* ---------- Motion ---------- */
+/* Margin cards leave by fading and sliding 8px right. */
+.lw-margin-card {
+  transition: opacity 0.22s ease, transform 0.22s ease, top 0.25s var(--ds-ease, ease);
+}
+.lw-margin-card[data-leaving="true"] {
+  opacity: 0;
+  transform: translateX(8px);
+  pointer-events: none;
+}
+
+/* A fixed check ticks green, then folds away. */
+.lw-fix-row {
+  overflow: hidden;
+  max-height: 120px;
+  transition: max-height 0.35s ease 0.45s, opacity 0.3s ease 0.45s, margin 0.35s ease 0.45s, padding 0.35s ease 0.45s, border-color 0.3s ease 0.45s;
+}
+.lw-fix-row[data-done="true"] {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  padding-top: 0;
+  border-color: transparent;
+}
+.lw-fix-row[data-done="true"] .lw-fix-mark {
+  background: var(--ds-green-bg);
+  color: var(--ds-green-fg);
+}
+.lw-tick path {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: ds-draw 0.35s ease-out forwards;
+}
+
+/* Tracker: a step that just completed fills and draws its tick. */
+.lw-progress [data-slot="stage-tracker"] li > span.size-7 {
+  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease, box-shadow 0.35s ease;
+}
+.lw-progress[data-tick-steps~="0"] [data-slot="stage-tracker"] > li:nth-child(1)[data-state="done"] svg path,
+.lw-progress[data-tick-steps~="1"] [data-slot="stage-tracker"] > li:nth-child(2)[data-state="done"] svg path,
+.lw-progress[data-tick-steps~="2"] [data-slot="stage-tracker"] > li:nth-child(3)[data-state="done"] svg path,
+.lw-progress[data-tick-steps~="3"] [data-slot="stage-tracker"] > li:nth-child(4)[data-state="done"] svg path {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: ds-draw 0.35s ease-out 0.1s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lw-progress[data-tick-steps] [data-slot="stage-tracker"] > li svg path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Status pill cross-fade when the stage changes. */
+.lw-fade-in {
+  animation: ds-fade-in 0.3s ease both;
+}
+
+/* Bar and segment movement in the side panel tabs. */
+.lw-seg-thumb {
+  transition: transform 0.2s var(--ds-ease, ease), width 0.2s var(--ds-ease, ease);
+}
+
+/* The approver's avatar gets a small green tick when they approve. */
+.lw-okb {
+  animation: ds-fade-in 0.3s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lw-root *,
+  .lw-root *::before,
+  .lw-root *::after,
+  .lw-paper *,
+  .lw-paper *::before {
+    transition-duration: 0.01s !important;
+    transition-delay: 0s !important;
+    animation-duration: 0.01s !important;
+    animation-delay: 0s !important;
+  }
+}
+
+/* The review page tags each redline with its author. DraftHR's own
+ * proposals are stored under an older AI author name; show them as
+ * DraftHR. */
+.review-canvas ins[data-suggestion-id][data-status="pending"][data-author]:is([data-author="Claude AI" i], [data-author="AI" i])::after,
+.review-canvas del[data-suggestion-id][data-status="pending"][data-author]:is([data-author="Claude AI" i], [data-author="AI" i]):not(:has(+ ins[data-suggestion-id]))::after {
+  content: "DraftHR";
+  font-family: var(--font-sans);
+}
+
+/* A teammate reviewer's commented words (V1, f4), painted with the CSS
+ * Custom Highlight API: amber with an amber underline, like a comment mark. */
+::highlight(lw-cmt) {
+  background-color: var(--ds-amber-bg);
+  text-decoration: underline;
+  text-decoration-color: var(--ds-amber-ring);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+/* ---------- The Review page (/editor/:id/review) ----------
+ * The same colours as the letter workspace: a reviewer's changes lilac
+ * (new words lilac with a lilac underline, struck words in a lilac strike,
+ * their name tag lilac), DraftHR's green and red. The globals give every
+ * suggestion mark green by default. */
+.review-canvas ins[data-suggestion-id][data-status="pending"] {
+  text-decoration: none;
+  color: var(--ds-lilac-ink);
+  background: var(--ds-lilac-bg);
+  border-bottom: 1.5px solid var(--ds-lilac-ring);
+  padding: 0;
+}
+.review-canvas del[data-suggestion-id][data-status="pending"] {
+  color: var(--ds-lilac-fg);
+  text-decoration: line-through;
+  text-decoration-color: var(--ds-lilac-line);
+  text-decoration-thickness: 1px;
+  background: var(--ds-lilac-soft);
+  padding: 0;
+}
+.review-canvas ins[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i], [data-author=""], :not([data-author])) {
+  color: var(--ds-green-ink);
+  background: var(--ds-green-bg);
+  border-bottom-color: var(--ds-green-line);
+}
+.review-canvas del[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i], [data-author=""], :not([data-author])) {
+  color: var(--ds-red-fg);
+  text-decoration-color: var(--ds-red-line);
+  background: var(--ds-red-soft);
+}
+.review-canvas ins[data-suggestion-id][data-status="pending"][data-author]::after,
+.review-canvas del[data-suggestion-id][data-status="pending"][data-author]:not(:has(+ ins[data-suggestion-id]))::after {
+  background: var(--ds-lilac-fg);
+  color: var(--ds-on-accent);
+}
+.review-canvas ins[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i])::after {
+  background: var(--ds-green-fg);
+}
+.review-canvas del[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i]):not(:has(+ ins[data-suggestion-id]))::after {
+  background: var(--ds-red-fg);
+}

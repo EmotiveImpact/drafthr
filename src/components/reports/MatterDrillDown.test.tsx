@@ -157,8 +157,8 @@ describe("MatterDrillDown", () => {
     expect(screen.getByText("Final warning — Jane")).toBeInTheDocument();
     expect(screen.getByText("Stage 2 grievance response")).toBeInTheDocument();
     expect(screen.queryByText("Unrelated letter")).not.toBeInTheDocument();
-    // 2 drafts, 2 unique employees rendered in the header chips.
-    expect(screen.getByText(/2 drafts/)).toBeInTheDocument();
+    // 2 letters, 2 unique employees rendered in the header chips.
+    expect(screen.getByText(/2 letters/)).toBeInTheDocument();
     expect(screen.getByText(/2 people/)).toBeInTheDocument();
   });
 
@@ -226,6 +226,27 @@ describe("MatterDrillDown", () => {
     // Colour: high uses the red token, low uses green.
     expect(piiBadge.getAttribute("style") ?? "").toContain("--ds-red-fg");
     expect(cleanBadge.getAttribute("style") ?? "").toContain("--ds-green-fg");
+    // Words, not a second "risk" level: what the letter's checks found.
+    expect(cleanBadge).toHaveTextContent("All pass");
+    expect(piiBadge).toHaveTextContent(/^\d+ failing$/);
+  });
+
+  it("shows the person who owns each letter, never the company it is from", () => {
+    storeMock.matters = { matter_1: makeMatter() };
+    storeMock.drafts = {
+      draft_a: makeDraft({
+        id: "draft_a",
+        title: "Owned letter",
+        collaborators: [{ id: "c1", email: "dana@acme.test", name: "Dana Whitfield", role: "owner", status: "active", invitedAt: 0 }],
+      } as Partial<Draft>),
+      draft_b: makeDraft({ id: "draft_b", title: "Mine" }),
+    };
+
+    renderAt("/reports/matters/matter_1");
+
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Dana Whitfield")).toBeInTheDocument();
+    expect(within(table).queryByText("Acme Ltd")).not.toBeInTheDocument();
   });
 
   it("supports keyboard activation on rows", () => {
@@ -259,8 +280,8 @@ describe("MatterDrillDown", () => {
 
     expect(screen.getByText("Real letter")).toBeInTheDocument();
     expect(screen.queryByText("Template source")).not.toBeInTheDocument();
-    // and the count chip should reflect 1 draft, not 2.
-    const headers = screen.getAllByText(/1 draft/);
+    // and the count chip should reflect 1 letter, not 2.
+    const headers = screen.getAllByText(/1 letter\b/);
     expect(headers.length).toBeGreaterThan(0);
     // Sanity: the inner table only contains the real draft as a row button.
     const table = screen.getByRole("table");

@@ -19,6 +19,7 @@ import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantProfiles } from "../../../src/db/schema.js";
+import { offersPriority, priorityReviewsOn } from "../../_utils/priority-reviews.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -90,7 +91,8 @@ export async function GET(req: Request): Promise<Response> {
     .limit(lim)
     .offset(off);
 
-  const consultants = rows.map(toClient);
+  const priorityOn = priorityReviewsOn();
+  const consultants = rows.map((row) => toClient(row, priorityOn));
 
   return new Response(JSON.stringify({ consultants, count: consultants.length }), {
     status: 200,
@@ -103,7 +105,7 @@ function clampInt(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
-function toClient(row: typeof consultantProfiles.$inferSelect) {
+function toClient(row: typeof consultantProfiles.$inferSelect, priorityOn: boolean) {
   return {
     id: row.id,
     initials: row.initials,
@@ -113,6 +115,9 @@ function toClient(row: typeof consultantProfiles.$inferSelect) {
     specialty: row.specialty,
     specialties: row.specialties,
     price: row.price,
+    /** Only while priority reviews are switched on, and only when the
+     *  expert offers them; null otherwise. */
+    priorityPrice: priorityOn && offersPriority(row) ? row.priorityPrice : null,
     currency: row.currency,
     sla: row.sla,
     availability: row.availability,

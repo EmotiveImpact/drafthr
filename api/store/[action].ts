@@ -28,6 +28,10 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/critique.js");
     case "notify":
       return import("./_handlers/notify.js");
+    case "email-letter":
+      return import("./_handlers/email-letter.js");
+    case "review-links":
+      return import("../review-links/_handlers/review-links.js");
     default:
       return null;
   }

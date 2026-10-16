@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { useDraftStore } from "@/lib/store";
 import { Markdown } from "@/components/editor/Markdown";
 import { getBillingStatus } from "@/lib/billing/api";
+import { lowestPrice, useExperts } from "@/components/journey/review/experts";
+import { money } from "@/components/journey/review/model";
 import {
   assembleLetterText,
   runCritique,
@@ -22,8 +24,10 @@ import {
  *   AI credit, get a structured critique streamed back (see api/store/critique).
  * - "External consultant" routes to the live /consultants marketplace, carrying
  *   the current draft so the booking has letter context.
- * - "Your team" is an honest "coming soon" placeholder — not clickable, charges
- *   nothing.
+ * - "Your team" opens the letter's reviewer picker on the team pane (the
+ *   same team review the Progress panel sends).
+ * - The consultant price is the marketplace's lowest listed price, the same
+ *   figure the reviewer picker shows.
  */
 export function ImproveTab() {
   const navigate = useNavigate();
@@ -33,6 +37,10 @@ export function ImproveTab() {
 
   const browseConsultants = () =>
     navigate(draftId ? `/consultants?draft=${encodeURIComponent(draftId)}` : "/consultants");
+  const askTeam = () => draftId && navigate(`/editor/${encodeURIComponent(draftId)}?review=team`);
+  const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const experts = useExperts(draft, true);
+  const cheapest = lowestPrice(experts.all);
 
   return (
     <motion.div
@@ -42,7 +50,7 @@ export function ImproveTab() {
       className="space-y-3"
     >
       <p className="text-[12px] text-[var(--ds-muted)] px-1">
-        Optional — recommended for high-stakes letters. Pick a lane.
+        Optional, recommended for high-stakes letters. Pick a lane.
       </p>
 
       <AiSpecialistLane draftId={draftId} />
@@ -54,8 +62,9 @@ export function ImproveTab() {
         statLabel="Cost"
         statValue={<>Free</>}
         timeLabel="Returns"
-        timeValue="Async"
-        comingSoon
+        timeValue="When they're done"
+        cta="Ask your team"
+        onClick={askTeam}
       />
 
       <ReviewLane
@@ -63,7 +72,7 @@ export function ImproveTab() {
         title="External consultant"
         desc="Vetted HR / employment specialist. Best for settlements, dismissals, tribunal-bound letters."
         statLabel="From"
-        statValue={<>£85</>}
+        statValue={cheapest ? <>{money(cheapest.price, cheapest.symbol)}</> : experts.status === "loading" ? <>…</> : <>See prices</>}
         timeLabel="SLA"
         timeValue="24–48h"
         cta="Browse consultants"
@@ -92,7 +101,10 @@ function AiSpecialistLane({ draftId }: { draftId?: string }) {
   useEffect(() => {
     let cancelled = false;
     void getBillingStatus().then((s) => {
-      if (!cancelled) setCredits(s?.credits ?? 0);
+      // Unknown (the status call failed) is not "no credits": leave the count
+      // unshown and the button usable; a run that truly lacks credits gets
+      // a 402 and says so.
+      if (!cancelled && s) setCredits(s.credits ?? 0);
     });
     return () => {
       cancelled = true;
@@ -327,22 +339,19 @@ function ReviewLane({
           Coming soon
         </div>
       ) : (
-        <motion.button
+        <button
           type="button"
           onClick={onClick}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          transition={{ duration: 0.12 }}
           className={cn(
-            "mt-2.5 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition",
+            "mt-2.5 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
             primary
-              ? "bg-[var(--ds-ink)] text-white hover:opacity-90"
-              : "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]",
+              ? "bg-[var(--ds-accent)] text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)]"
+              : "border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)]",
           )}
         >
           {cta}
           <ArrowRight className="size-3.5" />
-        </motion.button>
+        </button>
       )}
     </div>
   );

@@ -113,7 +113,7 @@ export function parseCsv(raw: string): CsvParseResult {
     .filter((r) => !isBlankRecord(r.cells));
 
   if (records.length === 0) {
-    return { headers: [], rows: [], warnings: [], error: "CSV is empty." };
+    return { headers: [], rows: [], warnings: [], error: "This file is empty. It needs a header row and at least one row of data." };
   }
   if (records.length < 2) {
     return {
@@ -148,7 +148,7 @@ export function parseCsv(raw: string): CsvParseResult {
       headers,
       rows: [],
       warnings: [],
-      error: `Duplicate column '${duplicate}' — column names must be unique.`,
+      error: `Duplicate column '${duplicate}'. Column names must be unique.`,
     };
   }
 
@@ -166,7 +166,8 @@ export function parseCsv(raw: string): CsvParseResult {
       // is sent to the offending record rather than the header.
       warnings.push({
         rowIndex: fileRow,
-        message: `Row ${fileRow} missing 'employee_name' — will skip.`,
+        // Plain words, not the column key (LISTS-X28).
+        message: `Row ${fileRow} has no name, so it will be skipped.`,
       });
       continue;
     }
@@ -340,4 +341,63 @@ export function rowToAnswers(
   }
 
   return answers;
+}
+
+/** "employee_job_title" → "job title", for plain-words copy. */
+export function humaniseField(key: string): string {
+  return foldKey(key).replace(/^employee_/, "").replace(/_/g, " ").trim();
+}
+
+/**
+ * What a row is missing, in the words the preview's row lines use:
+ * ["employee_job_title", "department"] → "no job title, no department".
+ * The column keys never reach the screen (LISTS-X28).
+ */
+export function missingFieldsLabel(fields: string[]): string {
+  return fields.map((f) => `no ${humaniseField(f)}`).join(", ");
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * A CSV date as the app writes dates ("2026-11-02" → "2 Nov 2026"). Only a
+ * real ISO calendar date (optionally with a time) is rewritten; anything
+ * else (other formats, free text, impossible dates) is shown as typed.
+ */
+export function displayCsvValue(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(value);
+  if (!m) return value;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return value;
+  return `${d} ${MONTHS[mo - 1]} ${y}`;
+}
+
+/**
+ * The preview's sub line for one CSV row: the job title first, then the row's
+ * other filled values in column order (never the name, which is the title),
+ * then what is missing ("no job title"). Empty when the row only has a name.
+ * Dates read as everywhere else in the app ("2 Nov 2026", LISTS-X23).
+ */
+export function rowSummary(
+  row: Record<string, string | number | undefined>,
+  headers: string[],
+  missingFields: string[] = [],
+  limit = 3,
+): string {
+  const values: string[] = [];
+  const seen = new Set<string>();
+  const ordered = [...headers].sort(
+    (a, b) => Number(foldKey(b) === "employee_job_title") - Number(foldKey(a) === "employee_job_title"),
+  );
+  for (const h of ordered) {
+    const key = foldKey(h);
+    if (key === "employee_name" || seen.has(key)) continue;
+    seen.add(key);
+    const v = String(row[h] ?? "").trim();
+    if (v) values.push(displayCsvValue(v));
+  }
+  const parts = values.slice(0, limit);
+  for (const f of missingFields) parts.push(`no ${humaniseField(f)}`);
+  return parts.join(" · ");
 }

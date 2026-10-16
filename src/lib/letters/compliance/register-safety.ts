@@ -75,7 +75,7 @@ export const REGISTER_SAFETY_RULES: RegisterSafetyRule[] = [
   {
     id: "rs_warn_admission_temper",
     severity: "warn",
-    label: "Admission — losing temper",
+    label: "Admission: losing temper",
     description:
       "Admitting to losing your temper / shouting / behaving badly will be quoted in any subsequent disciplinary or tribunal proceeding.",
     pattern: "\\bi (?:lost|raised) my (?:temper|voice)\\b|\\bi shouted\\b",
@@ -86,7 +86,7 @@ export const REGISTER_SAFETY_RULES: RegisterSafetyRule[] = [
   {
     id: "rs_warn_admission_shouldnt",
     severity: "warn",
-    label: "Concession — 'I shouldn't have'",
+    label: "Concession: 'I shouldn't have'",
     description: "'I shouldn't have...' is a self-incriminating admission.",
     pattern: "\\bi (?:should not have|shouldn[\\u2019']t have|admit (?:that )?i)\\b",
     recommendation: "Remove unless strategically necessary. Apologies and concessions weaken your evidential position.",
@@ -118,7 +118,7 @@ export const REGISTER_SAFETY_RULES: RegisterSafetyRule[] = [
     severity: "warn",
     label: "Subjective intensifier",
     description:
-      "'Clearly', 'obviously', 'blatantly', 'plainly' weaken assertions for a tribunal panel — if it's clear, the facts will speak.",
+      "'Clearly', 'obviously', 'blatantly', 'plainly' weaken assertions for a tribunal panel. If it's clear, the facts will speak.",
     pattern: "\\b(?:clearly|obviously|blatantly|plainly|absolutely|completely)\\b",
     recommendation: "Strip the intensifier; let the facts carry the assertion.",
   },
@@ -129,7 +129,7 @@ export const REGISTER_SAFETY_RULES: RegisterSafetyRule[] = [
     severity: "suggest",
     label: "Vague time reference",
     description:
-      "'A while ago', 'recently', 'some time back' — replace with a specific date if you have one.",
+      "'A while ago', 'recently', 'some time back': replace with a specific date if you have one.",
     pattern: "\\b(?:a while ago|some time ago|some time back|recently|the other day)\\b",
     recommendation: "Replace with a specific date. Tribunal panels disbelieve vague chronologies.",
   },
@@ -141,14 +141,14 @@ export const REGISTER_SAFETY_RULES: RegisterSafetyRule[] = [
       "Putting words in quotes without attribution invites a 'they didn't say that' challenge.",
     pattern: "(?<!\\w)[\\u201C\\u201D\"][^\\u201C\\u201D\"\\n]{8,}[\\u201C\\u201D\"]",
     recommendation:
-      "Attribute the quote — '[Manager] said on [date]: \"…\"' — or paraphrase: 'in substance she said that…'.",
+      "Attribute the quote ('[Manager] said on [date]: \"…\"') or paraphrase: 'in substance she said that…'.",
   },
   {
     id: "rs_suggest_undermining_adverb",
     severity: "suggest",
     label: "Undermining hedge",
     description:
-      "'I think maybe', 'I sort of feel', 'kind of' — pulls the rhetorical floor out from under your assertion.",
+      "'I think maybe', 'I sort of feel', 'kind of' pulls the rhetorical floor out from under your assertion.",
     pattern: "\\b(?:i think maybe|i sort of|kind of|kinda|sort of)\\b",
     recommendation:
       "Replace with 'I believe' or simply state the fact.",
@@ -158,7 +158,7 @@ export const REGISTER_SAFETY_RULES: RegisterSafetyRule[] = [
     severity: "suggest",
     label: "Unprovable absolute",
     description:
-      "'Everyone knows', 'it's well known', 'no one would deny' — unprovable; gives the employer a free hit.",
+      "'Everyone knows', 'it's well known', 'no one would deny' are unprovable and give the employer a free hit.",
     pattern: "\\b(?:everyone knows|it[\\u2019']?s well known|no one would deny|nobody (?:disputes|would deny))\\b",
     recommendation: "Replace with attributable, dated facts.",
   },

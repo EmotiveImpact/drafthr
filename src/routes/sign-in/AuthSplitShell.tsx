@@ -16,26 +16,19 @@ import { SignInSlideshow } from "./SignInSlideshow";
  */
 export function AuthSplitShell({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-screen lg:grid lg:grid-cols-2 text-[var(--ds-ink)]">
-      {/* Left column — image slideshow. Hidden below lg: so phones don't
-       * pay for the assets. Sticky to the viewport height so the form
-       * column can scroll independently on tall content. */}
+    <div data-page-main className="min-h-screen lg:grid lg:grid-cols-2 text-[var(--ds-ink)]">
+      {/* Left column: pastel letter slideshow on the warm off-white ground.
+       * Hidden below lg:. Sticky to the viewport height so the form column
+       * can scroll independently on tall content. */}
       <div className="hidden lg:block lg:sticky lg:top-0 lg:h-screen">
         <SignInSlideshow />
       </div>
 
-      {/* Right column — the existing form. Keeps the soft canvas gradient
-       * (so the visual register matches the rest of the auth surface)
-       * and centers the card vertically inside its own column. */}
-      <div
-        className="min-h-screen flex flex-col"
-        style={{
-          background:
-            "radial-gradient(60% 50% at 88% 0%, rgba(10,11,13,0.035), transparent 70%), linear-gradient(180deg, var(--ds-canvas) 0%, #ffffff 60%, var(--ds-canvas) 100%)",
-        }}
-      >
+      {/* Right column: the form. White on lg: (the card sits flat on it),
+       * warm off-white with a white card on smaller screens. */}
+      <div className="min-h-screen flex flex-col bg-[var(--ds-canvas)] lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)]">
         {children}
       </div>
-    </main>
+    </div>
   );
 }

@@ -60,6 +60,7 @@ export async function POST(req: Request): Promise<Response> {
         status: consultantBookings.status,
         priceAmount: consultantBookings.priceAmount,
         priceCurrency: consultantBookings.priceCurrency,
+        turnaround: consultantBookings.turnaround,
       })
       .from(consultantBookings)
       .where(eq(consultantBookings.id, bookingId))
@@ -156,6 +157,10 @@ export async function POST(req: Request): Promise<Response> {
     }
     const appFee = Math.round((amount * platformFeeBps()) / 10_000);
     const base = appBaseUrl(req);
+    const priority = booking.turnaround === "priority";
+    const description = [booking.matterTitle, priority ? "Back within 24 hours of payment." : null]
+      .filter(Boolean)
+      .join(". ");
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -168,8 +173,8 @@ export async function POST(req: Request): Promise<Response> {
             currency,
             unit_amount: amount,
             product_data: {
-              name: `Specialist letter review${profile.fullName ? ` — ${profile.fullName}` : ""}`,
-              description: booking.matterTitle ?? undefined,
+              name: `${priority ? "Priority specialist" : "Specialist"} letter review${profile.fullName ? ` with ${profile.fullName}` : ""}`,
+              description: description || undefined,
             },
           },
         },

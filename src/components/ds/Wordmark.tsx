@@ -1,7 +1,8 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The DRAFTHR wordmark — "DraftHR" set in Playfair Display.
+ * The DraftHR wordmark, set in Inter semibold like the rest of the UI (the
+ * brief allows only Inter and Newsreader).
  * Pairs with <BrandMark/> to form the brand lockup. Use the wordmark on its
  * own for headers where the glyph would feel redundant.
  *
@@ -28,18 +29,14 @@ export function Wordmark({
         className
       )}
       style={{
-        fontFamily: "var(--font-display)",
+        fontFamily: "var(--font-sans)",
         fontWeight: 600,
         fontSize: size,
-        letterSpacing: "0.06em",
-        // Playfair's cap-height sits low in its em-box. Nudge up so the
-        // optical center of the wordmark lines up with the BrandMark chip
-        // when both are placed in a flex row with items-center.
-        transform: "translateY(-0.02em)",
+        letterSpacing: "-0.02em",
       }}
       aria-label="DraftHR"
     >
-      Draft<span style={{ letterSpacing: "0.07em" }}>HR</span>
+      DraftHR
     </span>
   );
 }

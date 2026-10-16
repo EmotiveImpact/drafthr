@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronDown,
@@ -22,6 +22,7 @@ import { displayModeOf, figureLabelFor, sectionLabels } from "@/lib/evidence";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 import { uid } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 /* ---------------------------------------------------------------------------
@@ -96,6 +97,12 @@ type Props = {
   onInsertAtSection: EvidencePanelInsertHandler;
   /** Auto-open the Add form on mount — driven by `?action=add` URL param. */
   autoOpenAdd?: boolean;
+  /** Look only: no Add, Edit, Delete, Reference, Quote or Link (the letter
+   *  is locked while out for review or with the approver, or this person
+   *  cannot edit it). */
+  readOnly?: boolean;
+  /** Why it is read only, shown above the list. */
+  readOnlyNote?: string;
 };
 
 export function EvidencePanel({
@@ -104,12 +111,15 @@ export function EvidencePanel({
   onChangeEvidence,
   onInsertAtSection,
   autoOpenAdd,
+  readOnly = false,
+  readOnlyNote,
 }: Props) {
   const evidence = draft.evidence ?? [];
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterTab>("all");
-  const [addOpen, setAddOpen] = useState<boolean>(Boolean(autoOpenAdd));
+  const [addOpenState, setAddOpen] = useState<boolean>(Boolean(autoOpenAdd));
+  const addOpen = addOpenState && !readOnly;
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Open the Add form whenever the parent flips autoOpenAdd true (URL change).
@@ -185,7 +195,7 @@ export function EvidencePanel({
             {evidence.length} {evidence.length === 1 ? "item" : "items"}
           </p>
         </div>
-        <Button
+        {!readOnly && <Button
           size="xs"
           variant={addOpen ? "secondary" : "default"}
           onClick={() => setAddOpen((open) => !open)}
@@ -202,8 +212,13 @@ export function EvidencePanel({
               Add
             </>
           )}
-        </Button>
+        </Button>}
       </header>
+      {readOnly && readOnlyNote && (
+        <p className="m-0 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface-2)] px-3 py-2 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+          {readOnlyNote}
+        </p>
+      )}
 
       {/* Add-new form — collapsible. When closed, just the toggle stays in
        * the header. */}
@@ -231,8 +246,9 @@ export function EvidencePanel({
         />
       </div>
 
-      {/* Kind filter tabs */}
-      <div className="flex shrink-0 overflow-x-auto border-b border-[var(--ds-line)] px-2">
+      {/* Kind filters: chips that wrap, so none is cut off at the panel's
+       * edge (LETTER-X32), as in the evidence drawer. */}
+      <div role="tablist" aria-label="Evidence kinds" className="flex shrink-0 flex-wrap gap-1.5 border-b border-[var(--ds-line)] px-3 py-2">
         {FILTER_TABS.map((tab) => {
           const isActive = filter === tab.id;
           const count = counts[tab.id];
@@ -240,23 +256,18 @@ export function EvidencePanel({
             <button
               key={tab.id}
               type="button"
+              role="tab"
+              aria-selected={isActive}
               onClick={() => setFilter(tab.id)}
               className={cn(
-                "shrink-0 px-2.5 py-2 text-[11.5px] font-medium border-b-2 -mb-px transition whitespace-nowrap inline-flex items-center gap-1.5",
+                "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-[12px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
                 isActive
-                  ? "text-[var(--ds-ink)] border-[var(--ds-ink)]"
-                  : "text-[var(--ds-muted)] border-transparent hover:text-[var(--ds-ink)]",
+                  ? "border-[var(--ds-ink)] bg-[var(--ds-ink)] text-[var(--ds-on-accent)]"
+                  : "border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)]",
               )}
             >
               <span>{tab.label}</span>
-              <span
-                className={cn(
-                  "min-w-[16px] text-center text-[10px] font-semibold px-1.5 py-px rounded-full tabular-nums",
-                  isActive
-                    ? "bg-[var(--ds-ink)] text-white"
-                    : "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
-                )}
-              >
+              <span className={cn("ds-mono text-[11px] tabular-nums", isActive ? "text-[var(--ds-faint)]" : "text-[var(--ds-muted)]")}>
                 {count}
               </span>
             </button>
@@ -269,7 +280,7 @@ export function EvidencePanel({
         {filtered.length === 0 ? (
           <EmptyState
             hasAny={evidence.length > 0}
-            onAdd={() => setAddOpen(true)}
+            onAdd={readOnly ? undefined : () => setAddOpen(true)}
           />
         ) : (
           <ul className="m-0 list-none p-3 space-y-2">
@@ -286,6 +297,7 @@ export function EvidencePanel({
                 onDelete={() => removeItem(item.id)}
                 onInsertReference={() => onInsertAtSection(item, "reference")}
                 onInsertQuote={() => onInsertAtSection(item, "quote")}
+                readOnly={readOnly}
               />
             ))}
           </ul>
@@ -343,7 +355,7 @@ function AddEvidenceForm({
     if (!file) return;
     if (file.size > MAX_EVIDENCE_FILE_BYTES) {
       setError(
-        `${file.name} is larger than 10 MB. Use a smaller file or summarize as a note.`,
+        `${file.name} is larger than 10 MB. Use a smaller file or summarise it as a note.`,
       );
       return;
     }
@@ -387,23 +399,29 @@ function AddEvidenceForm({
     onSubmit(item);
   };
 
+  const typeLabelId = useId();
   return (
     <div className="shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-3 py-3 space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <label className="block text-[10.5px] font-medium text-[var(--ds-muted)]">
-          Type
-          <select
-            value={kind}
-            onChange={(event) => setKind(event.target.value as Kind)}
-            className="mt-1 h-7 w-full rounded-md border border-[var(--ds-line)] bg-white px-1.5 text-[12px] text-[var(--ds-ink)]"
-          >
-            {KIND_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="block text-[10.5px] font-medium text-[var(--ds-muted)]">
+          <span id={typeLabelId}>Type</span>
+          <Select value={kind} onValueChange={(v) => setKind(v as Kind)}>
+            <SelectTrigger
+              size="sm"
+              aria-labelledby={typeLabelId}
+              className="mt-1 h-7 w-full rounded-md px-1.5 text-[12px] font-normal data-[size=sm]:h-7 data-[size=sm]:text-[12px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="z-[60]">
+              {KIND_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <label className="block text-[10.5px] font-medium text-[var(--ds-muted)]">
           Label
           <input
@@ -505,7 +523,9 @@ function EvidenceCard({
   onDelete,
   onInsertReference,
   onInsertQuote,
+  readOnly = false,
 }: {
+  readOnly?: boolean;
   draft: Draft;
   item: EvidenceItem;
   activeSectionId: string | null;
@@ -562,7 +582,7 @@ function EvidenceCard({
                 {mode === "figure" && figLabel ? ` · ${figLabel}` : ""}
               </p>
             </div>
-            <div className="flex items-center shrink-0">
+            {!readOnly && <div className="flex items-center shrink-0">
               <button
                 type="button"
                 onClick={isEditing ? onStopEdit : onStartEdit}
@@ -585,7 +605,7 @@ function EvidenceCard({
               >
                 <Trash2 className="size-3" />
               </button>
-            </div>
+            </div>}
           </div>
 
           {!isEditing && (
@@ -606,7 +626,7 @@ function EvidenceCard({
 
           {/* Insertion actions — only meaningful when a section is active.
            * The reference / quote / link buttons all act on activeSectionId. */}
-          <div className="mt-2 flex flex-wrap gap-1">
+          {!readOnly && <div className="mt-2 flex flex-wrap gap-1">
             <Button
               size="xs"
               variant="outline"
@@ -647,11 +667,11 @@ function EvidenceCard({
                 {isLinkedToActive ? "Linked here" : "Link to active"}
               </Button>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 
-      {isEditing && (
+      {isEditing && !readOnly && (
         <CardEditPanel
           draft={draft}
           item={item}
@@ -680,6 +700,7 @@ function CardEditPanel({
   onUpdate: (patch: Partial<EvidenceItem>) => void;
   onClose: () => void;
 }) {
+  const typeLabelId = useId();
   const mode = displayModeOf(item);
   const evidence = draft.evidence ?? [];
   const autoLabel = figureLabelFor(item, evidence);
@@ -687,22 +708,25 @@ function CardEditPanel({
   return (
     <div className="border-t border-[var(--ds-line-2)] bg-[var(--ds-surface-2)] px-2.5 py-2.5 space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <label className="block text-[10px] font-medium text-[var(--ds-muted)]">
-          Type
-          <select
-            value={item.kind}
-            onChange={(event) =>
-              onUpdate({ kind: event.target.value as Kind })
-            }
-            className="mt-1 h-7 w-full rounded-md border border-[var(--ds-line)] bg-white px-1.5 text-[12px] text-[var(--ds-ink)]"
-          >
-            {KIND_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="block text-[10px] font-medium text-[var(--ds-muted)]">
+          <span id={typeLabelId}>Type</span>
+          <Select value={item.kind} onValueChange={(v) => onUpdate({ kind: v as Kind })}>
+            <SelectTrigger
+              size="sm"
+              aria-labelledby={typeLabelId}
+              className="mt-1 h-7 w-full rounded-md px-1.5 text-[12px] font-normal data-[size=sm]:h-7 data-[size=sm]:text-[12px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="z-[60]">
+              {KIND_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <label className="block text-[10px] font-medium text-[var(--ds-muted)]">
           Label
           <input
@@ -833,7 +857,7 @@ function EmptyState({
   onAdd,
 }: {
   hasAny: boolean;
-  onAdd: () => void;
+  onAdd?: () => void;
 }) {
   if (!hasAny) {
     return (
@@ -845,13 +869,16 @@ function EmptyState({
           No evidence yet
         </p>
         <p className="m-0 mt-1 mb-3 text-[11px] text-[var(--ds-muted)] max-w-[220px] mx-auto leading-snug">
-          Add emails, screenshots, documents or notes. You can then link each
-          item to the sections that rely on it.
+          {onAdd
+            ? "Add emails, screenshots, documents or notes. You can then link each item to the sections that rely on it."
+            : "Nothing has been added to this letter."}
         </p>
-        <Button size="xs" onClick={onAdd}>
-          <Plus className="size-3" />
-          Add evidence
-        </Button>
+        {onAdd && (
+          <Button size="xs" onClick={onAdd}>
+            <Plus className="size-3" />
+            Add evidence
+          </Button>
+        )}
       </div>
     );
   }

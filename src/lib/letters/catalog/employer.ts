@@ -4,7 +4,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "offer",
     mode: "employer",
-    title: "Offer of Employment",
+    title: "Offer of employment",
     shortTitle: "Offer letter",
     description:
       "Formalises the terms of a proposed employment offer. Generates UK or US variants with the right statutory references and at-will language.",
@@ -14,16 +14,16 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [500, 900],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
+      { id: "subject", title: "Subject", required: true },
       { id: "opening", title: "Opening", required: true },
       { id: "body", title: "Position details", required: true },
       { id: "compensation", title: "Compensation", required: true },
-      { id: "benefits", title: "Benefits & leave", required: true },
-      { id: "terms", title: "Working hours & terms", required: true },
+      { id: "benefits", title: "Benefits and leave", required: true },
+      { id: "terms", title: "Working hours and terms", required: true },
       { id: "conditions", title: "Conditions of offer", required: true },
-      { id: "next_steps", title: "Acceptance & deadline", required: true },
+      { id: "next_steps", title: "Acceptance and deadline", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
     ],
@@ -31,7 +31,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "reference",
     mode: "employer",
-    title: "Reference / Employment Verification",
+    title: "Reference or employment verification",
     shortTitle: "Reference letter",
     description:
       "Confirms employment for a third party. Defaults to fact-only to limit liability; switch to full character reference when authorised.",
@@ -41,9 +41,9 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [100, 400],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
+      { id: "subject", title: "Subject", required: true },
       { id: "body", title: "Confirmation of employment", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
@@ -52,7 +52,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "termination",
     mode: "employer",
-    title: "Termination / Dismissal",
+    title: "Termination or dismissal",
     shortTitle: "Termination",
     description:
       "Ends the employment relationship. UK variant references s.98 ERA fair-reason categories and ACAS Code; US variant respects at-will, WARN, COBRA, and state final-pay timing.",
@@ -63,13 +63,13 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     wordRange: [400, 800],
     badge: "Counsel review required",
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
+      { id: "subject", title: "Subject", required: true },
       { id: "opening", title: "Decision statement", required: true },
-      { id: "body", title: "Reason & findings", required: true },
+      { id: "body", title: "Reason and findings", required: true },
       { id: "terms", title: "Notice, final pay, holiday", required: true },
-      { id: "conditions", title: "Property return & covenants", required: true },
+      { id: "conditions", title: "Property return and covenants", required: true },
       { id: "appeal_rights", title: "Right of appeal", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
@@ -78,7 +78,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "warning",
     mode: "employer",
-    title: "Performance / Disciplinary Warning",
+    title: "Performance or disciplinary warning",
     shortTitle: "Warning letter",
     description:
       "Issues a verbal, written, or final written warning. Mandatory ACAS-aligned content for UK; documentation-grade content for US to defeat discrimination claims.",
@@ -88,12 +88,12 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: true,
     wordRange: [250, 800],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
+      { id: "subject", title: "Subject", required: true },
       { id: "opening", title: "Reference to hearing", required: true },
-      { id: "body", title: "Allegations & findings", required: true },
-      { id: "terms", title: "Improvement required & review", required: true },
+      { id: "body", title: "Allegations and findings", required: true },
+      { id: "terms", title: "Improvement required and review", required: true },
       { id: "appeal_rights", title: "Right of appeal", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
@@ -112,13 +112,13 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [250, 400],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
+      { id: "subject", title: "Subject", required: true },
       { id: "opening", title: "Congratulations", required: true },
-      { id: "body", title: "New role & responsibilities", required: true },
+      { id: "body", title: "New role and responsibilities", required: true },
       { id: "compensation", title: "New compensation", required: true },
-      { id: "terms", title: "Continuity & other terms", required: true },
+      { id: "terms", title: "Continuity and other terms", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
     ],
@@ -126,7 +126,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "salary_increase",
     mode: "employer",
-    title: "Salary Increase",
+    title: "Salary increase",
     shortTitle: "Pay rise",
     description:
       "Communicates a pay change without a role change. Pro-rata-aware and FLSA threshold-aware.",
@@ -136,11 +136,11 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [150, 300],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
-      { id: "body", title: "Pay change & reason", required: true },
-      { id: "compensation", title: "New rate & effective date", required: true },
+      { id: "subject", title: "Subject", required: true },
+      { id: "body", title: "Pay change and reason", required: true },
+      { id: "compensation", title: "New rate and effective date", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
     ],
@@ -148,7 +148,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "probation_outcome",
     mode: "employer",
-    title: "Probation Outcome",
+    title: "Probation outcome",
     shortTitle: "Probation outcome",
     description:
       "Pass, extension, or fail. Includes reference to the review meeting, support offered, and (on fail) right of appeal.",
@@ -158,10 +158,10 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [150, 650],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
-      { id: "body", title: "Outcome & rationale", required: true },
+      { id: "subject", title: "Subject", required: true },
+      { id: "body", title: "Outcome and rationale", required: true },
       { id: "terms", title: "Effect on terms", required: true },
       { id: "appeal_rights", title: "Right of appeal", required: false },
       { id: "closing", title: "Closing", required: true },
@@ -171,7 +171,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "contract_amendment",
     mode: "employer",
-    title: "Contract Amendment / Variation",
+    title: "Contract amendment or variation",
     shortTitle: "Contract variation",
     description:
       "Varies an existing contractual term (hours, location, duties, pay structure). Seeks express agreement.",
@@ -181,10 +181,10 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [300, 500],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
-      { id: "body", title: "Statement of change & reason", required: true },
+      { id: "subject", title: "Subject", required: true },
+      { id: "body", title: "Statement of change and reason", required: true },
       { id: "terms", title: "Effect on other terms", required: true },
       { id: "next_steps", title: "Acceptance request", required: true },
       { id: "closing", title: "Closing", required: true },
@@ -194,8 +194,8 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "redundancy",
     mode: "employer",
-    title: "Redundancy / Layoff",
-    shortTitle: "Redundancy / Layoff",
+    title: "Redundancy or layoff",
+    shortTitle: "Redundancy",
     description:
       "Termination by role elimination. UK variant covers consultation, selection criteria, and statutory redundancy pay; US variant covers WARN/Cal-WARN/NY-WARN, severance, OWBPA.",
     riskClass: "high",
@@ -205,12 +205,12 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     wordRange: [600, 1100],
     badge: "Counsel review required",
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
-      { id: "body", title: "Decision & process", required: true },
+      { id: "subject", title: "Subject", required: true },
+      { id: "body", title: "Decision and process", required: true },
       { id: "terms", title: "Notice, redundancy pay, holiday", required: true },
-      { id: "conditions", title: "Alternative employment & support", required: true },
+      { id: "conditions", title: "Alternative employment and support", required: true },
       { id: "appeal_rights", title: "Right of appeal", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
@@ -219,7 +219,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "leave_approval",
     mode: "employer",
-    title: "Leave Approval",
+    title: "Leave approval",
     shortTitle: "Leave approval",
     description:
       "Approves parental, sick, sabbatical, FMLA or statutory leave with pay rules and benefits-continuation logic per jurisdiction.",
@@ -229,10 +229,10 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [250, 500],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
-      { id: "body", title: "Leave details & dates", required: true },
+      { id: "subject", title: "Subject", required: true },
+      { id: "body", title: "Leave details and dates", required: true },
       { id: "terms", title: "Pay, benefits, contact", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
@@ -241,7 +241,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "resignation_acceptance",
     mode: "employer",
-    title: "Resignation Acceptance",
+    title: "Resignation acceptance",
     shortTitle: "Resignation acceptance",
     description:
       "Acknowledges and accepts an employee's resignation, confirms last working day, garden leave, final pay, and PTO/holiday treatment.",
@@ -251,10 +251,10 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [200, 350],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
-      { id: "body", title: "Acceptance & last day", required: true },
+      { id: "subject", title: "Subject", required: true },
+      { id: "body", title: "Acceptance and last day", required: true },
       { id: "terms", title: "Final pay, leave, property", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
@@ -263,7 +263,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "return_to_work",
     mode: "employer",
-    title: "Return to Work",
+    title: "Return to work",
     shortTitle: "Return-to-work",
     description:
       "Welcomes an employee back from extended leave with role, hours, accommodations and (where relevant) phased-return plans.",
@@ -273,10 +273,10 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [300, 500],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
-      { id: "body", title: "Welcome & return date", required: true },
+      { id: "subject", title: "Subject", required: true },
+      { id: "body", title: "Welcome and return date", required: true },
       { id: "terms", title: "Role, hours, accommodations", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
@@ -285,7 +285,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "settlement_cover",
     mode: "employer",
-    title: "Settlement / Severance Cover",
+    title: "Settlement or severance cover",
     shortTitle: "Settlement cover",
     description:
       "Cover letter accompanying a UK Settlement Agreement (s.203 ERA) or US Separation Agreement / General Release (OWBPA-compliant if 40+).",
@@ -296,12 +296,12 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     wordRange: [400, 700],
     badge: "Counsel review required",
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
-      { id: "subject", title: "Subject", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "salutation", title: "Salutation", required: true },
+      { id: "subject", title: "Subject", required: true },
       { id: "opening", title: "Context", required: true },
       { id: "body", title: "Summary of terms", required: true },
-      { id: "terms", title: "Independent advice & deadline", required: true },
+      { id: "terms", title: "Independent advice and deadline", required: true },
       { id: "next_steps", title: "Next steps", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },
@@ -310,7 +310,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "right_to_work",
     mode: "employer",
-    title: "Right-to-Work / Immigration Support",
+    title: "Right to work or immigration support",
     shortTitle: "Immigration support",
     description:
       "Supports a visa application, sponsorship, or right-to-work verification. UK Skilled Worker / CoS or US H-1B/L-1/O-1/I-140 variants.",
@@ -320,9 +320,9 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
     legalReviewRequired: false,
     wordRange: [300, 600],
     defaultSections: [
-      { id: "recipient_block", title: "Date & recipient", required: true },
+      { id: "recipient_block", title: "Date and recipient", required: true },
       { id: "subject", title: "Subject", required: true },
-      { id: "body", title: "Confirmation of employment & duties", required: true },
+      { id: "body", title: "Confirmation of employment and duties", required: true },
       { id: "terms", title: "Sponsorship / petition references", required: true },
       { id: "closing", title: "Closing", required: true },
       { id: "signature", title: "Signature", required: true },

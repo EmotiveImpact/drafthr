@@ -1,196 +1,263 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, FileText, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useBookingsStore } from "@/lib/bookings";
 import { getSharedDraft, type SharedDraftDTO } from "@/lib/consultantApi";
-import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { pullInbox, pushBookingMessage, pushBookingRespond } from "@/lib/marketplaceSync";
+import { REVIEW_VERDICT_LABELS, firstName, type ReviewVerdict } from "@/lib/journey/reviews";
+import { ReviewerWorkspace } from "@/components/journey/review/ReviewerWorkspace";
+import { paymentNote } from "@/components/journey/review/actions";
+import { fmtShortDate } from "@/components/journey/review/model";
+import {
+  actAsExpert,
+  openExpertReview,
+  type ExpertReview,
+  type LetterSnapshot,
+  type LinkResult,
+  type LinkState,
+  type ReviewerAction,
+} from "@/components/journey/review/trusted-api";
+import { LinkPage } from "./TrustedReview";
 
 /**
- * /c/review/:bookingId — read-only draft view for a consultant who has
- * accepted a booking that has been paid for.
+ * /c/review/:bookingId: the expert's own view of a letter they were booked
+ * to review (mock f4). The letter in the centre, "Your review" on the right
+ * with HR's ask, the Read, Suggest, Comment switch and Send back.
  *
- * Resolves the booking's matter-scoped share token via the server
- * endpoint /api/marketplace/shared/<token>. The server enforces:
- *   - the caller's session matches the booking's assigned consultant,
- *   - the token hasn't expired (30-day window from payment),
- *   - the booking is still paid (a refund or dispute withdraws access).
+ * Access is the booking's: the server checks the caller is the consultant
+ * on the booking, that it is accepted and paid, and (for the draft itself)
+ * the matter-scoped share token. Suggestions and comments go to the review
+ * record on the server (api/review-links, expert ops) so they reach HR's
+ * letter on their device; Send back also marks the booking delivered with
+ * the verdict and note, as Deliver does in the inbox.
  *
- * Falls back to the local draft store ONLY when the booking has no
- * share token yet (e.g. local-only demo bookings that never got an
- * API accept transition). That fallback path runs only for the booker's
- * own device — cross-device sharing requires the API + token.
+ * Falls back to a read-only letter (the shared draft) when the booking has
+ * no review record yet, for example a booking made before reviews were
+ * linked: the verdict and note still go back as the delivery.
  */
 export function SharedDraftReview() {
   const nav = useNavigate();
-  const { bookingId } = useParams<{ bookingId: string }>();
+  const { bookingId = "" } = useParams<{ bookingId: string }>();
   const bookings = useBookingsStore((s) => s.bookings);
   const booking = bookings.find((b) => b.id === bookingId);
 
   const [shared, setShared] = useState<SharedDraftDTO | null>(null);
+  const [sharedError, setSharedError] = useState<string | null>(null);
+  const [expert, setExpert] = useState<ExpertReview | null>(null);
+  const [expertError, setExpertError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const access = !!booking && (booking.status === "accepted" || booking.status === "delivered" || booking.status === "completed");
+  const token = booking?.shareToken;
 
-  // Fetch via the share-token endpoint when the booking has one. Try
-  // every accepted booking with a stored shareToken first; fall through
-  // to a local-render path if the token isn't present (demo / pre-API
-  // bookings).
+  const loadExpert = useCallback(async () => {
+    const res = await openExpertReview(bookingId);
+    if (res.ok) {
+      setExpert(res.data);
+      setExpertError(null);
+    } else {
+      setExpertError(res.message);
+    }
+  }, [bookingId]);
+
   useEffect(() => {
     let cancelled = false;
-    if (!booking) {
+    if (!booking || !access) {
       setLoading(false);
       return;
     }
-    const token = (booking as unknown as { shareToken?: string | null }).shareToken;
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    void getSharedDraft(token).then((res) => {
-      if (cancelled) return;
-      if (!res.ok) setError(res.error);
-      else setShared(res.data);
-      setLoading(false);
+    setLoading(true);
+    void Promise.all([
+      token
+        ? getSharedDraft(token).then((res) => {
+            if (cancelled) return;
+            if (res.ok) setShared(res.data);
+            else setSharedError(res.error);
+          })
+        : Promise.resolve(),
+      loadExpert(),
+    ]).finally(() => {
+      if (!cancelled) setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [booking?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id, access, token]);
+
+  // HR may send it back for another round, or recall it, while it's open.
+  useEffect(() => {
+    if (!access) return;
+    const t = window.setInterval(() => {
+      void loadExpert();
+      void pullInbox();
+    }, 30000);
+    const onFocus = () => void loadExpert();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [access, loadExpert]);
+
+  const fallbackState: LinkState = useMemo(
+    () => ({
+      status: booking?.status === "accepted" ? "out" : "back",
+      approvedAt: null,
+      openedAt: null,
+      expiresAt: null,
+      revokedAt: null,
+      rounds: [
+        {
+          n: 1,
+          sentAt: booking?.acceptedAt ?? booking?.bookedAt ?? 0,
+          backAt: booking?.deliveredAt,
+        },
+      ],
+      messages: [],
+      points: [],
+    }),
+    [booking?.status, booking?.acceptedAt, booking?.bookedAt, booking?.deliveredAt]
+  );
+  const [localState, setLocalState] = useState<LinkState | null>(null);
+
+  const messages = useMemo(
+    () =>
+      (booking?.messages ?? []).map((m) => ({
+        id: m.id,
+        mine: m.from === "consultant",
+        name: m.from === "consultant" ? "You" : firstName(expert?.asker.name) || "HR",
+        body: m.text,
+        at: m.ts,
+      })),
+    [booking?.messages, expert?.asker.name]
+  );
 
   if (!booking) {
     return (
-      <NotFoundShell
-        nav={nav}
-        title="Booking not found"
-        body="That booking either doesn't exist or has been withdrawn."
-      />
+      <LinkPage icon={<FileText className="size-5" strokeWidth={1.6} />} title="Booking not found" action={<BackToInbox onClick={() => nav("/c")} />}>
+        That booking either doesn't exist or has been withdrawn.
+      </LinkPage>
     );
   }
 
-  if (booking.status !== "accepted" && booking.status !== "delivered" && booking.status !== "completed") {
+  if (!access) {
     return (
-      <NotFoundShell
-        nav={nav}
-        title="Access not yet granted"
-        body={
-          <>
-            Draft access opens once you accept the booking and HR has paid
-            for it. Currently the status is <strong>{booking.status}</strong>.
-          </>
-        }
-      />
+      <LinkPage icon={<Lock className="size-5" strokeWidth={1.6} />} title="Access not yet granted" action={<BackToInbox onClick={() => nav("/c")} />}>
+        Draft access opens once you accept the booking and HR has paid for it. Currently the status is <strong>{booking.status}</strong>.
+      </LinkPage>
     );
   }
+
+  const refundNote = paymentNote(booking);
+  if (refundNote) {
+    return (
+      <LinkPage icon={<ShieldCheck className="size-5" strokeWidth={1.6} />} title="This booking is paused" action={<BackToInbox onClick={() => nav("/c")} />}>
+        {refundNote}
+      </LinkPage>
+    );
+  }
+
+  if (loading) {
+    return (
+      <LinkPage icon={<Loader2 className="size-5 animate-spin" strokeWidth={1.6} />} title="Fetching the draft…" action={<BackToInbox onClick={() => nav("/c")} />}>
+        This takes a moment.
+      </LinkPage>
+    );
+  }
+
+  const letter: LetterSnapshot | null = expert
+    ? expert.letter
+    : shared
+      ? {
+          title: shared.booking.matterTitle ?? shared.draft.title ?? booking.matterTitle ?? "Letter",
+          letterType: shared.draft.letterType,
+          jurisdiction: shared.draft.jurisdiction,
+          mode: shared.draft.mode,
+          company: "",
+          sections: shared.draft.sections,
+        }
+      : null;
+
+  if (!letter) {
+    return (
+      <LinkPage icon={<FileText className="size-5" strokeWidth={1.6} />} title="The draft isn't open yet" action={<BackToInbox onClick={() => nav("/c")} />}>
+        {sharedError ??
+          expertError ??
+          "Draft access opens once the booking is paid. If HR has just paid, refresh the inbox to pick up the share link."}
+      </LinkPage>
+    );
+  }
+
+  const state = expert?.state ?? localState ?? fallbackState;
+  const linked = !!expert;
+
+  const act = async (a: ReviewerAction): Promise<LinkResult<{ state: LinkState }>> => {
+    if (linked) return actAsExpert(bookingId, a);
+    if (a.action === "send-back") {
+      const now = Date.now();
+      const next: LinkState = {
+        ...state,
+        status: "back",
+        rounds: state.rounds.map((r, i) => (i === state.rounds.length - 1 ? { ...r, backAt: now, verdict: a.verdict, note: a.note } : r)),
+      };
+      return { ok: true, data: { state: next } };
+    }
+    return {
+      ok: false,
+      status: 409,
+      message: "Suggestions and comments open once HR's letter is linked to this booking. You can still send your verdict and note back.",
+    };
+  };
+
+  const deliver = async (verdict: ReviewVerdict, note: string) => {
+    // The first send-back is the delivery (the inbox, My bookings and HR's
+    // letter then agree). Later rounds only go through the review record.
+    if (booking.status !== "accepted") return;
+    const text = `${REVIEW_VERDICT_LABELS[verdict]}${note ? `\n\n${note}` : ""}`;
+    useBookingsStore.getState().deliverBooking(booking.id, text);
+    await pushBookingRespond(booking.id, "deliver", { note: text });
+  };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
-      <button
-        type="button"
-        onClick={() => nav("/c")}
-        className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden />
-        Back to inbox
-      </button>
-
-      <header className="mb-6">
-        <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-          <Lock className="size-3" aria-hidden />
-          Shared draft · read-only
-        </p>
-        <h1 className="mt-2 text-[clamp(26px,3.2vw,36px)] font-semibold text-[var(--ds-ink)]">
-          {shared?.booking.matterTitle ?? booking.matterTitle ?? "Untitled matter"}
-        </h1>
-        {(shared?.booking.message ?? booking.message) && (
-          <p className="mt-3 max-w-[60ch] rounded-md bg-[var(--ds-surface-2)] px-4 py-3 text-[13.5px] leading-relaxed text-[var(--ds-body)]">
-            <span className="mr-1 font-semibold text-[var(--ds-ink)]">HR brief:</span>
-            {shared?.booking.message ?? booking.message}
-          </p>
-        )}
-      </header>
-
-      <section className="rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-6">
-        <div className="mb-4 flex items-center gap-2 text-[13px] font-semibold text-[var(--ds-ink)]">
-          <FileText className="size-4 text-[var(--ds-muted)]" aria-hidden />
-          Draft contents
-        </div>
-        {loading ? (
-          <div className="grid place-items-center px-5 py-10 text-[13px] text-[var(--ds-muted)]">
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-            <p className="mt-2">Fetching the draft…</p>
-          </div>
-        ) : shared ? (
-          <div className="space-y-4">
-            <div className="rounded-md bg-[var(--ds-surface-2)] px-3 py-2 text-[12.5px] text-[var(--ds-body)]">
-              <p>
-                <strong>Letter type:</strong> {shared.draft.letterType.replace(/_/g, " ")}
-              </p>
-              <p>
-                <strong>Jurisdiction:</strong> {shared.draft.jurisdiction ?? "—"}
-              </p>
-              <p>
-                <strong>Mode:</strong> {shared.draft.mode}
-              </p>
-            </div>
-            <div className="prose prose-sm max-w-none">
-              {shared.draft.sections.map((s) => (
-                <article key={s.id} className="mb-4">
-                  <h3 className="font-semibold text-[var(--ds-ink)]">{s.title}</h3>
-                  <div
-                    className="leading-relaxed text-[var(--ds-body)]"
-                    // Defence-in-depth: this is a raw-HTML sink rendered to a
-                    // consultant via a share token. Section html is normally
-                    // sanitised on write, but an aborted/partial AI stream can
-                    // leave raw model deltas at rest — sanitise here so they
-                    // can never reach the DOM unescaped.
-                    dangerouslySetInnerHTML={{ __html: sanitizeLetterHtml(s.html) }}
-                  />
-                </article>
-              ))}
-            </div>
-            <p className="mt-4 inline-flex items-center gap-1.5 text-[11px] text-[var(--ds-muted)]">
-              <ShieldCheck className="size-3" aria-hidden />
-              Token-scoped read access · expires 30 days after payment
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-10 text-center">
-            <p className="text-[13.5px] text-[var(--ds-body)]">
-              {error
-                ? error
-                : "Draft access opens once the booking is paid. If HR has just paid, refresh the inbox to pick up the share link."}
-            </p>
-            <p className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ds-muted)]">
-              <ShieldCheck className="size-3.5" aria-hidden />
-              Access is bookingId-scoped and time-limited.
-            </p>
-          </div>
-        )}
-      </section>
-    </div>
+    <ReviewerWorkspace
+      modeKey={`booking:${bookingId}`}
+      letter={letter}
+      state={state}
+      asker={{ name: expert?.asker.name || "HR" }}
+      me={{ name: booking.consultantName || "You" }}
+      ask={expert?.ask ?? shared?.booking.message ?? booking.message ?? null}
+      evidence={expert?.evidence ?? []}
+      facts={{ letterType: letter.letterType, jurisdiction: letter.jurisdiction, mode: letter.mode }}
+      secureLine={booking.shareTokenExpiresAt ? `Secure link, expires ${fmtShortDate(booking.shareTokenExpiresAt)}` : null}
+      back={
+        <button
+          type="button"
+          onClick={() => nav("/c")}
+          aria-label="Back to inbox"
+          className="-ml-1 grid size-8 shrink-0 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)]"
+        >
+          <ArrowLeft className="size-4" strokeWidth={1.8} />
+        </button>
+      }
+      messages={messages}
+      onMessage={async (text) => {
+        const id = useBookingsStore.getState().appendMessage(booking.id, "consultant", text);
+        if (!id) return false;
+        return pushBookingMessage(booking.id, "consultant", text);
+      }}
+      act={act}
+      onState={(s) => (linked ? setExpert((prev) => (prev ? { ...prev, state: s } : prev)) : setLocalState(s))}
+      afterSendBack={deliver}
+    />
   );
 }
 
-function NotFoundShell({
-  nav,
-  title,
-  body,
-}: {
-  nav: ReturnType<typeof useNavigate>;
-  title: string;
-  body: React.ReactNode;
-}) {
+function BackToInbox({ onClick }: { onClick: () => void }) {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
-      <button
-        type="button"
-        onClick={() => nav("/c")}
-        className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden />
-        Back to inbox
-      </button>
-      <h1 className="text-[clamp(24px,3vw,32px)] font-semibold text-[var(--ds-ink)]">{title}</h1>
-      <p className="mt-3 text-[14px] text-[var(--ds-body)]">{body}</p>
-    </div>
+    <Button variant="outline" onClick={onClick}>
+      <ArrowLeft className="size-4" />
+      Back to inbox
+    </Button>
   );
 }

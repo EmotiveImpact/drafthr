@@ -18,20 +18,21 @@ import {
   type TimelineCategory,
 } from "@/lib/timeline";
 import { cn } from "@/lib/utils";
+import { downloads, readableTimeline } from "./timeline-view";
 
 type FilterId = "all" | TimelineCategory;
 
 const FILTERS: { id: FilterId; label: string }[] = [
   { id: "all", label: "All" },
   { id: "changes", label: "Changes" },
-  { id: "ai", label: "AI" },
+  { id: "ai", label: "DraftHR" },
   { id: "comments", label: "Comments" },
-  { id: "exports", label: "Exports" },
+  { id: "exports", label: "Downloads" },
   { id: "reviews", label: "Reviews" },
 ];
 
 export function TimelinePanel({ draft }: { draft: Draft }) {
-  const events = buildDraftTimeline(draft);
+  const events = readableTimeline(buildDraftTimeline(draft));
   const [filter, setFilter] = useTimelineFilter();
   const visible = filter === "all" ? events : events.filter((event) => event.category === filter);
   const groups = groupByDay(visible);
@@ -47,11 +48,11 @@ export function TimelinePanel({ draft }: { draft: Draft }) {
           </span>
         </div>
         <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--ds-muted)]">
-          <span>{count(events, "ai")} AI</span>
-          <span className="text-[var(--ds-subtle)]">/</span>
-          <span>{count(events, "comments")} comments</span>
-          <span className="text-[var(--ds-subtle)]">/</span>
-          <span>{count(events, "exports")} exports</span>
+          <span>{count(events, "ai")} from DraftHR</span>
+          <span aria-hidden className="text-[var(--ds-subtle)]">·</span>
+          <span>{plural(count(events, "comments"), "comment")}</span>
+          <span aria-hidden className="text-[var(--ds-subtle)]">·</span>
+          <span>{plural(downloads(events), "download")}</span>
         </div>
       </div>
 
@@ -102,6 +103,10 @@ export function TimelinePanel({ draft }: { draft: Draft }) {
       </div>
     </div>
   );
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
 function useTimelineFilter(): [FilterId, (value: FilterId) => void] {

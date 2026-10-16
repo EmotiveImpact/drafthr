@@ -97,7 +97,8 @@ export async function POST(req: Request): Promise<Response> {
     const configuration = process.env.STRIPE_BILLING_PORTAL_CONFIGURATION?.trim();
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${appBaseUrl(req)}${path}`,
+      // Settings opens on its Billing tab so people land where they left.
+      return_url: `${appBaseUrl(req)}${path === "/settings" ? "/settings?tab=billing" : path}`,
       ...(configuration ? { configuration } : {}),
     });
     return json({ url: session.url });

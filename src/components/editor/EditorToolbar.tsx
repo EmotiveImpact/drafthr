@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
@@ -36,15 +37,17 @@ import {
 
 const MAX_EMBED_BYTES = 5 * 1024 * 1024;
 
-async function fileToDataUrl(file: File): Promise<string | null> {
+export async function fileToDataUrl(file: File): Promise<string | null> {
   if (!isAllowedEmbeddedImageFile(file)) {
-    alert("Please use a PNG, JPEG, WEBP, or GIF image.");
+    toast.error("That image type cannot go in the letter", {
+      description: "Use a PNG, JPEG, WEBP or GIF image.",
+    });
     return null;
   }
   if (file.size > MAX_EMBED_BYTES) {
-    alert(
-      `${file.name} is larger than 5 MB. Use the Evidence step instead — that path keeps the original file at full quality.`
-    );
+    toast.error(`${file.name} is larger than 5 MB`, {
+      description: "Add it on the Evidence page instead. That keeps the original file at full quality.",
+    });
     return null;
   }
   return new Promise<string | null>((resolve) => {

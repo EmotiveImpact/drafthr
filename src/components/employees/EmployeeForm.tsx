@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/wizard/DatePicker";
+import { useMenuReturnFocus } from "@/components/letters/dialogs";
 import {
   Select,
   SelectContent,
@@ -85,6 +87,8 @@ export function EmployeeForm({
   }, [open, initial]);
 
   const canSubmit = values.legalName.trim().length > 0;
+  // Opened from a row's "..." menu: focus goes back to that menu's button.
+  const returnFocus = useMenuReturnFocus(open);
 
   function patch<K extends keyof EmployeeFormValues>(key: K, value: EmployeeFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -92,7 +96,7 @@ export function EmployeeForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-32px)] overflow-y-auto" onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
@@ -110,7 +114,7 @@ export function EmployeeForm({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="emp-preferred">Preferred name</Label>
               <Input
@@ -132,14 +136,14 @@ export function EmployeeForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="emp-job-title">Job title</Label>
               <Input
                 id="emp-job-title"
                 value={values.jobTitle ?? ""}
                 onChange={(e) => patch("jobTitle", e.target.value || undefined)}
-                placeholder="Senior Engineer"
+                placeholder="Senior engineer"
               />
             </div>
             <div className="space-y-1.5">
@@ -153,14 +157,14 @@ export function EmployeeForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="emp-start-date">Start date</Label>
-              <Input
+              <Label id="emp-start-date-label" htmlFor="emp-start-date">Start date</Label>
+              <DatePicker
                 id="emp-start-date"
-                type="date"
+                labelledBy="emp-start-date-label"
                 value={values.startDate ?? ""}
-                onChange={(e) => patch("startDate", e.target.value || undefined)}
+                onChange={(v) => patch("startDate", v || undefined)}
               />
             </div>
             <div className="space-y-1.5">

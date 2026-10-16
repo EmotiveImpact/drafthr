@@ -34,6 +34,9 @@ export const TENANT_SCOPED_PERSIST_KEYS = [
   "scribehr-profile-v1", // useProfileStore — user profile (legal name, role)
   "drafthr.consultant", // useConsultantStore — consultant marketplace card
   "drafthr.bookings.v1", // useBookingsStore — marketplace bookings + matter titles
+  "drafthr.reviews.v1", // useReviewStore — review requests, reviewer names and emails, messages
+  "drafthr.trusted-reviewers.v1", // useSavedReviewers — trusted reviewers' names and emails
+  "drafthr.letters.archived.v1", // useLetterArchive — which of this workspace's letters are archived
 ] as const;
 
 /**

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { Theme } from "@radix-ui/themes";
 import { StorageQuotaBanner } from "./StorageQuotaBanner";
 import {
   _resetQuotaToast,
@@ -17,9 +16,7 @@ describe("StorageQuotaBanner", () => {
       estimateUsage: () => used,
     });
     render(
-      <Theme>
-        <StorageQuotaBanner />
-      </Theme>,
+      <StorageQuotaBanner />,
     );
     expect(screen.queryByTestId("storage-quota-banner")).toBeNull();
 

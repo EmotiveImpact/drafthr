@@ -18,7 +18,7 @@ const TIER3 = `<p><strong>IMPORTANT:</strong> <em>This is a high-risk communicat
  * Employee-mode disclaimers (new)
  * ==========================================================================*/
 
-const EMP_TIER1 = `<p><em>This letter has been drafted with an AI tool and is not legal advice. For complex situations — particularly before signing settlement agreements, lodging tribunal claims, or making protected disclosures — obtain advice from a qualified employment solicitor (UK) or attorney (US).</em></p>`;
+const EMP_TIER1 = `<p><em>This letter has been drafted with an AI tool and is not legal advice. For complex situations, particularly before signing settlement agreements, lodging tribunal claims or making protected disclosures, obtain advice from a qualified employment solicitor (UK) or attorney (US).</em></p>`;
 
 const EMP_TIER2_UK = `<p><em>Free advice in the UK: ACAS helpline 0300 123 1100 (acas.org.uk); Citizens Advice (citizensadvice.org.uk); Working Families (workingfamilies.org.uk); Equality Advisory & Support Service (equalityadvisoryservice.com); Law Centres Network (lawcentres.org.uk).</em></p>`;
 

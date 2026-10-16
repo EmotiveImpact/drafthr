@@ -27,7 +27,7 @@ const ACTIONS: SmartRewriteAction[] = [
   },
   {
     id: "make-firmer",
-    label: "Make firmer",
+    label: "Firmer",
     hint: "Clearer position, less hedging",
     instruction:
       "Rewrite this section in a firmer and more assertive register. Remove hedging, keep the tone professional, preserve every fact and citation, and do not introduce new allegations.",
@@ -35,7 +35,7 @@ const ACTIONS: SmartRewriteAction[] = [
   },
   {
     id: "make-neutral",
-    label: "Make neutral",
+    label: "Neutral",
     hint: "Cooler, lower-conflict wording",
     instruction:
       "Rewrite this section in a neutral, lower-conflict register. Keep the legal position intact, remove emotive phrasing, and preserve all dates, names, facts, and requested outcomes.",
@@ -82,13 +82,13 @@ export function SmartRewriteMenu({
           type="button"
           disabled={disabled}
           onClick={() => onRun(action.instruction)}
-          className="min-w-0 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-2 text-left transition hover:border-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] disabled:pointer-events-none disabled:opacity-50"
+          className="min-w-0 rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-2 text-left transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)] disabled:pointer-events-none disabled:opacity-50"
         >
           <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ds-ink)]">
             <span className="shrink-0 text-[var(--ds-muted)]">{action.icon}</span>
             <span className="truncate">{action.label}</span>
           </span>
-          <span className="mt-0.5 block truncate text-[10px] text-[var(--ds-muted)]">
+          <span className="mt-0.5 block truncate text-[11px] text-[var(--ds-muted)]">
             {action.hint}
           </span>
         </button>

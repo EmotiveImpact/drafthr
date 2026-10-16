@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { BrandMark, Wordmark } from "@/components/ds";
 import { safeInternalRedirect } from "@/routes/AuthCallback";
-import { AuthFooter, AuthSecurityNote } from "@/routes/sign-in/AuthShell";
+import {
+  AUTH_HEADING_CLASS,
+  AuthFooter,
+  AuthSecurityNote,
+  ErrorAlert,
+  PasswordField,
+  TextField,
+  emailProblem,
+} from "@/routes/sign-in/AuthShell";
 import { AuthSplitShell } from "@/routes/sign-in/AuthSplitShell";
 import { CheckYourEmail } from "@/routes/SignUp";
 
@@ -41,11 +49,14 @@ export function SignIn() {
   const [params] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState<
     null | "password" | "google" | "microsoft" | "linkedin"
   >(null);
   const [error, setError] = useState<string | null>(null);
+  // Inline field errors (kit 04), shown after a submit attempt or when the
+  // email field is left with something that is not an address.
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   // Set when sign-in succeeds on credentials but the email isn't verified yet
   // (WorkOS email_verification_required). Carries the pending token so the
   // code-entry screen can finish via Flow B instead of dead-ending the user.
@@ -79,6 +90,14 @@ export function SignIn() {
     e.preventDefault();
     if (submitting) return;
     setError(null);
+    const badEmail = emailProblem(email);
+    const badPassword = password ? null : "Enter your password.";
+    setEmailError(badEmail);
+    setPasswordError(badPassword);
+    if (badEmail || badPassword) {
+      if (badEmail) emailRef.current?.focus();
+      return;
+    }
     setSubmitting("password");
     try {
       const res = await fetch("/api/auth/password", {
@@ -100,7 +119,7 @@ export function SignIn() {
         throw new Error(
           "Sign-in API didn't respond with JSON. If you're running `npm run dev` " +
             "locally, switch to `vercel dev` so /api/auth/* is served. " +
-            "If you're on production, please report this — it shouldn't happen.",
+            "If you're on production, please report this. It shouldn't happen.",
         );
       }
       const data = (await res.json().catch(() => ({}))) as {
@@ -110,7 +129,7 @@ export function SignIn() {
         pendingAuthenticationToken?: string;
       };
       if (!res.ok) {
-        throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);
+        throw new Error(data.error ?? "Sign-in didn't work. Check your email and password, then try again.");
       }
       // Credentials were correct but the inbox isn't verified yet — hand off to
       // the code-entry screen (Flow B) rather than treating it as a failure.
@@ -152,7 +171,7 @@ export function SignIn() {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Could not start sign-in (HTTP ${res.status})`);
+        throw new Error(data.error ?? "Couldn't start sign-in with that provider. Try again, or use your email.");
       }
       const { url } = (await res.json()) as { url: string };
       // Stash the post-callback redirect target so AuthCallback can pick
@@ -207,25 +226,20 @@ export function SignIn() {
           </Link>
           <section
             aria-labelledby="signin-heading"
-            className="w-full rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_1px_2px_rgba(10,11,13,0.04),0_24px_60px_-30px_rgba(10,11,13,0.18)]"
+            className="w-full rounded-[var(--ds-r-xl)] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-m)] lg:border-transparent lg:shadow-none"
         >
           <div className="px-7 pt-8 pb-6 sm:px-9">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
+            <p className="text-[13px] text-[var(--ds-muted)]">
               Sign in
             </p>
             <h1
               id="signin-heading"
-              className="mt-2 text-[var(--ds-ink)] font-semibold"
-              style={{
-                fontSize: "clamp(22px, 3vw, 26px)",
-                lineHeight: 1.15,
-                letterSpacing: 0,
-              }}
+              className={AUTH_HEADING_CLASS}
             >
               Sign in to draft tribunal-grade HR letters.
             </h1>
             <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--ds-body)]">
-              Pick up where you left off — your drafts, matters, and audit
+              Pick up where you left off. Your drafts, matters and audit
               chain are waiting.
             </p>
           </div>
@@ -260,75 +274,53 @@ export function SignIn() {
             <Divider label="or continue with email" />
 
             <form noValidate onSubmit={onPassword} className="space-y-3.5">
-              <Field
+              <TextField
                 id="email"
                 label="Email"
                 type="email"
                 autoComplete="email"
                 inputMode="email"
                 value={email}
-                onChange={setEmail}
+                onChange={(v) => {
+                  setEmail(v);
+                  // Clear the error as soon as the address is fixed.
+                  if (emailError && !emailProblem(v)) setEmailError(null);
+                }}
+                onBlur={() => {
+                  if (email.trim()) setEmailError(emailProblem(email));
+                }}
                 ref={emailRef}
                 required
                 disabled={isBusy}
+                error={emailError}
               />
-              <div>
-                <div className="flex items-baseline justify-between mb-1.5">
-                  <label
-                    htmlFor="password"
-                    className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)]"
-                  >
-                    Password
-                  </label>
+              <PasswordField
+                id="password"
+                label="Password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(v) => {
+                  setPassword(v);
+                  if (v) setPasswordError(null);
+                }}
+                disabled={isBusy}
+                error={passwordError}
+                aside={
                   <Link
                     to="/sign-in/forgot-password"
-                    className="text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
+                    className="text-[12.5px] text-[var(--ds-muted)] underline-offset-2 hover:text-[var(--ds-ink)] hover:underline transition"
                   >
                     Forgot password?
                   </Link>
-                </div>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    disabled={isBusy}
-                    className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white pl-3 pr-10 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    tabIndex={-1}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    aria-pressed={showPassword}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-grid place-items-center w-8 h-8 rounded-[6px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)] transition"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="size-[15px]" aria-hidden />
-                    ) : (
-                      <Eye className="size-[15px]" aria-hidden />
-                    )}
-                  </button>
-                </div>
-              </div>
+                }
+              />
 
-              {error && (
-                <div
-                  role="alert"
-                  aria-live="polite"
-                  className="rounded-[8px] border border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)]/40 px-3 py-2.5 text-[12.5px] leading-snug text-[var(--ds-red-fg)]"
-                >
-                  {error}
-                </div>
-              )}
+              {error && <ErrorAlert title="Couldn't sign you in" message={error} />}
 
               <button
                 type="submit"
                 disabled={isBusy}
-                className="w-full inline-flex items-center justify-center gap-2 h-[42px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13.5px] shadow-sm hover:-translate-y-px hover:shadow-md transition disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+                className="w-full inline-flex items-center justify-center gap-2 h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-accent)]"
               >
                 {submitting === "password" ? (
                   <>
@@ -363,49 +355,11 @@ export function SignIn() {
 
 /* ─── Form primitives ─────────────────────────────────────────────────── */
 
-type FieldProps = {
-  id: string;
-  label: string;
-  type?: string;
-  value: string;
-  onChange: (v: string) => void;
-  required?: boolean;
-  disabled?: boolean;
-  autoComplete?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
-};
-
-const Field = ({
-  ref,
-  ...props
-}: FieldProps & { ref?: React.Ref<HTMLInputElement> }) => (
-  <div>
-    <label
-      htmlFor={props.id}
-      className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5"
-    >
-      {props.label}
-    </label>
-    <input
-      ref={ref}
-      id={props.id}
-      type={props.type ?? "text"}
-      autoComplete={props.autoComplete}
-      inputMode={props.inputMode}
-      value={props.value}
-      onChange={(e) => props.onChange(e.target.value)}
-      required={props.required}
-      disabled={props.disabled}
-      className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white px-3 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
-    />
-  </div>
-);
-
 function Divider({ label }: { label: string }) {
   return (
     <div className="my-5 flex items-center gap-3" aria-hidden>
       <span className="flex-1 h-px bg-[var(--ds-line)]" />
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
+      <span className="text-[12px] text-[var(--ds-muted)]">
         {label}
       </span>
       <span className="flex-1 h-px bg-[var(--ds-line)]" />
@@ -444,7 +398,7 @@ function SocialButton({
       disabled={disabled}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-[var(--ds-line)]"
+      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-surface)] disabled:hover:border-[var(--ds-line)]"
     >
       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
       <span className="truncate">{shortLabel}</span>

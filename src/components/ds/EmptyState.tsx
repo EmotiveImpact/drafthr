@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 /**
  * Shared empty-state surface for "no drafts / no comments / no exports /
@@ -42,7 +43,7 @@ export function EmptyState({
   size?: "sm" | "md";
   className?: string;
 }) {
-  const iconBox = size === "sm" ? "size-10" : "size-14";
+  const iconBox = size === "sm" ? "size-10" : "size-11";
   const iconSize = size === "sm" ? "size-4" : "size-5";
   const padY = size === "sm" ? "py-8" : "py-14";
 
@@ -56,17 +57,22 @@ export function EmptyState({
     >
       <div
         className={cn(
-          "grid place-items-center rounded-full bg-[var(--ds-line-2)] border border-[var(--ds-line)] text-[var(--ds-muted)] mb-4",
+          "grid place-items-center rounded-[12px] bg-[var(--ds-surface)] border border-[var(--ds-line)] text-[var(--ds-ink)] mb-4",
           iconBox
         )}
       >
         <Icon className={iconSize} />
       </div>
-      <h3 className="text-[15px] font-medium text-[var(--ds-ink)] m-0">
+      <h3
+        className={cn(
+          "ds-heading m-0",
+          size === "sm" ? "text-[19px]" : "text-[22px]"
+        )}
+      >
         {title}
       </h3>
       {body && (
-        <p className="mt-1.5 text-[13px] text-[var(--ds-muted)] m-0 max-w-[52ch] leading-relaxed">
+        <p className="mt-2 text-[14px] text-[var(--ds-muted)] m-0 max-w-[52ch] leading-relaxed">
           {body}
         </p>
       )}
@@ -87,10 +93,7 @@ function ActionButton({
   action: EmptyStateAction;
   variant: "primary" | "ghost";
 }) {
-  const cls =
-    variant === "primary"
-      ? "inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-[var(--ds-ink)] text-white text-[12.5px] font-medium hover:opacity-90 transition"
-      : "inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md border border-[var(--ds-line)] text-[var(--ds-body)] text-[12.5px] font-medium hover:bg-[var(--ds-line-2)] transition";
+  const cls = buttonVariants({ variant: variant === "primary" ? "default" : "outline" });
 
   if (action.to) {
     return (

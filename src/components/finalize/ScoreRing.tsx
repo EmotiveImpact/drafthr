@@ -10,7 +10,7 @@ import type { HealthBand } from "@/lib/finalize/healthChecks";
  * from both at once: the number climbs, the ring fills, and the band
  * label badges in last with a tiny pop.
  *
- * Respects `prefers-reduced-motion` — falls back to a static render.
+ * Respects `prefers-reduced-motion`, falls back to a static render.
  */
 type Props = {
   /** Final score in [0,100]. */
@@ -27,21 +27,22 @@ type Props = {
   label?: string;
 };
 
+// The ring carries the band colour; the number stays ink.
 const BAND_STYLES: Record<HealthBand, { ring: string; text: string; bg: string }> = {
   strong: {
-    ring: "var(--ds-green-fg, #166534)",
-    text: "var(--ds-green-fg, #166534)",
-    bg: "var(--ds-green-bg, #dcfce7)",
+    ring: "var(--ds-green-fg)",
+    text: "var(--ds-ink)",
+    bg: "var(--ds-green-bg)",
   },
   adequate: {
-    ring: "var(--ds-amber-fg, #92400e)",
-    text: "var(--ds-amber-fg, #92400e)",
-    bg: "var(--ds-amber-bg, #fef3c7)",
+    ring: "var(--ds-amber-dot)",
+    text: "var(--ds-ink)",
+    bg: "var(--ds-amber-bg)",
   },
   weak: {
-    ring: "var(--ds-red-fg, #991b1b)",
-    text: "var(--ds-red-fg, #991b1b)",
-    bg: "var(--ds-red-bg, #fee2e2)",
+    ring: "var(--ds-red-fg)",
+    text: "var(--ds-ink)",
+    bg: "var(--ds-red-bg)",
   },
 };
 
@@ -76,7 +77,7 @@ export function ScoreRing({
         return;
       }
       const t = Math.min(1, (now - startAt) / duration);
-      // ease-out cubic — fast start, gentle landing.
+      // ease-out cubic, fast start, gentle landing.
       const eased = 1 - Math.pow(1 - t, 3);
       setDisplay(Math.round(from + (to - from) * eased));
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
@@ -87,15 +88,18 @@ export function ScoreRing({
     };
   }, [score, delay, prefersReduced]);
 
-  const ring = `conic-gradient(${styles.ring} ${display}%, var(--ds-line-2) 0)`;
+  const ring = `conic-gradient(${styles.ring} ${display}%, var(--ds-line) 0)`;
   // Scale the inner hole with the diameter so small rings don't look like
   // chunky donuts and large rings don't look like thin halos.
-  const inset = Math.max(4, Math.round(size * 0.095));
+  const inset = Math.max(3, Math.round(size * 0.075));
+  // Big rings set the number in the light serif (a "big number"); small
+  // rings use Geist Mono so the figure stays legible.
+  const big = size >= 56;
 
   const dial = (
     <motion.div
-      initial={prefersReduced ? false : { scale: 0.94, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
+      initial={prefersReduced ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.4, delay, ease: [0.32, 0.72, 0, 1] }}
       style={{
         width: size,
@@ -117,7 +121,7 @@ export function ScoreRing({
         style={{
           position: "absolute",
           inset,
-          background: "var(--ds-surface, #fff)",
+          background: "var(--ds-surface)",
           borderRadius: "50%",
         }}
         aria-hidden
@@ -125,8 +129,10 @@ export function ScoreRing({
       <span
         style={{
           position: "relative",
-          fontSize: Math.round(size * 0.3),
-          fontWeight: 700,
+          fontFamily: big ? "var(--font-title)" : "var(--font-mono)",
+          fontSize: Math.round(size * (big ? 0.36 : 0.3)),
+          fontWeight: big ? 300 : 500,
+          letterSpacing: big ? "-0.02em" : undefined,
           fontVariantNumeric: "tabular-nums",
           color: styles.text,
           lineHeight: 1,
@@ -151,11 +157,9 @@ export function ScoreRing({
       {dial}
       <span
         style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: "var(--ds-muted, #64748b)",
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
+          fontSize: 11.5,
+          fontWeight: 500,
+          color: "var(--ds-muted)",
         }}
       >
         {label}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { toast } from "sonner";
 import {
   LetterEditor,
@@ -12,6 +12,14 @@ import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { toLetterDraft } from "@/lib/letters/toLetterDraft";
 import type { PagedEditorActions } from "./types";
+
+/** pagedly lays out an A4 page at 794px; below this container width it is
+ *  zoomed down to fit (see the effect in the component). */
+const A4_PAGE_PX = 794;
+const A4_FIT_WIDTH = A4_PAGE_PX + 32;
+/** Below this container width (phones) the page narrows to the screen. */
+const PHONE_PAGE_MAX = 600;
+const A4_RATIO = 297 / 210;
 
 /**
  * Edit-on-page engine, backed by the vendored **pagedly** library. This is the
@@ -60,7 +68,9 @@ const FEATURES: EditorFeatures = {
   // — Quality-of-life behaviours (little/no toolbar footprint) —
   find: true,
   paste: true,
-  wordCount: true,
+  // Off: counted by the app under the page (pagedly's count only updates
+  // once the cursor is in the page, so it read "0 words" on arrival).
+  wordCount: false,
   markdownShortcuts: true,
   smartTypography: true,
   autoLink: true,
@@ -264,6 +274,19 @@ export function PagedlyDocEditor({
     return () => timers.forEach(clearTimeout);
   }, [mountVersion]);
 
+  // The word count under the page. pagedly's own toolbar count only updates
+  // once the cursor is in the page, so a letter opened without a click read
+  // "0 words"; this one reads the stored letter, as the health checks do.
+  const live = useDraftStore((s) => s.drafts[draftId]) ?? draft;
+  const words = useMemo(() => {
+    const text = live.sections
+      .map((x) => (x.html ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " "))
+      .join("\n")
+      .trim();
+    return text ? text.split(/\s+/).length : 0;
+  }, [live.sections]);
+  const minutes = Math.max(1, Math.round(words / 200));
+
   // Bridge pagedly's imperative handle to the app's PagedEditorActions contract
   // so the top menubar's Edit menu (Undo / Redo / Select all / Find) keeps
   // driving whatever engine is mounted.
@@ -322,12 +345,82 @@ export function PagedlyDocEditor({
   // raw <ins>/<del> carry no id/author, don't surface in the rail, and are
   // stripped wholesale on export — so suggestions stay in the rail's attributed,
   // export-safe pendingChange system, the app's single suggestion path.
+  // Fit the A4 page (794px) to narrow screens. Without this a phone shows
+  // the page's left two thirds and cuts the rest off at the right edge.
+  // Wider containers keep zoom 1, so desktop layout is untouched.
+  // On a phone that would shrink the words to about 5px, so there the page
+  // is narrowed to the screen instead (same proportions, smaller margins) and
+  // the letter reflows at its own size (FEAT-X4).
+  const [pageZoom, setPageZoom] = useState(1);
+  const [phonePageW, setPhonePageW] = useState<number | null>(null);
+
+  // pagedly names its text style menu "Heading — <value>" ("Heading —
+  // Heading" when the cursor is in a paragraph). Screen readers get a plain
+  // name instead, kept in step as the value changes (LETTER-X54).
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const fix = () => {
+      el.querySelectorAll<HTMLElement>(".pagedly-toolbar__blockstyle[aria-label]").forEach((b) => {
+        const now = b.getAttribute("aria-label") ?? "";
+        const plain = plainStyleLabel(now);
+        if (plain !== now) b.setAttribute("aria-label", plain);
+      });
+    };
+    fix();
+    if (typeof MutationObserver === "undefined") return;
+    const mo = new MutationObserver(fix);
+    mo.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-label"] });
+    return () => mo.disconnect();
+  }, []);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const fit = () => {
+      const w = el.clientWidth;
+      const phone = w > 0 && w < PHONE_PAGE_MAX;
+      setPhonePageW(phone ? Math.floor(w - 16) : null);
+      setPageZoom(!phone && w > 0 && w < A4_FIT_WIDTH ? Math.max(0.4, (w - 16) / A4_PAGE_PX) : 1);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const enableComments = reviewMode && !readOnly;
   const features = enableComments ? { ...FEATURES, comments: true } : FEATURES;
   void suggesting; // reserved; app owns suggestions in the rail (see above)
 
   return (
-    <div ref={wrapRef} className="h-full min-h-0">
+    <div
+      ref={wrapRef}
+      data-phone-page={phonePageW ? "" : undefined}
+      className="flex min-h-full flex-col [&_.pagedly-ce-footer]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-ce-page]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-toolbar__wordcount]:text-[var(--ds-muted)] [&_.pagedly-toolbar__wordcount-sep]:opacity-100"
+      // The letter on the page is set in the workspace serif (Newsreader),
+      // the page chrome in the UI sans (Inter).
+      style={
+        {
+          "--dhr-page-zoom": pageZoom,
+          // Read by the [data-phone-page] rule in globals.css, which wins
+          // over the A4 size pagedly sets on its own root.
+          ...(phonePageW
+            ? {
+                "--dhr-phone-page-w": `${phonePageW}px`,
+                "--dhr-phone-page-h": `${Math.round(phonePageW * A4_RATIO)}px`,
+              }
+            : {}),
+          "--pagedly-font-family": "var(--font-serif)",
+          "--pagedly-line-height": "1.5",
+          "--pagedly-ui-font": "var(--font-sans)",
+          // Toolbar meta text (word count, its separators) in the workspace
+          // grey that reads at AA, not pagedly's light default.
+          "--pagedly-text-faint": "var(--ds-muted)",
+          "--pagedly-muted": "var(--ds-muted)",
+          "--pagedly-text-soft": "var(--ds-muted)",
+        } as CSSProperties
+      }
+    >
       <LetterEditor
         key={`${draftId}:${mountVersion}`}
         draft={mapped}
@@ -336,7 +429,9 @@ export function PagedlyDocEditor({
         onCommentAdd={enableComments ? onCommentAdd : undefined}
         onCommentClick={reviewMode ? onCommentClick : undefined}
         toolbar
-        toolbarPosition="sticky"
+        // Stationary: the toolbar sits above the page instead of floating
+        // over the letter text as it scrolls.
+        toolbarPosition="stationary"
         toolbarLayout="compact"
         features={features}
         showPageNumbers
@@ -344,9 +439,19 @@ export function PagedlyDocEditor({
         // No write-back when read-only (review-locked): guarantees the surface
         // can never mutate the store even if pagedly emits an initial change.
         onChange={readOnly ? undefined : persist}
-        className="h-full"
+        className="flex-1"
         canvasClassName="bg-[var(--ds-canvas)]"
       />
+      <div
+        className="sticky bottom-0 z-10 flex h-8 shrink-0 items-center justify-end gap-1.5 border-t border-[var(--ds-line-2)] bg-[var(--ds-surface)] px-4 text-[12px] text-[var(--ds-muted)]"
+        role="status"
+        aria-live="off"
+        data-testid="page-word-count"
+      >
+        <span>{words.toLocaleString("en-GB")} {words === 1 ? "word" : "words"}</span>
+        <span aria-hidden>·</span>
+        <span>{minutes} min read</span>
+      </div>
     </div>
   );
 }
@@ -362,4 +467,17 @@ function findScroller(root: HTMLElement | null): HTMLElement | null {
     }
   }
   return null;
+}
+
+/**
+ * The text style menu's accessible name: "Text style" in a paragraph,
+ * "Text style: Heading 1" in a heading. Turns pagedly's "<menu> — <value>"
+ * (which reads "Heading — Heading" in a paragraph) into that; any other
+ * label is returned as it is.
+ */
+export function plainStyleLabel(label: string): string {
+  const m = /^(.+?)\s+\u2014\s+(.+)$/.exec(label.trim());
+  if (!m) return label;
+  const [, menu, value] = m;
+  return menu.trim() === value.trim() ? "Text style" : `Text style: ${value.trim()}`;
 }

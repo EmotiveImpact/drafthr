@@ -74,7 +74,7 @@ export function VerifyEmail() {
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error ?? `Verification failed (HTTP ${res.status})`);
+          throw new Error(data.error ?? "We couldn't confirm your email with that link.");
         }
         await refresh({ force: true });
         setStage("ok");
@@ -147,15 +147,15 @@ export function VerifyEmail() {
   // failed
   return (
     <AuthShell eyebrow="Verify email" heading="This verification link has expired.">
-      {error && <ErrorAlert message={error} />}
+      {error && <ErrorAlert title="Couldn't verify your email" message={error} />}
       <p className="mt-4 text-[13.5px] leading-relaxed text-[var(--ds-body)]">
-        Sign in to request a new verification email — we’ll send a fresh
+        Sign in to request a new verification email and we’ll send a fresh
         link to your inbox.
       </p>
       <div className="mt-5">
         <Link
           to="/sign-in"
-          className="inline-flex items-center justify-center w-full h-[42px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13.5px]"
+          className="inline-flex items-center justify-center w-full h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition"
         >
           Back to sign in
         </Link>

@@ -1,21 +1,32 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, FlaskConical } from "lucide-react";
-import { hasPendingSuggestions } from "@/lib/tiptap/suggestion-merge";
-import { uid } from "@/lib/utils";
+import { ArrowUp, Sparkles, Wand2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, SquarePen, SlidersHorizontal, Paperclip, Bookmark, ChevronDown, Square, TextSelect } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useNavigate } from "react-router-dom";
+import { getDiffViewMode, setDiffViewMode, type DiffViewMode } from "@/lib/diff-view-mode";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { useProfileStore } from "@/lib/profile";
+import { MODEL_OPTIONS, useProfileStore, type ModelId } from "@/lib/profile";
+import { ConfirmDialog } from "@/components/letters/dialogs";
 import { agentErrorMessage, buildAgentSystemPrompt, buildLetterContextMessage } from "@/lib/llm/agent";
 import { captureRuntimeContext } from "@/lib/llm/runtime-context";
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { regenerateSectionAsPending } from "@/lib/llm/draft";
 import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
-import { Avatar, BrandMark } from "@/components/ds";
-import { meIdentity } from "@/lib/comments/identity";
 import { getRecentPrompts, pushRecentPrompt } from "@/lib/recent-prompts";
+import { CRITIQUE_EVENT, type CritiqueEventDetail } from "./SecondOpinion";
 
 /**
  * Quick-prompt chips. Each maps to one of the four typed tools so the
@@ -30,87 +41,98 @@ import { getRecentPrompts, pushRecentPrompt } from "@/lib/recent-prompts";
  *   - "summarise for counsel"           → summariseForCounsel
  */
 /**
- * Starter prompts shown in the empty-state grid — one per typed tool, so
- * a first-time user discovers what the agent can do at a glance. Pulled
- * from QUICK_PROMPTS but with icons + a one-line hint for discoverability.
+ * Starter prompts shown in the empty state and the Prompts menu, chosen for
+ * the letter in front of the person: a clause only where the letter is a
+ * contract term (offer, contract change, promotion), an appeal line on a
+ * disciplinary letter, a calm firm rewrite on an employee's own letter. The
+ * prompt goes into the box as written, so it reads as plain English too.
  */
-const STARTER_PROMPTS: {
-  label: string;
-  hint: string;
-  Icon: typeof Wand2;
-  prompt: string;
-}[] = [
-  {
-    label: "Make it tribunal-ready",
-    hint: "Strict, factual, statutory anchors explicit.",
-    Icon: Sparkles,
-    prompt:
-      "Rewrite this letter to be tribunal-ready: strictly factual, no intensifiers, no admissions, reservation of rights at the close, statutory anchors explicit. Walk through each section that needs changing.",
-  },
-  {
-    label: "Tighten to ~180 words",
-    hint: "Cut adjectives without dropping facts or clauses.",
-    Icon: Minus,
-    prompt:
-      "Tighten the body section to approximately 180 words. Preserve every fact, citation, and required clause. Cut adjectives and throat-clearing.",
-  },
-  {
-    label: "Add a confidentiality clause",
-    hint: "Three-year survival post-termination by default.",
-    Icon: Plus,
-    prompt:
-      "Add a confidentiality clause to the terms section. Three-year survival post-termination unless the contract provides otherwise.",
-  },
-  {
-    label: "Summarise for counsel",
-    hint: "One-paragraph brief covering risks + remedies.",
-    Icon: FileText,
-    prompt:
-      "Summarise this letter for counsel — one paragraph covering the legal posture, key risks, remedies sought, and any open factual questions.",
-  },
-];
+type Starter = { label: string; hint: string; Icon: typeof Wand2; prompt: string };
 
-const QUICK_PROMPTS: { label: string; prompt: string }[] = [
-  // regenerateSection
-  {
-    label: "Tribunal-ready tone",
-    prompt:
-      "Rewrite this letter to be tribunal-ready: strictly factual, no intensifiers, no admissions, reservation of rights at the close, statutory anchors explicit. Walk through each section that needs changing.",
-  },
-  {
-    label: "Make formal",
-    prompt:
-      "Rewrite this letter in a more formal register. Remove contractions, use full clause names, keep every statutory citation intact.",
-  },
-  // tightenSection
-  {
-    label: "Tighten body to ~180 words",
-    prompt:
-      "Tighten the body section to approximately 180 words. Preserve every fact, citation, and required clause. Cut adjectives and throat-clearing.",
-  },
-  // addClause
-  {
-    label: "+ Confidentiality clause",
-    prompt:
-      "Add a confidentiality clause to the terms section. Three-year survival post-termination unless the contract provides otherwise.",
-  },
-  {
-    label: "+ IP-assignment clause",
-    prompt:
-      "Add an IP-assignment clause to the terms section: all work-product vests in the employer, recipient assigns and waives moral rights so far as the law permits.",
-  },
-  {
-    label: "+ Reservation of rights",
-    prompt:
-      "Add an explicit reservation-of-rights paragraph to the closing — statutory, contractual, common-law remedies, and the right to bring tribunal / agency proceedings.",
-  },
-  // summariseForCounsel
-  {
-    label: "Summarise for counsel",
-    prompt:
-      "Summarise this letter for an external employment-law adviser. Cover (1) what the letter says, (2) what it relies on, (3) what it asks for, (4) key risk points.",
-  },
-];
+const CONTRACT_TYPES = new Set<string>(["offer", "contract_amendment", "promotion", "salary_increase"]);
+const DISCIPLINARY_TYPES = new Set<string>(["warning", "termination", "probation_outcome", "redundancy"]);
+
+const TRIBUNAL_READY: Starter = {
+  label: "Make it ready for a tribunal",
+  hint: "Plain facts, no admissions, the law it relies on named.",
+  Icon: Sparkles,
+  prompt:
+    "Rewrite this letter so it would stand up at a tribunal: keep to the facts, avoid admissions and loaded words, and name the law or policy it relies on. Go through each section that needs changing.",
+};
+const SHORTER: Starter = {
+  label: "Make it shorter",
+  hint: "Cut repetition without losing a fact or required wording.",
+  Icon: Minus,
+  prompt:
+    "Make the main part of this letter shorter, about 180 words. Keep every fact, date and required statement. Cut repetition and filler.",
+};
+const SUMMARISE: Starter = {
+  label: "Summarise for a solicitor",
+  hint: "One paragraph on the risks and what could go wrong.",
+  Icon: FileText,
+  prompt:
+    "Summarise this letter for an employment solicitor in one paragraph: what it says, what it relies on, the main risks and any facts still to confirm.",
+};
+const CONFIDENTIALITY: Starter = {
+  label: "Add a confidentiality clause",
+  hint: "Keeps business information private during and after employment.",
+  Icon: Plus,
+  prompt:
+    "Add a confidentiality clause to the terms: business information stays private during employment and for three years after it ends, unless the contract already says otherwise.",
+};
+const APPEAL: Starter = {
+  label: "Check the right of appeal",
+  hint: "Who to write to, how long they have and what happens next.",
+  Icon: Plus,
+  prompt:
+    "Check the right of appeal in this letter: who the employee writes to, how many days they have, and what happens at the appeal. Add or fix that paragraph if anything is missing.",
+};
+const FAIR_PROCESS: Starter = {
+  label: "Check the process was fair",
+  hint: "The meeting, earlier warnings and the chance to respond.",
+  Icon: Sparkles,
+  prompt:
+    "Check this letter shows a fair process: the meeting, the chance to respond and be accompanied, and any earlier warnings. Suggest changes where something is missing.",
+};
+const CALM_FIRM: Starter = {
+  label: "Make it calm and firm",
+  hint: "Clear about what happened and what you are asking for.",
+  Icon: Sparkles,
+  prompt:
+    "Rewrite this letter so it is calm and firm: clear about what happened, what I am asking for and by when, without sounding angry.",
+};
+
+function startersFor(draft: Pick<Draft, "mode" | "letterType">): Starter[] {
+  if (draft.mode === "employee") return [CALM_FIRM, TRIBUNAL_READY, SHORTER, SUMMARISE];
+  if (CONTRACT_TYPES.has(draft.letterType)) return [CONFIDENTIALITY, SHORTER, TRIBUNAL_READY, SUMMARISE];
+  if (DISCIPLINARY_TYPES.has(draft.letterType)) return [FAIR_PROCESS, APPEAL, SHORTER, SUMMARISE];
+  return [TRIBUNAL_READY, SHORTER, SUMMARISE];
+}
+
+/** The Prompts menu: the starters, then a formal rewrite and, on a contract
+ *  letter, the other clauses. */
+function quickPromptsFor(draft: Pick<Draft, "mode" | "letterType">): { label: string; prompt: string }[] {
+  const out = startersFor(draft).map((p) => ({ label: p.label, prompt: p.prompt }));
+  out.push({
+    label: "Make it more formal",
+    prompt: "Rewrite this letter in a more formal register. Avoid contractions and keep every legal reference as it is.",
+  });
+  if (draft.mode === "employer" && CONTRACT_TYPES.has(draft.letterType)) {
+    out.push({
+      label: "Add an intellectual property clause",
+      prompt:
+        "Add an intellectual property clause to the terms: work created in the job belongs to the employer, and the employee waives moral rights as far as the law allows.",
+    });
+  }
+  if (draft.mode === "employee") {
+    out.push({
+      label: "Add a reservation of rights",
+      prompt:
+        "Add a short paragraph to the closing that reserves my rights, including the right to bring a tribunal claim.",
+    });
+  }
+  return out;
+}
 
 const SCOPE_LABEL: Record<AIChatScope, string> = {
   letter: "whole letter",
@@ -148,6 +170,12 @@ export function AIPanel({
   onPin,
   onUnpin,
   isPinned,
+  replaceThread,
+  threadKey,
+  onSent,
+  onOpenEvidence,
+  chips,
+  locked,
 }: {
   draft: Draft;
   activeSectionId: string | null;
@@ -163,9 +191,29 @@ export function AIPanel({
    * true, clicking the pin button will call this instead of onPin. */
   onUnpin?: () => void;
   isPinned?: boolean;
+  /** "panel" (default): the 14B side panel. "rail": legacy rail chrome.
+   *  Both now render the same thread. */
+  variant?: "rail" | "panel";
+  /** When set, replaces the chat thread above the composer (the side
+   * panel's Edits and Progress tabs) so the composer stays pinned on every
+   * tab while the conversation keeps its state. */
+  replaceThread?: ReactNode;
+  /** Identifies what replaceThread shows (the side panel tab). When it
+   * changes the scroller returns to the top, or to the latest message for
+   * the chat thread. */
+  threadKey?: string;
+  /** Called after a message is sent (the side panel switches to Chat). */
+  onSent?: () => void;
+  /** Opens the letter's evidence (the composer's Files button). */
+  onOpenEvidence?: () => void;
+  /** Prompt chips above the box, fitting the letter's stage. A click sends. */
+  chips?: { label: string; prompt: string }[];
+  /** The letter is locked at this stage (with the approver, approved,
+   *  sent): DraftHR answers and drafts what comes next, but offers no edits
+   *  to the letter (LETTER-X48). */
+  locked?: boolean;
 }) {
   const profile = useProfileStore((s) => s.profile);
-  const me = meIdentity(profile);
 
   const updateSection = useDraftStore((s) => s.updateSection);
   const appendToSection = useDraftStore((s) => s.appendToSection);
@@ -174,16 +222,6 @@ export function AIPanel({
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
   const clearAIChat = useDraftStore((s) => s.clearAIChat);
   const recordTimelineEvent = useDraftStore((s) => s.recordTimelineEvent);
-  const acceptAllSuggestions = useDraftStore((s) => s.acceptAllSuggestions);
-  const rejectAllSuggestions = useDraftStore((s) => s.rejectAllSuggestions);
-
-  // Track-changes affordance — derive once per draft change whether any
-  // section still has pending suggestion marks. Cheap because the helper
-  // string-probes before any DOM parse. Drives the Accept/Reject strip.
-  const anyPending = useMemo(
-    () => draft.sections.some((sec) => hasPendingSuggestions(sec.html)),
-    [draft.sections]
-  );
 
   const [scope, setScope] = useState<AIChatScope>("letter");
   const [input, setInput] = useState("");
@@ -201,6 +239,12 @@ export function AIPanel({
     () => captureRuntimeContext(draft.context.jurisdiction),
     [draft.context.jurisdiction]
   );
+  const todayWords = useMemo(() => {
+    const d = new Date(`${runtimeCtx.isoDate}T12:00:00`);
+    return Number.isNaN(d.getTime())
+      ? runtimeCtx.localDate
+      : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  }, [runtimeCtx.isoDate, runtimeCtx.localDate]);
 
   const initialMessages = useMemo<UIMessage[]>(
     () =>
@@ -221,8 +265,14 @@ export function AIPanel({
   // after the user edits the draft or changes the model in Settings.
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  const modelRef = useRef(profile.defaults.qwenModel);
-  modelRef.current = profile.defaults.qwenModel;
+  // The default model lives in Settings; the composer can pick another one
+  // for this letter's chat (a one-off, not saved as the default).
+  const defaultModel: ModelId = profile.defaults.qwenModel ?? DEFAULT_MODEL;
+  const [modelChoice, setModelChoice] = useState<ModelId | null>(null);
+  const model: ModelId = modelChoice ?? defaultModel;
+  const modelRef = useRef(model);
+  modelRef.current = model;
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const transport = useMemo(
     () =>
@@ -338,9 +388,9 @@ export function AIPanel({
     return { quote, sectionId: sectionEl?.getAttribute("data-section-id") ?? undefined };
   };
 
-  const submit = async (e?: React.FormEvent) => {
+  const submit = async (e?: React.FormEvent, override?: string) => {
     e?.preventDefault();
-    const text = input.trim();
+    const text = (override ?? input).trim();
     if (!text || status === "streaming" || status === "submitted") return;
     // Don't fire a new chat turn while a section regen is mutating the draft.
     if (applyAbortsRef.current.size > 0) return;
@@ -365,8 +415,9 @@ export function AIPanel({
     }
 
     const scoped = `${text}\n[scope: ${resolvedLabel}]${scopePayload}`;
-    setInput("");
+    if (override === undefined) setInput("");
     setRecentPrompts(pushRecentPrompt(text));
+    onSent?.();
     await sendMessage({ text: scoped });
   };
 
@@ -379,8 +430,9 @@ export function AIPanel({
   const scrollerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
+    if (!el || replaceThread !== undefined) return;
     el.scrollTop = el.scrollHeight;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, status]);
 
   /**
@@ -546,211 +598,309 @@ export function AIPanel({
     });
   }, [addToolResult]);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Grow the composer with its content, up to the cap set in CSS.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input]);
+
+  const scopeChipLabel =
+    scope === "section" && scopeSection
+      ? scopeSection.title
+      : scope === "selection"
+        ? "Selected text"
+        : "Whole letter";
+
+  const showThread = replaceThread === undefined;
+  const nav = useNavigate();
+
+  // Prompts sent from elsewhere in the workspace (chips, a stage's "Ask
+  // DraftHR"): window event "drafthr:ask" with { draftId, prompt }.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ draftId?: string; prompt?: string }>).detail;
+      if (!d?.prompt || (d.draftId && d.draftId !== draft.id)) return;
+      void submitRef.current(undefined, d.prompt);
+    };
+    window.addEventListener("drafthr:ask", on);
+    return () => window.removeEventListener("drafthr:ask", on);
+  }, [draft.id]);
+
+  // A second opinion from the Progress tab (SecondOpinion): it joins the
+  // thread as DraftHR's message, before the follow-up that asks for edits.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<CritiqueEventDetail>).detail;
+      if (!d?.critique || d.draftId !== draft.id) return;
+      setMessages((prev) => [
+        ...prev,
+        { id: `critique-${Date.now()}`, role: "assistant", parts: [{ type: "text", text: `**Second opinion · ${d.lensLabel}**\n\n${d.critique}` }] },
+      ]);
+    };
+    window.addEventListener(CRITIQUE_EVENT, on);
+    return () => window.removeEventListener(CRITIQUE_EVENT, on);
+  }, [draft.id, setMessages]);
+
+  // "Show new edits" (the sliders menu): in the text or side by side.
+  const [diffMode, setDiffModeState] = useState<DiffViewMode>(() => getDiffViewMode());
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<DiffViewMode>).detail;
+      if (d === "inline" || d === "card") setDiffModeState(d);
+    };
+    window.addEventListener("drafthr:diff-view-mode", on);
+    return () => window.removeEventListener("drafthr:diff-view-mode", on);
+  }, []);
+
+  // Switching side panel tabs swaps what the scroller holds: start a
+  // replaced view at its top and the chat at its latest message.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTop = replaceThread === undefined ? el.scrollHeight : 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadKey]);
+
+  // The tab's content scrolls behind the Ask DraftHR chips and box (and
+  // under the tabs once scrolled): while there is more beyond an edge, that
+  // edge fades out instead of cutting a line or a card in half (REVIEW-X10).
+  const [moreBelow, setMoreBelow] = useState(false);
+  const [moreAbove, setMoreAbove] = useState(false);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const measure = () => {
+      setMoreBelow(el.scrollHeight - el.clientHeight - el.scrollTop > 2);
+      setMoreAbove(el.scrollTop > 2);
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    ro?.observe(el);
+    if (el.firstElementChild) ro?.observe(el.firstElementChild);
+    const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(measure);
+    mo?.observe(el, { childList: true, subtree: true });
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro?.disconnect();
+      mo?.disconnect();
+    };
+  }, [threadKey, showThread]);
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Apple-minimal header: single row. Model name + today's date are
-       * collapsed into one badge so the rail header stays under one line.
-       * The Clear action is icon-only and lives at the far right. */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
-        <Wand2 className="size-4 text-[var(--ds-muted)]" />
-        <span className="text-[13px] font-medium text-[var(--ds-ink)]">AI agent</span>
-        <span
-          className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)] tabular-nums"
-          title={`Model: ${profile.defaults.qwenModel ?? DEFAULT_MODEL}. The agent has today's date (${runtimeCtx.localDate}, ${runtimeCtx.timeZone}) so it never invents dates.`}
-        >
-          {profile.defaults.qwenModel ?? DEFAULT_MODEL} · {runtimeCtx.localDate}
-        </span>
-        <div className="ml-auto flex items-center gap-1">
-          {messages.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm("Clear this chat thread?")) {
-                  clearAIChat(draft.id);
-                  setMessages([]);
-                }
-              }}
-              className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-              aria-label="Clear chat thread"
-              title="Clear chat thread"
-            >
-              <Trash2 className="size-3.5" />
-            </button>
-          )}
-          {(onPin || onUnpin) && (
-            <button
-              type="button"
-              onClick={isPinned ? (onUnpin ?? onPin) : onPin}
-              className={
-                "group inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[10.5px] font-bold uppercase tracking-[0.04em] border transition-colors " +
-                (isPinned
-                  ? "bg-[var(--ds-violet-bg)] text-[var(--ds-violet-fg)] border-violet-200 hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] hover:border-[var(--ds-line)]"
-                  : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line-2)] hover:text-[var(--ds-ink)]")
-              }
-              title={isPinned ? "Click to unpin (back to twin pills)" : "Pin Ask AI as the right rail (collapses Evidence)"}
-              aria-pressed={isPinned}
-            >
-              {isPinned ? (
-                <>
-                  <Pin className="size-3 group-hover:hidden" />
-                  <PinOff className="size-3 hidden group-hover:inline" />
-                  <span className="group-hover:hidden">Pinned</span>
-                  <span className="hidden group-hover:inline">Unpin</span>
-                </>
-              ) : (
-                <>
-                  <Pin className="size-3" />
-                  <span>Pin</span>
-                </>
-              )}
-            </button>
-          )}
-          {onCollapse && (
-            <button
-              type="button"
-              onClick={onCollapse}
-              className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-              aria-label="Hide AI rail"
-              title="Hide AI rail"
-            >
-              <PanelRight className="size-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
       <div
         ref={scrollerRef}
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions text"
-        aria-busy={isStreaming}
-        className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0"
+        role={showThread ? "log" : undefined}
+        aria-live={showThread ? "polite" : undefined}
+        aria-relevant={showThread ? "additions text" : undefined}
+        aria-busy={showThread ? isStreaming : undefined}
+        data-more-below={moreBelow || undefined}
+        data-more-above={moreAbove || undefined}
+        className="ai-panel-scroll flex-1 overflow-auto min-h-0"
       >
-        <SuggestionTestStrip
-          draft={draft}
-          activeSectionId={activeSectionId}
-          anyPending={anyPending}
-          onAcceptAll={() => acceptAllSuggestions(draft.id)}
-          onRejectAll={() => rejectAllSuggestions(draft.id)}
-          insertTest={() => insertTestSuggestion(draft, activeSectionId, updateSection)}
-        />
-        {messages.length === 0 && (
-          // Empty state — brand mark + tagline at the top, then a clickable
-          // suggestion grid (one prompt per tool, so the user discovers
-          // what the agent can do without scrolling the composer chips),
-          // then a Recent row if the user has sent prompts before.
-          <div className="px-1 py-4">
-            <div className="flex flex-col items-center text-center px-4 pb-5">
-              <BrandMark size={32} className="mb-3 opacity-60" />
-              <p className="text-[13px] text-[var(--ds-ink)] font-medium">
-                What change do you want?
-              </p>
-              <p className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-relaxed max-w-[28ch]">
-                Pick a starter below or describe your own. I'll show the result before applying it.
-              </p>
+        {!showThread ? (
+          replaceThread
+        ) : (
+          <div className="flex flex-col gap-5 px-4 pb-6 pt-3">
+            {/* Thread header: model and date the agent works with, plus a
+             * fresh thread. Pin and hide only render where a caller wires them. */}
+            <div className="flex items-center gap-2">
+              <span
+                className="min-w-0 truncate text-[12px] text-[var(--ds-muted)]"
+                title={`DraftHR has today's date (${todayWords}, ${runtimeCtx.timeZone}) so it never invents dates.`}
+              >
+                Today · {todayWords}
+              </span>
+              <div className="ml-auto flex items-center gap-0.5">
+                {messages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClear(true)}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-[var(--ds-r-s)] px-2 text-[12px] font-medium text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                    aria-label="Clear chat thread"
+                    title="Start a new thread"
+                  >
+                    <SquarePen className="size-3.5" />
+                    New thread
+                  </button>
+                )}
+                {(onPin || onUnpin) && (
+                  <button
+                    type="button"
+                    onClick={isPinned ? (onUnpin ?? onPin) : onPin}
+                    className="grid size-7 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                    title={isPinned ? "Unpin" : "Pin"}
+                    aria-pressed={isPinned}
+                  >
+                    {isPinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+                  </button>
+                )}
+                {onCollapse && (
+                  <button
+                    type="button"
+                    onClick={onCollapse}
+                    className="grid size-7 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                    aria-label="Hide AI rail"
+                    title="Hide AI rail"
+                  >
+                    <PanelRight className="size-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-1.5 px-1">
-              {STARTER_PROMPTS.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => setInput(p.prompt)}
-                  className="text-left rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] hover:bg-[var(--ds-line-2)] hover:border-[var(--ds-line)] transition px-3 py-2 group"
-                >
-                  <div className="flex items-center gap-2">
-                    <p.Icon className="size-3.5 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition" />
-                    <span className="text-[12px] font-medium text-[var(--ds-ink)]">{p.label}</span>
-                  </div>
-                  <p className="text-[11px] text-[var(--ds-muted)] mt-0.5 ml-[22px] leading-snug">
-                    {p.hint}
-                  </p>
-                </button>
-              ))}
-            </div>
 
-            {recentPrompts.length > 0 && (
-              <div className="mt-4 px-1">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--ds-muted)] mb-1.5 px-1">
-                  Recent
-                </div>
-                <div className="flex flex-col gap-1">
-                  {recentPrompts.map((p) => (
+            {messages.length === 0 && (
+              // Empty state: what DraftHR can do, one starter per tool, then
+              // the user's recent prompts.
+              <div className="pt-2">
+                {locked ? (
+                  <>
+                    <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">Ask DraftHR about this letter</p>
+                    <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+                      The letter is locked now, so DraftHR won't change it. It can explain it, summarise it or draft
+                      what comes next.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">What should DraftHR change?</p>
+                    <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+                      Pick a starter or describe your own. DraftHR shows each change for you to accept.
+                    </p>
+                  </>
+                )}
+                <div className="mt-4 flex flex-col gap-1">
+                  {(locked ? [] : startersFor(draft)).map((p) => (
                     <button
-                      key={p}
+                      key={p.label}
                       type="button"
-                      onClick={() => setInput(p)}
-                      className="text-left text-[11.5px] text-[var(--ds-body)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] px-2 py-1 rounded transition truncate"
-                      title={p}
+                      onClick={() => {
+                        setInput(p.prompt);
+                        textareaRef.current?.focus();
+                      }}
+                      className="group flex items-start gap-2.5 rounded-[var(--ds-r-m)] px-3 py-2.5 text-left transition hover:bg-[var(--ds-surface-2)]"
                     >
-                      {p}
+                      <p.Icon className="mt-0.5 size-3.5 shrink-0 text-[var(--ds-muted)] transition group-hover:text-[var(--ds-ink)]" />
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-medium text-[var(--ds-ink)]">{p.label}</span>
+                        <span className="mt-0.5 block text-[12px] leading-snug text-[var(--ds-muted)]">{p.hint}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
+
+                {recentPrompts.length > 0 && (
+                  <div className="mt-4">
+                    <div className="mb-1.5 px-1 text-[12px] text-[var(--ds-muted)]">Recent</div>
+                    <div className="flex flex-col gap-0.5">
+                      {recentPrompts.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setInput(p)}
+                          className="truncate rounded-[var(--ds-r-s)] px-2 py-1.5 text-left text-[12.5px] text-[var(--ds-body)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                          title={p}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {messages.map((m) => (
+              <Message
+                key={m.id}
+                message={m}
+                streaming={isStreaming && m === messages[messages.length - 1] && m.role === "assistant"}
+                draft={draft}
+                onApplyRegenerate={applyRegenerate}
+                onApplyAddClause={applyAddClause}
+                onApplyTighten={applyTighten}
+                onApplySummarise={applySummarise}
+              />
+            ))}
+            {error && (
+              <div className="flex items-center gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-red-bg)] px-3 py-2 text-[12.5px] text-[var(--ds-red-fg)]">
+                <AlertCircle className="size-3.5 shrink-0" />
+                <span className="flex-1">{agentErrorMessage(error)}</span>
+                <button onClick={() => regenerate()} className="inline-flex items-center gap-1 font-medium hover:underline">
+                  <RotateCw className="size-3" /> Retry
+                </button>
               </div>
             )}
           </div>
         )}
-        {messages.map((m) => (
-          <Message
-            key={m.id}
-            message={m}
-            streaming={isStreaming && m === messages[messages.length - 1] && m.role === "assistant"}
-            me={me}
-            draft={draft}
-            onApplyRegenerate={applyRegenerate}
-            onApplyAddClause={applyAddClause}
-            onApplyTighten={applyTighten}
-            onApplySummarise={applySummarise}
-          />
-        ))}
-        {error && (
-          <div className="rounded-md border border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] text-[12px] px-3 py-2 flex items-center gap-2">
-            <AlertCircle className="size-3.5" />
-            <span className="flex-1">{agentErrorMessage(error)}</span>
-            <button onClick={() => regenerate()} className="inline-flex items-center gap-1 hover:underline">
-              <RotateCw className="size-3" /> Retry
-            </button>
-          </div>
-        )}
       </div>
 
-      <form onSubmit={submit} className="shrink-0 border-t border-[var(--ds-line-2)] bg-[var(--ds-surface)] px-3 py-3 space-y-2">
-        {/* Scope chips — small, above the composer (necessary context, not a control). */}
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-[10px] text-[var(--ds-muted)] mr-1">Scope:</span>
-          {(["letter", "section", "selection"] as AIChatScope[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setScope(s)}
-              className={
-                "text-[10px] px-2 py-0.5 rounded-full border transition " +
-                (scope === s
-                  ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-                  : "bg-[var(--ds-surface)] text-[var(--ds-muted)] border-[var(--ds-line)] hover:text-[var(--ds-ink)]")
-              }
-            >
-              {SCOPE_LABEL[s]}
-              {s === "section" && scopeSection ? ` · ${scopeSection.title}` : ""}
-            </button>
-          ))}
-        </div>
-
-        {/* Composer — one rounded box with textarea + bottom toolbar + send button INSIDE. */}
+      {/* Ask DraftHR: the stage's prompt chips, then one white box with the
+       * context chip, the message and a tool row ending in a dark send. */}
+      <form onSubmit={submit} className="shrink-0 px-4 pb-4 pt-2">
+        {chips && chips.length > 0 && (
+          <div className="mb-2.5 flex flex-wrap gap-1.5" aria-label="Suggested prompts">
+            {chips.map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                disabled={busy}
+                onClick={() => void submit(undefined, c.prompt)}
+                className="inline-flex h-7 items-center whitespace-nowrap rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div
-          className={
-            "rounded-lg border bg-[var(--ds-surface)] transition focus-within:ring-2 focus-within:ring-[var(--ds-ink)]/10 " +
-            "focus-within:border-[var(--ds-ink)] border-[var(--ds-line)]"
-          }
+          className="flex cursor-text flex-col gap-2 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] pb-2.5 pl-3.5 pr-2.5 pt-3 shadow-[var(--ds-shadow-ask)] transition-colors duration-[120ms] focus-within:border-[var(--ds-line-strong)]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) textareaRef.current?.focus();
+          }}
         >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-[26px] min-w-0 max-w-full items-center gap-1.5 rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] pl-2 pr-1.5 text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                  aria-label={`Context: ${scopeChipLabel}`}
+                  title="What DraftHR should look at"
+                >
+                  <FileText className="size-3.5 shrink-0 text-[var(--ds-muted)]" />
+                  <span className="truncate">{scopeChipLabel}</span>
+                  <ChevronDown className="size-3.5 shrink-0 text-[var(--ds-subtle)]" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top" className="w-[240px] duration-[160ms] data-[state=closed]:duration-[100ms]">
+                <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Ask about</DropdownMenuLabel>
+                {(["letter", "section", "selection"] as AIChatScope[]).map((sc) => (
+                  <DropdownMenuItem key={sc} onClick={() => setScope(sc)}>
+                    <span className="flex-1 truncate">
+                      {sc === "letter" ? "Whole letter" : sc === "section" ? `Section${scopeSection || activeSectionId ? `: ${(draft.sections.find((x) => x.id === activeSectionId) ?? draft.sections[0])?.title ?? ""}` : ""}` : "Selected text"}
+                    </span>
+                    {scope === sc && <Check className="size-3.5" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <textarea
+            ref={textareaRef}
+            data-ai-composer
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Rewrite a section · Add a clause · Tighten to a word target · Summarise for counsel"
-            rows={3}
-            className="block w-full min-h-[64px] max-h-[240px] resize-none px-3 pt-3 pb-1 rounded-lg bg-transparent text-[14px] leading-relaxed text-[var(--ds-ink)] focus:outline-none placeholder:text-[var(--ds-subtle)]"
+            placeholder="Ask DraftHR anything about this letter"
+            aria-label="Message DraftHR"
+            rows={1}
+            className="block max-h-[120px] min-h-[22px] w-full resize-none border-0 bg-transparent px-0.5 text-[14px] leading-[21px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -758,138 +908,193 @@ export function AIPanel({
               }
             }}
           />
-          <div className="flex items-center gap-1 px-2 pb-2 pt-1">
-            {/* Quick-prompt chips on the left (horizontal scroll if many) */}
-            <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0 -my-1 py-1">
-              {QUICK_PROMPTS.map((q) => (
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="-ml-1.5 flex min-w-0 items-center gap-0.5 overflow-hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                    aria-label="Add to the message"
+                    title="Add"
+                  >
+                    <Plus className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top" className="w-[240px] duration-[160ms] data-[state=closed]:duration-[100ms]">
+                  <DropdownMenuItem onClick={() => nav(`/editor/${draft.id}/evidence?action=add`)}>
+                    <Paperclip className="mr-2 size-4" /> Add evidence
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setScope("selection")}>
+                    <TextSelect className="mr-2 size-4" /> Ask about the selected text
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {onOpenEvidence && (
                 <button
-                  key={q.label}
                   type="button"
-                  onClick={() => setInput(q.prompt)}
-                  disabled={busy}
-                  className="shrink-0 text-[11px] px-2 py-1 rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition disabled:opacity-50"
+                  onClick={onOpenEvidence}
+                  className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] px-1.5 text-[13px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                  title="Evidence and files for this letter"
                 >
-                  {q.label}
+                  <Paperclip className="size-3.5" />
+                  Files
+                  {(draft.evidence?.length ?? 0) > 0 && (
+                    <span className="ds-mono text-[11.5px] text-[var(--ds-subtle)]">{draft.evidence?.length}</span>
+                  )}
                 </button>
-              ))}
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] px-1.5 text-[13px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                    aria-label="Saved prompts"
+                    title="Saved prompts"
+                  >
+                    <Bookmark className="size-3.5" />
+                    Prompts
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top" className="w-[260px] duration-[160ms] data-[state=closed]:duration-[100ms]">
+                  <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Saved prompts</DropdownMenuLabel>
+                  {(locked ? chips ?? [] : quickPromptsFor(draft)).map((q) => (
+                    <DropdownMenuItem
+                      key={q.label}
+                      onClick={() => {
+                        setInput(q.prompt);
+                        requestAnimationFrame(() => textareaRef.current?.focus());
+                      }}
+                    >
+                      {q.label}
+                    </DropdownMenuItem>
+                  ))}
+                  {recentPrompts.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Recent</DropdownMenuLabel>
+                      {recentPrompts.slice(0, 5).map((rp) => (
+                        <DropdownMenuItem key={rp} onClick={() => setInput(rp)}>
+                          <span className="truncate">{rp}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            {/* Send button — bottom-right inside the composer */}
-            {busy ? (
-              <button
-                type="button"
-                onClick={() => stopAll()}
-                className="size-7 shrink-0 rounded-md bg-[var(--ds-line-2)] text-[var(--ds-ink)] grid place-items-center hover:bg-[var(--ds-line)]"
-                aria-label="Stop"
-                title="Stop"
-              >
-                <Loader2 className="size-3.5 animate-spin" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim()}
-                className="size-7 shrink-0 rounded-md bg-[var(--ds-ink)] text-white grid place-items-center disabled:opacity-25 disabled:bg-[var(--ds-line)] disabled:text-[var(--ds-muted)] transition"
-                aria-label="Send"
-                title="Send (⌘ + Enter)"
-              >
-                <ArrowUp className="size-3.5" />
-              </button>
-            )}
+            <div className="flex shrink-0 items-center gap-0.5">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="grid size-7 place-items-center rounded-[7px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                    aria-label="Options"
+                    title="Options"
+                  >
+                    <SlidersHorizontal className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="top" className="w-[240px] duration-[160ms] data-[state=closed]:duration-[100ms]">
+                  <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Show DraftHR's edits</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setDiffViewMode("inline")}>
+                    <span className="flex-1">In the text</span>
+                    {diffMode === "inline" && <Check className="size-3.5" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDiffViewMode("card")}>
+                    <span className="flex-1">Side by side</span>
+                    {diffMode === "card" && <Check className="size-3.5" />}
+                  </DropdownMenuItem>
+                  {/* The model sits here, not in the box (mocks f1, f8):
+                   * the default is in Settings, this chat can use another. */}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger
+                      disabled={busy}
+                      aria-label={`Model: ${modelLabel(model)}`}
+                      title={modelChoice ? "Model for this chat (your default is in Settings)" : "Model (your default, set in Settings)"}
+                      data-testid="composer-model"
+                    >
+                      <span className="flex-1">Model</span>
+                      <span className="ml-3 truncate text-[12px] text-[var(--ds-muted)]">{modelLabel(model, true)}</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-[260px]">
+                      <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Model for this chat</DropdownMenuLabel>
+                      {MODEL_OPTIONS.map((m) => (
+                        <DropdownMenuItem key={m.id} onClick={() => setModelChoice(m.id === defaultModel ? null : m.id)}>
+                          <span className="flex-1 truncate">
+                            {m.label}
+                            {m.id === defaultModel && <span className="text-[var(--ds-muted)]"> · default</span>}
+                          </span>
+                          {model === m.id && <Check className="size-3.5" />}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => nav("/settings")}>
+                        <span className="text-[var(--ds-muted)]">Change the default in Settings</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  {messages.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setConfirmClear(true)}
+                      >
+                        <SquarePen className="mr-2 size-4" /> New thread
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {busy ? (
+                <button
+                  type="button"
+                  onClick={() => stopAll()}
+                  className="ml-1 grid size-[30px] place-items-center rounded-[8px] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                  aria-label="Stop"
+                  title="Stop"
+                >
+                  <Square className="size-3 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim()}
+                  className="ml-1 grid size-[30px] place-items-center rounded-[8px] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] disabled:bg-[var(--ds-accent)] disabled:text-[var(--ds-on-accent)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                  aria-label="Send"
+                  title="Send (Ctrl or Cmd + Enter)"
+                >
+                  <ArrowUp className="size-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
-        <p className="text-[10px] text-[var(--ds-subtle)] text-center">
-          ⌘ + Enter to send · The AI may propose section changes — review with Apply before they go live.
-        </p>
       </form>
+      <ConfirmDialog
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        title="Start a new thread?"
+        body="This clears the chat for this letter. The letter and its suggested edits stay as they are."
+        confirmLabel="New thread"
+        onConfirm={() => {
+          clearAIChat(draft.id);
+          setMessages([]);
+        }}
+      />
     </div>
   );
 }
 
-/**
- * Track-changes affordance + DEV debug button. Rendered at the top of the
- * AI scroller so the four downstream surfaces (consultant review, AI critique
- * diff, threaded comments, co-edit cursors) have a working primitive to
- * exercise. The "Test suggestion" button is gated to DEV — it injects a
- * green-underlined <ins> at the start of the active section so we can prove
- * the merge / accept / reject paths end-to-end. The Accept/Reject row only
- * shows when there's at least one pending suggestion in the draft.
- */
-function SuggestionTestStrip(props: {
-  draft: Draft;
-  activeSectionId: string | null;
-  anyPending: boolean;
-  onAcceptAll: () => void;
-  onRejectAll: () => void;
-  insertTest: () => void;
-}): ReactElement | null {
-  const isDev = import.meta.env.DEV;
-  if (!isDev && !props.anyPending) return null;
-  return (
-    <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-2 text-[11.5px] flex items-center gap-2 flex-wrap">
-      <span className="text-[var(--ds-muted)] inline-flex items-center gap-1">
-        <FlaskConical className="size-3.5" />
-        Track-changes
-      </span>
-      {props.anyPending ? (
-        <>
-          <span className="text-[var(--ds-ink)]">Pending suggestions</span>
-          <span className="ml-auto inline-flex items-center gap-1">
-            <button
-              type="button"
-              onClick={props.onAcceptAll}
-              className="h-6 px-2 rounded-md bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] hover:opacity-90 transition text-[11px] font-medium"
-              title="Accept every pending suggestion in this draft"
-            >
-              Accept all
-            </button>
-            <button
-              type="button"
-              onClick={props.onRejectAll}
-              className="h-6 px-2 rounded-md bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] hover:opacity-90 transition text-[11px] font-medium"
-              title="Reject every pending suggestion — text stays, marks mute"
-            >
-              Reject all
-            </button>
-          </span>
-        </>
-      ) : (
-        <span className="text-[var(--ds-subtle)]">No pending suggestions</span>
-      )}
-      {isDev && (
-        <button
-          type="button"
-          onClick={props.insertTest}
-          className="h-6 px-2 rounded-md border border-dashed border-[var(--ds-line)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition text-[11px]"
-          title="DEV: inject a fake suggestion into the active section"
-        >
-          Test suggestion
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** DEV helper: append a pending <ins> to the active section's HTML so the
- * accept / reject paths have something to chew on. Reads-then-writes via
- * updateSection so it goes through the canonical sanitiser. */
-function insertTestSuggestion(
-  draft: Draft,
-  activeSectionId: string | null,
-  updateSection: (draftId: string, sectionId: string, html: string) => void,
-): void {
-  const section =
-    draft.sections.find((s) => s.id === activeSectionId) ?? draft.sections[0];
-  if (!section) return;
-  const id = uid("sug");
-  const created = Date.now();
-  // <p> wrapper keeps the editor's block schema happy — bare inline marks at
-  // the doc level get re-wrapped on next parse anyway.
-  const inserted =
-    `<p><ins data-suggestion-id="${id}" data-suggestion-kind="insertion" ` +
-    `data-author="Test reviewer" data-created-at="${created}" ` +
-    `data-status="pending" data-body="DEV: synthetic suggestion" ` +
-    `class="ds-suggestion ds-suggestion-ins ds-suggestion-pending">[TEST INSERT]</ins></p>`;
-  updateSection(draft.id, section.id, `${section.html ?? ""}${inserted}`);
+/** A model's name for people: its Settings label, or just the family name
+ *  when short (the composer row has little room). */
+function modelLabel(id: ModelId, short = false): string {
+  const label = MODEL_OPTIONS.find((m) => m.id === id)?.label ?? "Default model";
+  if (!short) return label;
+  return label.replace(/^Claude\s+/, "").replace(/\s+[\d.]+$/, "");
 }
 
 /** Concatenate text-type parts from a v6 UIMessage. */
@@ -959,7 +1164,6 @@ function stripPendingToolCalls(messages: UIMessage[]): UIMessage[] {
 function Message({
   message,
   streaming,
-  me,
   draft,
   onApplyRegenerate,
   onApplyAddClause,
@@ -968,7 +1172,6 @@ function Message({
 }: {
   message: UIMessage;
   streaming: boolean;
-  me: { initials: string; name: string; email?: string };
   draft: Draft;
   onApplyRegenerate: (toolCallId: string, input: RegenerateInput) => Promise<void>;
   onApplyAddClause: (toolCallId: string, input: AddClauseInput) => Promise<void>;
@@ -979,65 +1182,52 @@ function Message({
   const textOnly = textFromParts(message);
   const { body, scopeChip } = parseScopeFromUserBody(textOnly, isUser);
 
+  if (isUser) {
+    // 3A: the user's turn sits right-aligned in a soft bubble.
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <div className="max-w-[88%] whitespace-pre-wrap rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-3 py-2 text-[13.5px] leading-relaxed text-[var(--ds-ink)] [overflow-wrap:anywhere]">
+          {body || (streaming && <span className="text-[var(--ds-muted)]">…</span>)}
+        </div>
+        {scopeChip && (
+          <span className="max-w-[88%] truncate text-[11px] text-[var(--ds-muted)]">{scopeChip}</span>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex gap-2 items-start">
-      {isUser ? (
-        <Avatar seed={me.email ?? me.name} name={me.name} email={me.email} initials={me.initials} size="md" />
-      ) : (
-        <BrandMark size={24} />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] font-semibold text-[var(--ds-ink)]">
-            {isUser ? "You" : "DRAFTHR"}
-          </span>
-          {scopeChip && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)] truncate max-w-[200px]">
-              {scopeChip}
+    <div className="min-w-0">
+      {/* Assistant: plain text on the panel, no bubble. */}
+      {(body || (streaming && !textOnly)) && (
+        <div className="ai-msg-body text-[var(--ds-body)]">
+          {body ? (
+            <Markdown>{body}</Markdown>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--ds-muted)]">
+              <Loader2 className="size-3 animate-spin" /> Thinking
             </span>
           )}
         </div>
+      )}
 
-        {/* Text bubble (only if there's any text content) */}
-        {(body || (streaming && !textOnly)) && (
-          <div
-            className={
-              "mt-1 rounded-md px-3 py-2 " +
-              (isUser
-                ? "bg-[var(--ds-ink)] text-white text-[13px] leading-relaxed whitespace-pre-wrap"
-                : "ai-msg-body bg-[var(--ds-surface-2)] text-[var(--ds-body)]")
-            }
-          >
-            {isUser ? (
-              body || (streaming && <span className="text-[var(--ds-muted)]">…</span>)
-            ) : body ? (
-              <Markdown>{body}</Markdown>
-            ) : streaming ? (
-              <span className="text-[var(--ds-muted)] text-[13px]">…</span>
-            ) : null}
-          </div>
-        )}
-
-        {/* Tool-call parts — render the right card per tool. */}
-        {!isUser && (
-          <div className="mt-2 space-y-1.5">
-            {message.parts.filter(isToolUIPart).map((p) => {
-              const tp = p as unknown as ToolPart;
-              switch (tp.type) {
-                case "tool-regenerateSection":
-                  return <RegenerateCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyRegenerate} />;
-                case "tool-addClause":
-                  return <AddClauseCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyAddClause} />;
-                case "tool-tightenSection":
-                  return <TightenCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyTighten} />;
-                case "tool-summariseForCounsel":
-                  return <SummariseMarker key={tp.toolCallId} part={tp} onAck={onApplySummarise} />;
-                default:
-                  return null;
-              }
-            })}
-          </div>
-        )}
+      {/* Tool-call parts: render the right card per tool. */}
+      <div className="mt-2 space-y-1.5 empty:hidden">
+        {message.parts.filter(isToolUIPart).map((p) => {
+          const tp = p as unknown as ToolPart;
+          switch (tp.type) {
+            case "tool-regenerateSection":
+              return <RegenerateCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyRegenerate} />;
+            case "tool-addClause":
+              return <AddClauseCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyAddClause} />;
+            case "tool-tightenSection":
+              return <TightenCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyTighten} />;
+            case "tool-summariseForCounsel":
+              return <SummariseMarker key={tp.toolCallId} part={tp} onAck={onApplySummarise} />;
+            default:
+              return null;
+          }
+        })}
       </div>
     </div>
   );
@@ -1124,7 +1314,7 @@ function RegenerateCard({
               <button
                 type="button"
                 onClick={() => void onApply(part.toolCallId, input)}
-                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+                className="h-7 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2.5 text-[12px] font-medium text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
               >
                 Apply
               </button>
@@ -1168,7 +1358,7 @@ function AddClauseCard({
               <button
                 type="button"
                 onClick={() => void onApply(part.toolCallId, input)}
-                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+                className="h-7 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2.5 text-[12px] font-medium text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
               >
                 Apply
               </button>
@@ -1208,7 +1398,7 @@ function TightenCard({
               <button
                 type="button"
                 onClick={() => void onApply(part.toolCallId, input)}
-                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+                className="h-7 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2.5 text-[12px] font-medium text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
               >
                 Apply
               </button>
@@ -1302,12 +1492,12 @@ function ToolCard({
   eyebrow?: string;
 }) {
   return (
-    <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-3 py-2 text-[12px]">
+    <div className="rounded-[var(--ds-r-m)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-2.5 text-[12.5px]">
       <div className="flex items-center gap-2">
         <span className="shrink-0">{icon ?? <Sparkles className="size-3 text-[var(--ds-muted)]" />}</span>
         <div className="min-w-0 flex-1">
           {eyebrow && (
-            <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--ds-muted)] truncate">
+            <div className="truncate text-[11.5px] text-[var(--ds-muted)]">
               {eyebrow}
             </div>
           )}
@@ -1316,7 +1506,7 @@ function ToolCard({
         <div className="flex items-center gap-2 shrink-0">{status}</div>
       </div>
       {body && (
-        <div className="text-[11px] text-[var(--ds-muted)] leading-relaxed mt-1 italic">
+        <div className="mt-1.5 text-[12px] leading-relaxed text-[var(--ds-muted)]">
           {body}
         </div>
       )}

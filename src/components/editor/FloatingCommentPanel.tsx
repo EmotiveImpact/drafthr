@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, MessageSquarePlus, Reply, Trash2, X } from "lucide-react";
 import type { Comment, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
+import { notifyComment } from "@/lib/collab-notify";
 import {
   type CommentViewer,
   canDeleteComment,
@@ -48,17 +49,27 @@ export type FloatingAnchor = {
    *  (so tapping the underlying comment mark doesn't immediately close
    *  the panel it just opened). */
   containerEl?: HTMLElement | null;
+  /** Line the panel up with the anchor's left edge (default) or its right
+   *  edge (a margin card: the panel then sits under the card, beside the
+   *  page, not over the letter). */
+  align?: "start" | "end";
 };
 
 export function FloatingCommentPanel({
   draft,
   anchor,
   mode,
+  focusReply,
+  returnFocus,
   onClose,
 }: {
   draft: Draft;
   anchor: FloatingAnchor | null;
   mode: FloatingMode;
+  /** Existing thread: put the cursor in the reply box when it opens. */
+  focusReply?: boolean;
+  /** Where focus goes back to when the panel is closed with Esc or Close. */
+  returnFocus?: HTMLElement | null;
   onClose: () => void;
 }) {
   const profile = useProfileStore((s) => s.profile);
@@ -72,6 +83,7 @@ export function FloatingCommentPanel({
 
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const updateRef = useRef<(() => void) | null>(null);
 
   // Position the panel below the anchor's rect, clamped to viewport.
   useEffect(() => {
@@ -90,13 +102,14 @@ export function FloatingCommentPanel({
       const top = overflowsBottom
         ? Math.max(VIEWPORT_PADDING, rect.top - GAP - panelH)
         : naturalTop;
-      const naturalLeft = rect.left;
+      const naturalLeft = anchor.align === "end" ? rect.right - PANEL_WIDTH : rect.left;
       const left = Math.min(
         Math.max(VIEWPORT_PADDING, naturalLeft),
         Math.max(VIEWPORT_PADDING, vw - PANEL_WIDTH - VIEWPORT_PADDING)
       );
-      setPos({ top, left });
+      setPos((p) => (p && p.top === top && p.left === left ? p : { top, left }));
     };
+    updateRef.current = update;
     update();
     window.addEventListener("scroll", update, true);
     window.addEventListener("resize", update);
@@ -106,10 +119,30 @@ export function FloatingCommentPanel({
     };
   }, [anchor]);
 
-  // Esc + outside-click close.
+  // Place it again once its real height is known (the first pass guesses),
+  // and whenever it grows (a reply added), so it never covers its anchor.
+  const shown = pos !== null;
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!shown || !el) return;
+    updateRef.current?.();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => updateRef.current?.());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [shown]);
+
+  // Esc + outside-click close. Esc and Close hand focus back to where the
+  // panel was opened from; a click elsewhere leaves focus where it landed.
+  const closeAndReturn = () => {
+    onClose();
+    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+  };
+  const closeAndReturnRef = useRef(closeAndReturn);
+  closeAndReturnRef.current = closeAndReturn;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") closeAndReturnRef.current();
     };
     const onDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
@@ -173,7 +206,7 @@ export function FloatingCommentPanel({
         </div>
         <button
           type="button"
-          onClick={onClose}
+          onClick={closeAndReturn}
           className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)]"
           aria-label="Close"
         >
@@ -197,6 +230,9 @@ export function FloatingCommentPanel({
               resolved: false,
             });
             mode.applyMark?.(id);
+            // Email the author that a comment landed, as the Comments panel
+            // does (best effort; the server skips self-comments).
+            notifyComment(draft.id, body);
             onClose();
           }}
         />
@@ -208,6 +244,7 @@ export function FloatingCommentPanel({
           identities={identities}
           viewer={viewer}
           me={me}
+          autoFocus={focusReply}
           onReply={(body) => {
             addComment(draft.id, {
               sectionId: rootComment.sectionId,
@@ -219,6 +256,7 @@ export function FloatingCommentPanel({
               body,
               resolved: false,
             });
+            notifyComment(draft.id, body);
           }}
           onDelete={(id) => deleteComment(draft.id, id)}
           onToggleResolve={() =>
@@ -307,6 +345,7 @@ function ThreadView({
   onReply,
   onDelete,
   onToggleResolve,
+  autoFocus,
 }: {
   draftId: string;
   root: Comment;
@@ -317,8 +356,16 @@ function ThreadView({
   onReply: (body: string) => void;
   onDelete: (commentId: string) => void;
   onToggleResolve: () => void;
+  /** Put the cursor in the reply box on open. */
+  autoFocus?: boolean;
 }) {
   const [replyValue, setReplyValue] = useState("");
+  const replyRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (autoFocus) replyRef.current?.focus({ preventScroll: true });
+    // Once, when the thread opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submitReply = () => {
     const t = replyValue.trim();
@@ -361,6 +408,8 @@ function ThreadView({
           <div className="flex items-start gap-2 mt-1">
             <Avatar size="sm" seed={me.email ?? me.id} initials={me.initials} />
             <textarea
+              ref={replyRef}
+              aria-label="Reply"
               value={replyValue}
               onChange={(e) => setReplyValue(e.target.value)}
               placeholder="Reply…"

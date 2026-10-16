@@ -71,7 +71,7 @@ export function ImportSuggestions({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-h-[calc(100dvh-32px)] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import employees from drafts</DialogTitle>
           <DialogDescription>
@@ -81,7 +81,7 @@ export function ImportSuggestions({
         </DialogHeader>
 
         {suggestions.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] py-8 text-center">
+          <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] py-8 text-center">
             <Users className="size-6 text-[var(--ds-muted)] mx-auto mb-2" />
             <p className="text-[13px] text-[var(--ds-muted)] m-0">
               No new people found in your drafts. Every employee mentioned
@@ -90,11 +90,11 @@ export function ImportSuggestions({
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] text-[var(--ds-muted)] uppercase tracking-wide pb-1">
+            <div className="flex items-center justify-between text-[12.5px] text-[var(--ds-muted)] pb-1">
               <button
                 type="button"
                 onClick={toggleAll}
-                className="hover:text-[var(--ds-ink)] transition font-semibold"
+                className="font-medium text-[var(--ds-ink)] underline-offset-2 transition hover:underline"
               >
                 {allSelected ? "Deselect all" : "Select all"}
               </button>
@@ -102,7 +102,7 @@ export function ImportSuggestions({
                 {selected.size} of {suggestions.length} selected
               </span>
             </div>
-            <div className="max-h-[360px] overflow-y-auto rounded-md border border-[var(--ds-line)] divide-y divide-[var(--ds-line)]">
+            <div className="max-h-[min(360px,45dvh)] overflow-y-auto rounded-[12px] border border-[var(--ds-line)] divide-y divide-[var(--ds-line)]">
               {suggestions.map((s) => {
                 const isSelected = selected.has(s.legalName);
                 return (
@@ -113,16 +113,16 @@ export function ImportSuggestions({
                     className={cn(
                       "w-full flex items-center gap-3 p-3 text-left transition",
                       isSelected
-                        ? "bg-[var(--ds-surface)]"
-                        : "bg-[var(--ds-surface-2)] hover:bg-[var(--ds-surface)]"
+                        ? "bg-[var(--ds-surface-2)]"
+                        : "bg-[var(--ds-surface)] hover:bg-[var(--ds-surface-2)]"
                     )}
                   >
                     <span
                       className={cn(
-                        "size-5 rounded border grid place-items-center transition shrink-0",
+                        "size-5 rounded-[5px] border grid place-items-center transition shrink-0",
                         isSelected
-                          ? "bg-[var(--ds-ink)] border-[var(--ds-ink)] text-white"
-                          : "border-[var(--ds-line)] bg-white"
+                          ? "bg-[var(--ds-accent)] border-[var(--ds-accent)] text-[var(--ds-on-accent)]"
+                          : "border-[var(--ds-line-strong)] bg-[var(--ds-surface)]"
                       )}
                     >
                       {isSelected && <Check className="size-3" />}
@@ -133,11 +133,11 @@ export function ImportSuggestions({
                         {s.legalName}
                       </div>
                       <div className="text-[12px] text-[var(--ds-muted)] truncate">
-                        {[s.jobTitle, s.department].filter(Boolean).join(" · ") ||
+                        {[s.jobTitle, s.department].filter(Boolean).join(", ") ||
                           "No role on file"}
                       </div>
                     </div>
-                    <div className="text-right text-[11px] text-[var(--ds-muted)] shrink-0">
+                    <div className="text-right text-[12px] text-[var(--ds-muted)] shrink-0">
                       {s.draftCount} draft{s.draftCount === 1 ? "" : "s"}
                     </div>
                   </button>

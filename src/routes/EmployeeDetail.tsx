@@ -1,327 +1,363 @@
-import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useMemo, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { format, isToday } from "date-fns";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Archive,
   ArrowLeft,
-  Edit3,
+  ArrowUpRight,
+  CalendarDays,
+  FolderOpen,
+  Info,
   MoreHorizontal,
+  Pencil,
+  Plus,
+  RotateCcw,
   Trash2,
-  UserRound,
 } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
-import { matchEmployeeForDraft } from "@/lib/employees";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import { briefTitleFor } from "@/lib/letters/display";
-import { formatDateOnly, toDateOnly } from "@/lib/date-only";
-import { Avatar } from "@/components/ds";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
+import type { Draft, Employee } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
-import type {
-  Draft,
-  Employee,
-  EmploymentStatus,
-  Matter,
-} from "@/lib/letters/types";
-import {
-  EmployeeForm,
-  type EmployeeFormValues,
-} from "@/components/employees/EmployeeForm";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Pill } from "@/components/ds";
+import { StatusPill } from "@/components/journey/ui/StatusPill";
+import { ListHeader } from "@/components/letters/ListHeader";
+import { LettersTable } from "@/components/letters/LettersTable";
+import { FlatPaper, Initials, MENU_MOTION, usePageTitle } from "@/components/letters/parts";
+import { useLetterRows, type LetterRowData } from "@/components/letters/rows";
+import { letterLabel, listStatusPill, shortTypeLabel, timelineSentence } from "@/components/letters/letterView";
+import { EmployeeForm, type EmployeeFormValues } from "@/components/employees/EmployeeForm";
+import { NewLetterForPerson } from "@/components/employees/NewLetterForPerson";
+import { DeleteEmployeeDialog, EmployeeStatusPill } from "@/components/employees/parts";
+import { buildEmployeeRow, firstName, inMatter, startDateLabel, tenureLabel, WORKER_LABEL } from "@/components/employees/model";
+import { useMatterRows, type MatterRow } from "@/components/matter/rows";
+import { CardLink, EvidenceList, evidenceRows, SectionCard, SectionHead } from "@/components/matter/cards";
+import { RISK_LABEL, RISK_TONE, relativeDays, shortDay } from "@/components/matter/model";
 
 /**
- * /employees/:employeeId — single employee profile.
+ * /employees/:employeeId: one person (employee mock). The record with the
+ * letters about them, the matters they are part of, what needs doing this
+ * week, their details and a timeline, plus Letters, Matters, Documents
+ * (when their letters hold evidence) and private Notes.
  *
- * Surfaces the workspace-level Employee record alongside derived
- * context: matters they participate in, the letters that mention them,
- * and a stubbed AI-suggestions strip (real ML lands in a future wave).
- */
-/**
- * Route wrapper: keys the inner component on employeeId so React remounts it
- * (resetting all local state — notes, editOpen, dismissedSuggestions) when the
- * user navigates between two employee profiles via history. Without this, the
- * single reused instance kept employee A's `notes` while the save guard
- * compared against B — clicking Save wrote A's notes into B's record.
+ * The route wrapper keys the page on the id so moving between two people
+ * with back and forward remounts it, and one person's unsaved notes never
+ * land in the other's record.
  */
 export function EmployeeDetail() {
   const { employeeId } = useParams<{ employeeId: string }>();
   return <EmployeeDetailBody key={employeeId ?? "none"} />;
 }
 
+type TabId = "overview" | "letters" | "matters" | "documents" | "notes";
+
 function EmployeeDetailBody() {
   const { employeeId } = useParams<{ employeeId: string }>();
+  const employee = useDraftStore((s) => (employeeId ? s.employees[employeeId] : undefined));
+  usePageTitle(employee ? employee.legalName : "Employee not found");
+  if (!employee) {
+    return (
+      <div className="mx-auto max-w-[560px] px-6 py-20 text-center">
+        <h1 className="ds-title m-0 text-[34px] leading-tight">Employee not found</h1>
+        <p className="m-0 mt-2 text-[15px] text-[var(--ds-muted)]">This record may have been deleted, or the URL is incorrect.</p>
+        <Button variant="outline" className="mt-5" asChild>
+          <Link to="/employees">
+            <ArrowLeft className="size-[17px]" />
+            Back to employees
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+  return <EmployeePage employee={employee} />;
+}
+
+function EmployeePage({ employee: e }: { employee: Employee }) {
   const nav = useNavigate();
-  const employee = useDraftStore((s) =>
-    employeeId ? s.employees[employeeId] : undefined
-  );
   const drafts = useDraftStore((s) => s.drafts);
   const matters = useDraftStore((s) => s.matters);
+  const events = useDraftStore((s) => s.events);
   const updateEmployee = useDraftStore((s) => s.updateEmployee);
   const archiveEmployee = useDraftStore((s) => s.archiveEmployee);
   const deleteEmployee = useDraftStore((s) => s.deleteEmployee);
 
+  const [params, setParams] = useSearchParams();
   const [editOpen, setEditOpen] = useState(false);
-  const [dismissedSuggestions, setDismissedSuggestions] = useState(false);
-  const [notes, setNotes] = useState(employee?.notes ?? "");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [letterOpen, setLetterOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [notes, setNotes] = useState(e.notes ?? "");
 
-  const allDrafts = useMemo(
-    () => Object.values(drafts).filter((d) => !d.isTemplateSource),
-    [drafts]
+  const row = useMemo(
+    () =>
+      buildEmployeeRow(
+        e,
+        Object.values(drafts).filter((d) => !d.isTemplateSource && d.mode === "employer"),
+        Object.values(matters).filter((m) => m.mode === "employer")
+      ),
+    [e, drafts, matters]
   );
-  const allMatters = useMemo(() => Object.values(matters), [matters]);
-
-  const matchingDrafts = useMemo(() => {
-    if (!employee) return [] as Draft[];
-    const empMap: Record<string, Employee> = { [employee.id]: employee };
-    return allDrafts
-      .filter((d) => matchEmployeeForDraft(d, empMap) === employee.id)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [employee, allDrafts]);
-
-  const linkedMatters = useMemo(() => {
-    if (!employee) return [] as Matter[];
-    return allMatters.filter((m) => {
-      // Prefer the explicit participants link, with a backwards-compat
-      // fallback to legacy matters that only set parties.primaryName.
-      if (m.participants?.some((p) => p.employeeId === employee.id)) return true;
-      const primary = m.parties?.primaryName?.trim().toLowerCase();
-      if (primary && primary === employee.legalName.trim().toLowerCase()) return true;
-      return false;
-    });
-  }, [employee, allMatters]);
-
-  const activeMatters = useMemo(
-    () => linkedMatters.filter((m) => m.status === "active"),
-    [linkedMatters]
+  const letterRows = useLetterRows(row.letters);
+  const letters = useMemo(() => [...letterRows].sort((a, b) => b.updatedAt - a.updatedAt), [letterRows]);
+  const allMatterRows = useMatterRows(true);
+  const matterRows = useMemo(
+    () =>
+      allMatterRows
+        .filter((r) => inMatter(r.matter, e))
+        .sort((a, b) => Number(b.matter.status === "active") - Number(a.matter.status === "active") || b.matter.updatedAt - a.matter.updatedAt),
+    [allMatterRows, e]
   );
+  const openMatterRows = matterRows.filter((r) => r.matter.status === "active");
+  const evidence = useMemo(() => evidenceRows(row.letters), [row.letters]);
 
-  // Real, data-derived prompts (NOT AI) drawn from this employee's actual
-  // letter history + open matters. Empty when there's no signal — we render
-  // nothing rather than inventing insight.
-  const reviewSignals = useMemo(() => {
-    const out: string[] = [];
-    const has = (re: RegExp) => matchingDrafts.filter((d) => re.test(d.letterType)).length;
+  const tabs: { id: TabId; label: string; count?: number }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "letters", label: "Letters", count: letters.length },
+    { id: "matters", label: "Matters", count: openMatterRows.length },
+    ...(evidence.length > 0 ? [{ id: "documents" as TabId, label: "Documents", count: evidence.length }] : []),
+    { id: "notes", label: "Notes" },
+  ];
+  const raw = params.get("tab") as TabId | null;
+  const tab: TabId = raw && tabs.some((t) => t.id === raw) ? raw : "overview";
+  const setTab = (id: string) => {
+    const next = new URLSearchParams(params);
+    if (id === "overview") next.delete("tab");
+    else next.set("tab", id);
+    setParams(next, { replace: true });
+    window.scrollTo({ top: 0 });
+  };
+
+  const first = firstName(e);
+
+  /* Things to review: letters that need you, matter events this week, record signals. */
+  const review = useMemo(() => {
+    const items: ReviewItem[] = [];
+    for (const r of letters.filter((l) => l.journey.needsYou)) {
+      const c = r.journey.counts;
+      const reason =
+        c.failingRequired > 0
+          ? `${c.failingRequired} required ${c.failingRequired === 1 ? "check is" : "checks are"} failing`
+          : c.pendingSuggestions > 0
+            ? `${c.pendingSuggestions} suggested ${c.pendingSuggestions === 1 ? "edit" : "edits"} to look at`
+            : r.journey.whereLabel;
+      const title = r.journey.stage === "review" || r.journey.stage === "approve" ? `${r.label} needs your review` : `${r.label} needs finishing`;
+      items.push({ id: `l-${r.id}`, tone: "amber", title, detail: reason, action: { label: "Open letter", to: `/editor/${r.id}` } });
+    }
+    const now = Date.now();
+    const week = now + 7 * 86400000;
+    const mine = new Set(openMatterRows.map((r) => r.matter.id));
+    for (const ev of Object.values(events)) {
+      if (!mine.has(ev.matterId)) continue;
+      const t = new Date(ev.whenISO).getTime();
+      if (Number.isNaN(t) || t < now - 3600000 || t > week) continue;
+      const hasTime = ev.whenISO.includes("T");
+      const when = format(new Date(ev.whenISO), hasTime ? "EEE d MMM, HH:mm" : "EEE d MMM");
+      const matterName = matters[ev.matterId]?.name;
+      items.push({
+        id: `e-${ev.id}`,
+        tone: "blue",
+        title: `${ev.label} on ${when}`,
+        detail: [ev.detail, matterName].filter(Boolean).join(". "),
+        action: { label: "View matter", to: `/matters/${ev.matterId}` },
+        ts: t,
+      });
+    }
+    const has = (re: RegExp) => row.letters.filter((d) => re.test(d.letterType)).length;
     const warnings = has(/warning/);
     const grievances = has(/grievance/);
     const performance = has(/pip|performance|probation/);
-    if (warnings >= 2) {
-      out.push(`${warnings} warning letters on file — consider a formal review`);
-    } else if (warnings === 1) {
-      out.push("A warning letter is on file — track any follow-up");
-    }
-    if (grievances >= 1) {
-      out.push(
-        `${grievances} grievance${grievances > 1 ? "s" : ""} recorded — track to resolution`,
-      );
-    }
-    if (performance >= 1) {
-      out.push("Performance/PIP letter on file — check the review date");
-    }
-    if (activeMatters.length >= 2) {
-      out.push(`${activeMatters.length} active matters open for this person`);
-    }
-    return out;
-  }, [matchingDrafts, activeMatters]);
+    const signals: string[] = [];
+    if (warnings >= 2) signals.push(`${warnings} warning letters on file: consider a formal review`);
+    else if (warnings === 1) signals.push("A warning letter is on file: track any follow-up");
+    if (grievances >= 1) signals.push(`${grievances} grievance${grievances > 1 ? "s" : ""} recorded: track to resolution`);
+    if (performance >= 1) signals.push("Performance or PIP letter on file: check the review date");
+    if (openMatterRows.length >= 2) signals.push(`${openMatterRows.length} active matters open for this person`);
+    for (const s of signals) items.push({ id: `s-${s}`, tone: "grey", title: s });
+    return items;
+  }, [letters, events, openMatterRows, matters, row.letters]);
 
-  if (!employee) {
-    return (
-      <div className="max-w-3xl px-4 py-12 sm:px-6 mx-auto text-center">
-        <UserRound className="size-8 text-[var(--ds-muted)] mx-auto mb-3" />
-        <h2 className="text-[16px] font-semibold text-[var(--ds-ink)] m-0">
-          Employee not found
-        </h2>
-        <p className="text-[13px] text-[var(--ds-muted)] mt-1.5 mb-5">
-          This record may have been deleted, or the URL is incorrect.
-        </p>
-        <Link
-          to="/employees"
-          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-[var(--ds-ink)] text-white text-[12.5px] font-medium hover:opacity-90 transition"
-        >
-          <ArrowLeft className="size-3.5" />
-          Back to employees
-        </Link>
-      </div>
-    );
-  }
-
-  const headerSubtitle = [employee.jobTitle, employee.department]
-    .filter(Boolean)
-    .join(" · ");
+  const timeline = useMemo(() => buildTimeline(row.letters, matterRows), [row.letters, matterRows]);
 
   const initialForm: EmployeeFormValues = {
-    legalName: employee.legalName,
-    preferredName: employee.preferredName,
-    jobTitle: employee.jobTitle,
-    department: employee.department,
-    email: employee.email,
-    startDate: employee.startDate,
-    workerClass: employee.workerClass,
-    status: employee.status,
+    legalName: e.legalName,
+    preferredName: e.preferredName,
+    jobTitle: e.jobTitle,
+    department: e.department,
+    email: e.email,
+    startDate: e.startDate,
+    workerClass: e.workerClass,
+    status: e.status,
   };
 
+  const archive = () => {
+    const prev = { status: e.status, endDate: e.endDate };
+    archiveEmployee(e.id);
+    toast(`${e.legalName} marked as left`, { duration: 6000, action: { label: "Undo", onClick: () => updateEmployee(e.id, prev) } });
+  };
+
+  const lede = (
+    <div className="flex min-w-0 flex-wrap items-center gap-y-1.5">
+      {[e.jobTitle, e.department].filter(Boolean).map((t, i) => (
+        <span key={i} className="flex items-center">
+          {i > 0 && <Sep />}
+          <span>{t}</span>
+        </span>
+      ))}
+      <span className={cn("inline-flex flex-wrap items-center gap-1.5", (e.jobTitle || e.department) && "ml-3")}>
+        <EmployeeStatusPill status={e.status} />
+        {openMatterRows.length > 0 && (
+          <Pill tone="amber">
+            {openMatterRows.length} open {openMatterRows.length === 1 ? "matter" : "matters"}
+          </Pill>
+        )}
+      </span>
+    </div>
+  );
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8"
-    >
-      <div className="mb-4">
-        <Link
-          to="/employees"
-          className="inline-flex items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
-        >
-          <ArrowLeft className="size-3.5" />
-          Employees
-        </Link>
-      </div>
+    <div className="min-w-0">
+      <ListHeader
+        crumbs={[{ label: "Employees", href: "/employees" }, { label: e.legalName }]}
+        title={e.legalName}
+        titleExtra={e.preferredName && e.preferredName.trim() !== e.legalName.trim() ? `(${e.preferredName})` : undefined}
+        mark={
+          <span className="grid size-[52px] shrink-0 place-items-center rounded-[14px] border border-[var(--ds-line)]" aria-hidden>
+            <Initials name={e.legalName} size={50} className="!rounded-[13px] !text-[19px]" />
+          </span>
+        }
+        lede={lede}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Pencil className="size-[16px]" />
+              Edit details
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="More actions">
+                  <MoreHorizontal className="size-[18px]" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent collisionPadding={16} align="end" sideOffset={8} className={cn("w-[230px] max-w-[calc(100vw-32px)]", MENU_MOTION)}>
+                {e.status !== "left" ? (
+                  <DropdownMenuItem onSelect={archive}>
+                    <Archive />
+                    Archive (mark as left)
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      updateEmployee(e.id, { status: "active", endDate: undefined });
+                      toast(`${e.legalName} is active again`);
+                    }}
+                  >
+                    <RotateCcw />
+                    Mark as active again
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+                  <Trash2 />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button onClick={() => setLetterOpen(true)}>
+              <Plus className="size-[17px]" />
+              New letter
+            </Button>
+          </>
+        }
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        countStyle="chip"
+        tabsLabel="Employee sections"
+      />
 
-      {/* Hero */}
-      <header className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] p-6 mb-6 flex items-start gap-5">
-        <div className="shrink-0">
-          <Avatar
-            name={employee.legalName}
-            seed={employee.id}
-            size="xl"
-            className="size-16 text-[20px]"
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1
-            className="m-0 text-[24px] font-semibold leading-[1.15] text-[var(--ds-ink)] tracking-[-0.01em]"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            {employee.legalName}
-            {employee.preferredName && (
-              <span className="ml-2 text-[15px] font-normal text-[var(--ds-muted)]">
-                ({employee.preferredName})
-              </span>
-            )}
-          </h1>
-          {headerSubtitle && (
-            <p className="mt-1 m-0 text-[13.5px] text-[var(--ds-body)]">
-              {headerSubtitle}
-            </p>
-          )}
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-[var(--ds-muted)]">
-            <StatusBadge status={employee.status} />
-            {employee.startDate && (
-              <span>
-                Started {formatDateOnly(employee.startDate, { dateStyle: "medium" })}
-              </span>
-            )}
-            {employee.workerClass && <span>· {employee.workerClass}</span>}
-            {employee.managerName && <span>· Reports to {employee.managerName}</span>}
-            {employee.email && (
-              <a
-                href={`mailto:${employee.email}`}
-                className="text-[var(--ds-ink)] underline-offset-2 hover:underline"
-              >
-                {employee.email}
-              </a>
-            )}
+      <div className="min-w-0 px-4 pb-14 pt-6 md:px-12 md:pt-[30px]">
+        {tab === "overview" && (
+          <div className="grid min-w-0 gap-9 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-w-0 space-y-9">
+              {!dismissed && review.length > 0 && (
+                <section aria-label="Things to review">
+                  <SectionHead
+                    title="Things to review"
+                    sub={`What needs doing for ${first} this week`}
+                    action={<CardLink onClick={() => setDismissed(true)}>Dismiss</CardLink>}
+                  />
+                  <ReviewList items={review} />
+                </section>
+              )}
+
+              <section aria-label="Letters">
+                <SectionHead title="Letters" sub={`Every letter written about ${first}`} action={letters.length > 0 ? <CardLink onClick={() => setTab("letters")}>View all</CardLink> : undefined} />
+                {letters.length === 0 ? <Quiet>No letters reference this person yet.</Quiet> : <LetterLines rows={letters.slice(0, 3)} />}
+              </section>
+
+              <section aria-label="Matters">
+                <SectionHead title="Matters" sub={`Cases ${first} is part of`} action={matterRows.length > 0 ? <CardLink onClick={() => setTab("matters")}>View all</CardLink> : undefined} />
+                {openMatterRows.length === 0 ? <Quiet>No active matters for this person yet.</Quiet> : <MatterCards rows={openMatterRows} />}
+              </section>
+            </div>
+
+            <aside className="min-w-0 space-y-4">
+              <SectionCard title="Details" action={<CardLink onClick={() => setEditOpen(true)}>Edit</CardLink>}>
+                <DetailsList employee={e} />
+              </SectionCard>
+              <SectionCard title="Timeline" action={timeline.length > 5 ? <CardLink onClick={() => setTimelineOpen(true)}>View all</CardLink> : undefined}>
+                {timeline.length === 0 ? <p className="m-0 mb-3.5 text-[13.5px] text-[var(--ds-muted)]">Nothing has happened for {first} yet.</p> : <TimelineList items={timeline.slice(0, 5)} />}
+              </SectionCard>
+            </aside>
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-            <Edit3 className="size-3.5" />
-            Edit
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" aria-label="More actions">
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  archiveEmployee(employee.id);
-                }}
-              >
-                <Archive className="size-3.5" />
-                Archive (mark as left)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  const ok = window.confirm(
-                    `Delete ${employee.legalName}? This removes the employee record permanently. ` +
-                      `Their letters stay, but they'll be unlinked from any matters. ` +
-                      `To keep the record, use Archive instead.`,
-                  );
-                  if (!ok) return;
-                  deleteEmployee(employee.id);
-                  nav("/employees", { replace: true });
-                }}
-                className="text-[var(--ds-red-fg)] focus:text-[var(--ds-red-fg)]"
-              >
-                <Trash2 className="size-3.5" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
+        )}
 
-      {/* Tabs — Active matters / Letter history / Notes */}
-      <Tabs defaultValue="matters">
-        <TabsList variant="line" className="mb-4">
-          <TabsTrigger value="matters">
-            Active matters{activeMatters.length > 0 && ` (${activeMatters.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="letters">
-            Letter history{matchingDrafts.length > 0 && ` (${matchingDrafts.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="notes">Notes</TabsTrigger>
-        </TabsList>
+        {tab === "letters" &&
+          (letters.length === 0 ? (
+            <Quiet>No letters reference this person yet.</Quiet>
+          ) : (
+            <LettersTable rows={letters} columns={["matter", "where", "health", "updated", "owner"]} ariaLabel={`Letters about ${e.legalName}`} />
+          ))}
 
-        <TabsContent value="matters">
-          <ActiveMattersPanel matters={activeMatters} onOpen={(id) => nav(`/matters/${id}`)} />
-          {!dismissedSuggestions && reviewSignals.length > 0 && (
-            <ReviewPanel
-              signals={reviewSignals}
-              onDismiss={() => setDismissedSuggestions(true)}
-            />
-          )}
-        </TabsContent>
+        {tab === "matters" && (matterRows.length === 0 ? <Quiet>No matters for this person yet.</Quiet> : <MatterCards rows={matterRows} />)}
 
-        <TabsContent value="letters">
-          <LetterHistoryPanel drafts={matchingDrafts.slice(0, 5)} totalCount={matchingDrafts.length} />
-        </TabsContent>
+        {tab === "documents" && (
+          <div className="max-w-[860px]">
+            <SectionCard title="Documents">
+              <EvidenceList rows={evidence} detailed />
+            </SectionCard>
+          </div>
+        )}
 
-        <TabsContent value="notes">
-          <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-            <p className="text-[12px] text-[var(--ds-muted)] m-0 mb-2">
-              Private to you. Never sent to AI or included in exports.
-            </p>
+        {tab === "notes" && (
+          <div className="max-w-[720px] rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
+            <p className="m-0 mb-3 text-[13px] text-[var(--ds-muted)]">Private to you. Never sent to AI or included in exports.</p>
             <Textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={6}
-              placeholder="Anything worth remembering about this person — context, conversations, decisions."
+              onChange={(ev) => setNotes(ev.target.value)}
+              rows={7}
+              aria-label="Notes"
+              placeholder="Anything worth remembering about this person: context, conversations, decisions."
             />
             <div className="mt-3 flex justify-end">
               <Button
-                size="sm"
-                onClick={() => updateEmployee(employee.id, { notes: notes.trim() || undefined })}
-                disabled={notes === (employee.notes ?? "")}
+                onClick={() => {
+                  updateEmployee(e.id, { notes: notes.trim() || undefined });
+                  toast("Notes saved");
+                }}
+                disabled={notes === (e.notes ?? "")}
               >
                 Save notes
               </Button>
             </div>
           </div>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       <EmployeeForm
         open={editOpen}
@@ -331,248 +367,290 @@ function EmployeeDetailBody() {
         description="Update this person's workspace record. Changes apply across all letters and matters."
         submitLabel="Save changes"
         onSubmit={(values) => {
-          updateEmployee(employee.id, values);
+          updateEmployee(e.id, values);
           setEditOpen(false);
         }}
       />
-    </motion.div>
-  );
-}
-
-/* ============================================================================
- * Sub-components
- * ==========================================================================*/
-
-function ActiveMattersPanel({
-  matters,
-  onOpen,
-}: {
-  matters: Matter[];
-  onOpen: (id: string) => void;
-}) {
-  if (matters.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] py-8 text-center mb-4">
-        <p className="text-[13px] text-[var(--ds-muted)] m-0">
-          No active matters for this person yet.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <section className="mb-4">
-      <SectionHeader title="Active matters" />
-      <ul className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] divide-y divide-[var(--ds-line)] m-0 p-0 list-none">
-        {matters.map((m) => (
-          <li key={m.id} className="m-0">
-            <button
-              type="button"
-              onClick={() => onOpen(m.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--ds-surface-2)] transition"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-[14px] text-[var(--ds-ink)] truncate">
-                  {m.name}
-                </div>
-                <div className="text-[12px] text-[var(--ds-muted)] mt-0.5">
-                  {m.deadlineISO
-                    ? `${m.deadlineLabel ?? "Deadline"}: ${formatDateOnly(m.deadlineISO, { dateStyle: "medium" })}`
-                    : `Started ${formatDateOnly(toDateOnly(new Date(m.createdAt)), { dateStyle: "medium" })}`}
-                </div>
-              </div>
-              {m.riskBand && <RiskBadge band={m.riskBand} />}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function LetterHistoryPanel({
-  drafts,
-  totalCount,
-}: {
-  drafts: Draft[];
-  totalCount: number;
-}) {
-  if (drafts.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] py-8 text-center">
-        <p className="text-[13px] text-[var(--ds-muted)] m-0">
-          No letters reference this person yet.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <section>
-      <SectionHeader
-        title="Letter history"
-        subtitle={
-          totalCount > drafts.length
-            ? `Showing 5 of ${totalCount}`
-            : undefined
-        }
+      <DeleteEmployeeDialog
+        employee={e}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => {
+          deleteEmployee(e.id);
+          toast(`${e.legalName} deleted`);
+          nav("/employees", { replace: true });
+        }}
       />
-      <ul className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] divide-y divide-[var(--ds-line)] m-0 p-0 list-none">
-        {drafts.map((d) => {
-          const meta = getLetterMeta(d.letterType);
-          return (
-            <li key={d.id} className="m-0">
-              <Link
-                to={`/editor/${d.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--ds-surface-2)] transition"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-[13.5px] text-[var(--ds-ink)] truncate">
-                    {briefTitleFor(d)}
-                  </div>
-                  <div className="text-[11.5px] text-[var(--ds-muted)] mt-0.5">
-                    {meta.shortTitle} · updated {timeAgo(d.updatedAt)}
-                  </div>
-                </div>
-                <DraftStatusPill draft={d} />
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function ReviewPanel({
-  signals,
-  onDismiss,
-}: {
-  signals: string[];
-  onDismiss: () => void;
-}) {
-  return (
-    <section className="mt-2">
-      <SectionHeader title="Things to review" />
-      <div className="rounded-lg border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] p-4">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="size-4 text-[var(--ds-amber-fg)] mt-0.5 shrink-0" />
-          <ul className="flex-1 m-0 p-0 list-none space-y-1.5">
-            {signals.map((s, i) => (
-              <li
-                key={i}
-                className="text-[13px] text-[var(--ds-ink)] leading-snug"
-              >
-                {s}
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="text-[11.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition shrink-0"
-          >
-            Dismiss
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div className="flex items-baseline gap-3 pb-2 border-b border-[var(--ds-line)] mb-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0">
-        {title}
-      </h2>
-      {subtitle && (
-        <span className="text-[11px] text-[var(--ds-muted)]">{subtitle}</span>
-      )}
+      <NewLetterForPerson employee={e} open={letterOpen} onOpenChange={setLetterOpen} />
+      <Dialog open={timelineOpen} onOpenChange={setTimelineOpen}>
+        <DialogContent className="max-h-[calc(100dvh-32px)] max-w-[560px] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Timeline</DialogTitle>
+          </DialogHeader>
+          <TimelineList items={timeline} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: EmploymentStatus }) {
-  const config: Record<EmploymentStatus, { label: string; cls: string }> = {
-    active: {
-      label: "Active",
-      cls: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-    },
-    notice: {
-      label: "Notice",
-      cls: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-    },
-    "on-leave": {
-      label: "On leave",
-      cls: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-    },
-    left: {
-      label: "Left",
-      cls: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
-    },
-  };
-  const { label, cls } = config[status];
+/* ─── Parts ──────────────────────────────────────────────────────────── */
+
+function Sep() {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10.5px] px-2 py-[1.5px] rounded-full font-medium",
-        cls
-      )}
-    >
-      {label}
+    <span aria-hidden className="mx-2 text-[var(--ds-faint)]">
+      ·
     </span>
   );
 }
 
-function RiskBadge({ band }: { band: NonNullable<Matter["riskBand"]> }) {
-  const config: Record<NonNullable<Matter["riskBand"]>, { label: string; cls: string }> = {
-    low: { label: "Low", cls: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]" },
-    moderate: { label: "Moderate", cls: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]" },
-    high: { label: "High", cls: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]" },
-    critical: { label: "Critical", cls: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]" },
-  };
-  const { label, cls } = config[band];
+function Quiet({ children }: { children: ReactNode }) {
+  return <p className="m-0 rounded-[12px] bg-[var(--ds-surface-2)] px-4 py-6 text-center text-[13.5px] text-[var(--ds-muted)]">{children}</p>;
+}
+
+type ReviewItem = { id: string; tone: "amber" | "blue" | "grey"; title: string; detail?: string; action?: { label: string; to: string }; ts?: number };
+
+const TILE: Record<ReviewItem["tone"], string> = {
+  amber: "border-[var(--ds-amber-bd)] bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
+  blue: "border-[var(--ds-blue-bd,var(--ds-line))] bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
+  grey: "border-[var(--ds-line)] bg-[var(--ds-surface-2)] text-[var(--ds-muted)]",
+};
+
+function ReviewList({ items }: { items: ReviewItem[] }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-[10.5px] px-2 py-[1.5px] rounded-full font-medium shrink-0",
-        cls
-      )}
-    >
-      <AlertTriangle className="size-3" />
-      {label}
-    </span>
+    <ul className="m-0 list-none overflow-hidden rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-0">
+      {items.map((it, i) => {
+        const Icon = it.tone === "amber" ? AlertTriangle : it.tone === "blue" ? CalendarDays : Info;
+        return (
+          <li
+            key={it.id}
+            className={cn(
+              "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-[var(--ds-line-2)] px-4 py-3 first:border-t-0",
+              i === 0 && it.tone === "amber" && "bg-[var(--ds-amber-soft)]"
+            )}
+          >
+            <span className={cn("grid size-8 shrink-0 place-items-center rounded-[9px] border", TILE[it.tone])}>
+              <Icon aria-hidden className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1 basis-[200px]">
+              <div className="text-[14px] font-medium text-[var(--ds-ink)] [overflow-wrap:anywhere]">{it.title}</div>
+              {it.detail && <div className="truncate text-[12.5px] text-[var(--ds-muted)]">{it.detail}</div>}
+            </div>
+            {it.action && (
+              <Button variant="outline" size="sm" asChild>
+                <Link to={it.action.to}>{it.action.label}</Link>
+              </Button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
-function DraftStatusPill({ draft }: { draft: Draft }) {
-  const hasExport = (draft.exports?.length ?? 0) > 0;
-  const label = hasExport ? "Sent" : "Draft";
-  const cls = hasExport
-    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-    : "bg-[var(--ds-line-2)] text-[var(--ds-muted)]";
+function whoLine(r: LetterRowData): string {
+  const type = shortTypeLabel(r.draft.letterType);
+  if (r.journey.stage === "sent") return `${type} · ${r.reviewedBy ? `Sent by ${r.reviewedBy}` : "Sent"}`;
+  const approver = [...(r.draft.approvals ?? [])].reverse().find((a) => a.decision === "approved")?.reviewerName;
+  if (r.journey.stage === "send" && approver) return `${type} · Approved by ${approver}`;
+  return `${type} · Drafted by ${r.owner.name}`;
+}
+
+function shortDate(ts: number): string {
+  return isToday(ts) ? "Today" : format(ts, "d MMM");
+}
+
+function LetterLines({ rows }: { rows: LetterRowData[] }) {
+  const nav = useNavigate();
   return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10px] px-2 py-[1px] rounded-full font-medium shrink-0",
-        cls
-      )}
-    >
-      {label}
-    </span>
+    <ul className="m-0 list-none border-t border-[var(--ds-line-2)] p-0">
+      {rows.map((r) => {
+        const pill = listStatusPill(r.journey);
+        return (
+        <li
+          key={r.id}
+          onClick={(ev) => {
+            if ((ev.target as HTMLElement).closest("a,button,[role=menuitem]")) return;
+            nav(`/editor/${r.id}`);
+          }}
+          className="flex min-w-0 cursor-pointer items-center gap-3.5 border-b border-[var(--ds-line-2)] py-2.5 transition-colors duration-[120ms] hover:bg-[var(--ds-hover)]"
+        >
+          <FlatPaper tint={r.tint} />
+          <div className="min-w-0 flex-1">
+            <Link to={`/editor/${r.id}`} className="block truncate rounded-[4px] text-[14px] font-medium text-[var(--ds-ink)] outline-none focus-visible:shadow-[var(--ds-focus-ring)]">
+              {r.label}
+            </Link>
+            <div className="truncate text-[12.5px] text-[var(--ds-muted)]" title={whoLine(r)}>{whoLine(r)}</div>
+            {/* On a phone the pill moves under the name so the status still shows. */}
+            <span className="mt-1 flex sm:hidden">
+              <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+            </span>
+          </div>
+          <span className="hidden shrink-0 sm:inline-flex">
+            <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+          </span>
+          <span className="w-12 shrink-0 text-right text-[13px] text-[var(--ds-subtle)]">{shortDate(r.journey.stage === "sent" && r.sentAt ? r.sentAt : r.updatedAt)}</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={`Actions for ${r.label}`}
+                className="grid size-7 shrink-0 place-items-center rounded-[8px] text-[var(--ds-subtle)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)] focus-visible:shadow-[var(--ds-focus-ring)] data-[state=open]:bg-[var(--ds-surface-3)]"
+              >
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent collisionPadding={16} align="end" className={cn("w-44", MENU_MOTION)}>
+              <DropdownMenuItem onSelect={() => nav(`/editor/${r.id}`)}>
+                <ArrowUpRight />
+                Open
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </li>
+        );
+      })}
+    </ul>
   );
 }
 
-function timeAgo(ts: number): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
+function nextStep(r: MatterRow): string | null {
+  if (r.matter.status !== "active") return null;
+  const n = r.next;
+  // The whole title (it wraps): cutting it mid-phrase hid what is due.
+  if (n?.iso) return n.title;
+  return r.matter.nextAction?.trim() || null;
+}
+
+function MatterCards({ rows }: { rows: MatterRow[] }) {
+  return (
+    <ul className="m-0 grid list-none gap-2.5 p-0">
+      {rows.map((r) => {
+        const m = r.matter;
+        const step = nextStep(r);
+        return (
+          <li key={m.id} className="relative min-w-0 rounded-[14px] bg-[var(--ds-surface-2)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-3)]">
+            <div className="flex min-w-0 flex-wrap items-start gap-x-3.5 gap-y-2 px-4 py-3.5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-muted)]">
+                <FolderOpen aria-hidden className="size-[17px]" />
+              </span>
+              <div className="min-w-0 flex-1 basis-[220px]">
+                <Link
+                  to={`/matters/${m.id}`}
+                  className="block truncate rounded-[4px] text-[14.5px] font-medium text-[var(--ds-ink)] outline-none after:absolute after:inset-0 after:rounded-[14px] focus-visible:after:shadow-[var(--ds-focus-ring)]"
+                >
+                  {m.name}
+                </Link>
+                <div className="truncate text-[12.5px] text-[var(--ds-muted)]">
+                  Opened {format(m.createdAt, "d MMM")} by {r.owner} · {r.letters.length} {r.letters.length === 1 ? "letter" : "letters"} · {r.evidenceCount}{" "}
+                  {r.evidenceCount === 1 ? "document" : "documents"}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Pill tone={r.stage.tone}>{r.stage.label}</Pill>
+                  {r.risk && <Pill tone={RISK_TONE[r.risk]}>{RISK_LABEL[r.risk]} risk</Pill>}
+                </div>
+              </div>
+              {step && (
+                <div className="max-w-[300px] text-left sm:text-right">
+                  <div className="text-[12.5px] text-[var(--ds-muted)]">Next step</div>
+                  <div className="text-[14px] font-medium text-[var(--ds-ink)]">{step}</div>
+                  {r.next?.iso && (
+                    <div className="text-[12px] text-[var(--ds-muted)]">
+                      {shortDay(r.next.iso)} · {relativeDays(r.next.iso).text}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function DetailsList({ employee: e }: { employee: Employee }) {
+  const start = startDateLabel(e.startDate);
+  const tenure = tenureLabel(e.startDate);
+  const rows: [string, ReactNode | undefined][] = [
+    ["Email", e.email ? <a href={`mailto:${e.email}`} className="truncate underline-offset-2 hover:underline">{e.email}</a> : undefined],
+    ["Start date", start ? <>{start}{tenure && <span className="text-[var(--ds-muted)]"> · {tenure}</span>}</> : undefined],
+    [
+      "Manager",
+      e.managerName ? (
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <Initials name={e.managerName} size={20} />
+          <span className="truncate">{e.managerName}</span>
+        </span>
+      ) : undefined,
+    ],
+    ["Job title", e.jobTitle],
+    ["Department", e.department],
+    ["Worker type", e.workerClass ? WORKER_LABEL[e.workerClass] : undefined],
+  ];
+  return (
+    <dl className="m-0 mb-3.5 grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-[13.5px]">
+      {rows.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-[var(--ds-subtle)]">{k}</dt>
+          <dd className={cn("m-0 min-w-0 truncate", v ? "text-[var(--ds-ink)]" : "text-[var(--ds-muted)]")}>{v ?? "Not set"}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+type TimelineItem = { id: string; ts: number; text: string; who?: string; tone: "amber" | "blue" | "green" | "grey"; to?: string };
+
+const DRAFTING = new Set(["created", "sections_updated", "section_generated", "review_submitted", "review_changes_requested"]);
+
+function buildTimeline(letters: Draft[], matters: MatterRow[]): TimelineItem[] {
+  const out: TimelineItem[] = [];
+  for (const d of letters) {
+    const label = letterLabel(d);
+    for (const ev of d.timeline ?? []) {
+      const text = timelineSentence(ev, label);
+      out.push({
+        id: `${d.id}-${ev.id}`,
+        ts: ev.createdAt,
+        text,
+        who: ev.actorName,
+        tone: ev.kind === "exported" ? "blue" : DRAFTING.has(ev.kind) ? "amber" : "grey",
+        to: `/editor/${d.id}`,
+      });
+    }
+  }
+  for (const r of matters) {
+    out.push({ id: `m-${r.matter.id}`, ts: r.matter.createdAt, text: `Matter opened: ${r.matter.name}`, who: r.owner, tone: "green", to: `/matters/${r.matter.id}` });
+  }
+  return out.sort((a, b) => b.ts - a.ts);
+}
+
+const DOT: Record<TimelineItem["tone"], string> = {
+  amber: "border-[var(--ds-amber-dot)]",
+  blue: "border-[var(--ds-blue-fg)]",
+  green: "border-[var(--ds-green-fg)]",
+  grey: "border-[var(--ds-line-strong)]",
+};
+
+function TimelineList({ items }: { items: TimelineItem[] }) {
+  return (
+    <ol className="relative m-0 mb-3 list-none p-0 before:absolute before:bottom-3 before:left-[5px] before:top-3 before:w-px before:bg-[var(--ds-line)]">
+      {items.map((it) => (
+        <li key={it.id} className="relative flex gap-3 py-2">
+          <span aria-hidden className={cn("relative mt-[5px] size-[11px] shrink-0 rounded-full border-2 bg-[var(--ds-surface)]", DOT[it.tone])} />
+          <div className="min-w-0">
+            {it.to ? (
+              <Link to={it.to} className="block rounded-[4px] text-[14px] text-[var(--ds-ink)] outline-none hover:underline hover:underline-offset-2 focus-visible:shadow-[var(--ds-focus-ring)]">
+                {it.text}
+              </Link>
+            ) : (
+              <div className="text-[14px] text-[var(--ds-ink)]">{it.text}</div>
+            )}
+            <div className="text-[12.5px] text-[var(--ds-muted)]">{[it.who, isToday(it.ts) ? `Today, ${format(it.ts, "HH:mm")}` : format(it.ts, "d MMM")].filter(Boolean).join(" · ")}</div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
 }

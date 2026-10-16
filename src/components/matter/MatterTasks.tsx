@@ -1,23 +1,22 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { CheckCircle2, Circle, Plus, Trash2, ListChecks } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import type { Task } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { formatDateOnly, todayDateOnly, toDateOnly } from "@/lib/date-only";
+import { daysUntilDateOnly, todayDateOnly, toDateOnly } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/wizard/DatePicker";
 import { cn } from "@/lib/utils";
+import { TickBox } from "@/components/letters/parts";
+import { CardLink, SectionCard } from "./cards";
+import { shortDay } from "./model";
 
 /**
- * Tasks panel for a Matter. Renders open tasks first (sorted by due ascending)
- * then up to five most-recently-completed. Inline add-form for new tasks.
+ * Tasks card for a matter (matter mock `task()`): open tasks first by due
+ * date, then up to five recently completed. Ticking completes a task;
+ * unticking a done one re-opens it. "Add" shows an inline form.
  */
-export function MatterTasks({
-  matterId,
-  tasks,
-}: {
-  matterId: string;
-  tasks: Task[];
-}) {
+export function MatterTasks({ matterId, tasks, className }: { matterId: string; tasks: Task[]; className?: string }) {
   const createTask = useDraftStore((s) => s.createTask);
   const completeTask = useDraftStore((s) => s.completeTask);
   const updateTask = useDraftStore((s) => s.updateTask);
@@ -27,202 +26,102 @@ export function MatterTasks({
   const [label, setLabel] = useState("");
   const [due, setDue] = useState("");
 
-  const open = tasks
-    .filter((t) => t.status === "open")
-    .sort((a, b) => (a.dueISO ?? "9999").localeCompare(b.dueISO ?? "9999"));
+  const open = tasks.filter((t) => t.status === "open").sort((a, b) => (a.dueISO ?? "9999").localeCompare(b.dueISO ?? "9999"));
   const completed = tasks
     .filter((t) => t.status === "done")
     .sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0))
     .slice(0, 5);
-
-  const total = tasks.length;
-  const openCount = open.length;
 
   const resetForm = () => {
     setLabel("");
     setDue("");
     setAdding(false);
   };
-
   const onSave = () => {
     const trimmed = label.trim();
     if (!trimmed) return;
-    createTask({
-      matterId,
-      label: trimmed,
-      dueISO: due || undefined,
-      status: "open",
-    });
+    createTask({ matterId, label: trimmed, dueISO: due || undefined, status: "open" });
     resetForm();
   };
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut", delay: 0.1 }}
-      className="mb-5"
-    >
-      <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--ds-line-2)]">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 flex items-center gap-1.5">
-            <ListChecks className="size-3" /> Tasks
-            <span className="text-[var(--ds-muted)] font-mono ml-1">
-              {openCount}/{total}
-            </span>
-          </h2>
-          {!adding && (
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
-            >
-              <Plus className="size-3" /> New task
-            </button>
-          )}
+    <SectionCard title="Tasks" className={className} action={!adding ? <CardLink onClick={() => setAdding(true)}>Add</CardLink> : undefined}>
+      {tasks.length === 0 && !adding ? (
+        <div className="mb-3.5 rounded-[10px] bg-[var(--ds-surface-2)] px-4 py-5 text-center">
+          <p className="m-0 mb-3 text-[13px] text-[var(--ds-muted)]">No tasks yet. Track what needs doing next.</p>
+          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+            <Plus />
+            New task
+          </Button>
         </div>
+      ) : (
+        <ul className="m-0 list-none p-0">
+          {open.map((t) => (
+            <TaskRow key={t.id} task={t} onToggle={() => completeTask(t.id)} onDelete={() => deleteTask(t.id)} />
+          ))}
+          {completed.map((t) => (
+            // Unticking a done task re-opens it (completeTask is one way).
+            <TaskRow key={t.id} task={t} onToggle={() => updateTask(t.id, { status: "open", doneAt: undefined })} onDelete={() => deleteTask(t.id)} completed />
+          ))}
+        </ul>
+      )}
 
-        {total === 0 && !adding ? (
-          <div className="px-4 py-6 text-center">
-            <p className="text-[13px] text-[var(--ds-muted)] m-0 mb-2">
-              No tasks yet — track what needs doing next
-            </p>
-            <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-              <Plus className="size-3.5" /> New task
+      {adding && (
+        <div className="mb-3.5 mt-1 grid gap-2 rounded-[10px] bg-[var(--ds-surface-2)] p-3">
+          <Input
+            autoFocus
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="What needs doing?"
+            aria-label="What needs doing?"
+            className="h-9 text-[14px]"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave();
+              if (e.key === "Escape") resetForm();
+            }}
+          />
+          <DatePicker value={due} min={todayDateOnly()} onChange={(v) => setDue(v ?? "")} ariaLabel="Due date" placeholder="Due date (optional)" className="h-9" />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={onSave} disabled={!label.trim()}>
+              Save
+            </Button>
+            <Button variant="outline" size="sm" onClick={resetForm}>
+              Cancel
             </Button>
           </div>
-        ) : (
-          <ul className="m-0 p-0 list-none">
-            {open.map((t) => (
-              <TaskRow
-                key={t.id}
-                task={t}
-                onToggle={() => completeTask(t.id)}
-                onDelete={() => deleteTask(t.id)}
-              />
-            ))}
-            {completed.map((t) => (
-              <TaskRow
-                key={t.id}
-                task={t}
-                // The completed check renders as a toggle button — clicking it
-                // must RE-OPEN the task, not call the one-way completeTask
-                // (which would just re-stamp doneAt to today).
-                onToggle={() => updateTask(t.id, { status: "open", doneAt: undefined })}
-                onDelete={() => deleteTask(t.id)}
-                completed
-              />
-            ))}
-          </ul>
-        )}
-
-        {adding && (
-          <div className="border-t border-[var(--ds-line-2)] px-4 py-3 bg-[var(--ds-surface-2)]">
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                autoFocus
-                type="text"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="What needs doing?"
-                className="flex-1 text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:ring-2 focus:ring-[var(--ds-line)]"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") onSave();
-                  if (e.key === "Escape") resetForm();
-                }}
-              />
-              <input
-                type="date"
-                value={due}
-                min={todayDateOnly()}
-                onChange={(e) => setDue(e.target.value)}
-                className="text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
-              />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={onSave} disabled={!label.trim()}>
-                  Save
-                </Button>
-                <Button variant="outline" size="sm" onClick={resetForm}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </motion.section>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
-function TaskRow({
-  task,
-  onToggle,
-  onDelete,
-  completed,
-}: {
-  task: Task;
-  onToggle: () => void;
-  onDelete: () => void;
-  completed?: boolean;
-}) {
+function TaskRow({ task, onToggle, onDelete, completed }: { task: Task; onToggle: () => void; onDelete: () => void; completed?: boolean }) {
+  const days = task.dueISO ? daysUntilDateOnly(task.dueISO) : undefined;
+  const soon = days !== undefined && days <= 3;
   return (
-    <li className="flex items-center gap-3 px-4 py-2.5 border-t border-[var(--ds-line-2)] first:border-t-0 group">
-      <button
-        type="button"
-        onClick={onToggle}
-        className={cn(
-          "shrink-0 transition",
-          completed
-            ? "text-[var(--ds-green-fg)]"
-            : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        )}
-        title={completed ? "Completed" : "Mark complete"}
-      >
-        {completed ? (
-          <CheckCircle2 className="size-4" />
-        ) : (
-          <Circle className="size-4" />
-        )}
-      </button>
-      <div className="flex-1 min-w-0">
-        <div
-          className={cn(
-            "text-[13px] truncate",
-            completed
-              ? "text-[var(--ds-muted)] line-through"
-              : "text-[var(--ds-ink)]"
-          )}
-        >
-          {task.label}
-        </div>
-      </div>
-      <div className="text-[11px] text-[var(--ds-muted)] shrink-0 tabular-nums">
+    <li className="flex min-h-[47px] items-center gap-3 border-t border-[var(--ds-line-2)] py-2 first:border-t-0">
+      <TickBox
+        checked={!!completed}
+        onChange={onToggle}
+        label={completed ? `Re-open ${task.label}` : `Complete ${task.label}`}
+        className="rounded-[5px]"
+      />
+      <span className={cn("min-w-0 flex-1 truncate text-[13.5px]", completed ? "text-[var(--ds-subtle)] line-through" : "text-[var(--ds-ink)]")}>{task.label}</span>
+      <span className={cn("shrink-0 text-[12px]", !completed && soon ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-subtle)]")}>
         {completed
           ? task.doneAt
-            ? `completed ${formatDateOnly(
-                toDateOnly(new Date(task.doneAt)),
-                { dateStyle: "medium" }
-              )}`
-            : "completed"
+            ? `Done ${shortDay(toDateOnly(new Date(task.doneAt))).replace(/^\w+ /, "")}`
+            : "Done"
           : task.dueISO
-          ? `due ${formatDateOnly(task.dueISO, { dateStyle: "medium" })}`
-          : "no date"}
-      </div>
-      {!completed && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onToggle}
-          className="hidden group-hover:inline-flex shrink-0"
-        >
-          Done
-        </Button>
-      )}
+            ? shortDay(task.dueISO)
+            : "No date"}
+      </span>
       <button
         type="button"
         onClick={onDelete}
-        className="text-[var(--ds-muted)] hover:text-[var(--ds-red-fg)] opacity-0 group-hover:opacity-100 transition shrink-0"
         title="Delete task"
+        aria-label={`Delete task ${task.label}`}
+        className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-subtle)] outline-none transition-[color,background-color] duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-red-fg)] focus-visible:shadow-[var(--ds-focus-ring)]"
       >
         <Trash2 className="size-3.5" />
       </button>

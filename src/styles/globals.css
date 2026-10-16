@@ -1,77 +1,229 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/source-serif-4";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/newsreader/opsz.css";
 
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================================
- * DRAFTHR theme — Source-Serif headlines on pure white, monochrome ink-on-paper
- * with status-only color (red / amber / green) on data dots. Aligned to the
- * compliance-table and contract-generator references: minimal, mintlify-ish.
+ * DRAFTHR theme: the calm redesign (phase 3). Cool neutral greys on white,
+ * hairline borders, a near-black primary, and status colour only where status
+ * is meant: amber needs you, lilac is with someone else (or the reviewer),
+ * green is done, red is errors and failing checks only, blue is neutral info.
+ * Inter for the whole UI, Newsreader (serif) for page titles, card headings,
+ * big numbers and the letter itself. Nothing else: code, the wordmark and
+ * toasts are Inter too (the brief allows two typefaces).
+ *
+ * Values mirror the approved mocks (design/hifi/base.css and kit.html).
+ * Components read the --ds-* tokens or shadcn's variables below; never
+ * hard-code a hex in a component. Small grey text never goes lighter than
+ * --ds-subtle (#74747a) so it keeps 4.5:1 on white.
  * ==========================================================================*/
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.16 0.01 250);
+  /* ---- shadcn variables ---- */
+  --background: #ffffff;
+  --foreground: #111110;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0.01 250);
+  --card: #ffffff;
+  --card-foreground: #111110;
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0.01 250);
+  --popover: #ffffff;
+  --popover-foreground: #111110;
 
-  /* Primary CTA: pure ink (near-black) on white — the "Run compliance check"
-   * and "Generate contract" buttons in the references. */
-  --primary: oklch(0.18 0.008 250);
-  --primary-foreground: oklch(0.99 0 0);
+  /* Primary CTA: near-black with white text. */
+  --primary: #111110;
+  --primary-foreground: #ffffff;
 
-  --secondary: oklch(0.975 0.003 250);
-  --secondary-foreground: oklch(0.18 0.008 250);
+  --secondary: #f5f5f6;
+  --secondary-foreground: #111110;
 
-  --muted: oklch(0.975 0.003 250);
-  --muted-foreground: oklch(0.49 0.012 250);
+  --muted: #f5f5f6;
+  --muted-foreground: #6b6b70;
 
-  --accent: oklch(0.97 0.004 250);
-  --accent-foreground: oklch(0.18 0.008 250);
+  --accent: #f5f5f6;
+  --accent-foreground: #111110;
 
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive: #a8321f;
+  --destructive-foreground: #ffffff;
 
-  --border: oklch(0.93 0.005 250);
-  --input: oklch(0.93 0.005 250);
-  --ring: oklch(0.6 0.012 250);
+  --border: #e8e8ea;
+  --input: #e8e8ea;
+  --ring: #6f95d6;
 
-  --radius: 0.5rem;
+  --radius: 0.5625rem; /* 9px: buttons and fields */
 
-  /* DRAFTHR brand — legal-clean, ink-on-cream */
-  --letter-paper: oklch(0.995 0.002 95);
-  --letter-ink: oklch(0.18 0.01 250);
-  --letter-rule: oklch(0.92 0.004 250);
-  --letter-warning: oklch(0.6 0.18 30);
-  --letter-ok: oklch(0.55 0.13 145);
+  /* DRAFTHR letter paper. The letter always renders on light paper. */
+  --letter-paper: #ffffff;
+  --letter-ink: #1d1c1a;
+  --letter-rule: #ececee;
+  --letter-warning: #a8321f;
+  --letter-ok: #26704f;
 
-  /* Annotation highlight — soft yellow used by comment-mark text. Theme-neutral. */
-  --comment-highlight: oklch(0.94 0.13 90);
-  --comment-highlight-strong: oklch(0.86 0.16 80);
+  /* Annotation highlight: soft amber used by comment-mark text. */
+  --comment-highlight: #fbf0d2;
+  --comment-highlight-strong: #e2c068;
 
-  /* Subtle chart palette */
-  --chart-1: oklch(0.872 0.007 219.6);
-  --chart-2: oklch(0.56 0.021 213.5);
-  --chart-3: oklch(0.45 0.017 213.2);
-  --chart-4: oklch(0.378 0.015 216);
-  --chart-5: oklch(0.275 0.011 216.9);
+  /* Cool grey chart ramp */
+  --chart-1: #dcdce0;
+  --chart-2: #b9b9be;
+  --chart-3: #74747a;
+  --chart-4: #2b2a28;
+  --chart-5: #111110;
 
-  /* Sidebar — barely-there grey, one tier below canvas. Borders thin & cool. */
-  --sidebar: oklch(0.985 0.002 250);
-  --sidebar-foreground: oklch(0.32 0.012 250);
-  --sidebar-primary: oklch(0.18 0.008 250);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.965 0.004 250);
-  --sidebar-accent-foreground: oklch(0.18 0.008 250);
-  --sidebar-border: oklch(0.93 0.005 250);
-  --sidebar-ring: oklch(0.6 0.012 250);
+  /* The sidebar is white with a hairline; the active row is a soft fill. */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #2b2a28;
+  --sidebar-primary: #111110;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f5f5f6;
+  --sidebar-accent-foreground: #111110;
+  --sidebar-border: #e8e8ea;
+  --sidebar-ring: #6f95d6;
+
+  /* ---- DRAFTHR design-system tokens (--ds-*) ----
+   * Canonical names consumed across the app. Meanings:
+   *   canvas     the desk behind the letter and other recessed grounds
+   *   surface    white panels (pages, cards, the sidebar)
+   *   surface-2  soft fill: wells, quiet tiles, hover on white, active nav row
+   *   surface-3  the next fill step: pressed, selected, track
+   *   chip       small pills, counts, segmented-control track
+   *   line       hairline border      line-2  lighter divider
+   *   line-strong  hovered field borders, checkbox and radio rims
+   *   ink        headings, strongest text   body  body text
+   *   muted      secondary text (AA on surface and surface-2)
+   *   subtle     icons, meta text, the smallest grey text (AA on white)
+   *   faint      disabled text, placeholders on fills, decorative strokes
+   */
+  --ds-canvas: #f6f6f7;
+  /* pagedly desk = the editor canvas, so the pagedly editor surface sits on the
+   * same background as the read-only preview. */
+  --pagedly-desk-background: var(--ds-canvas);
+  --ds-surface: #ffffff;
+  --ds-surface-2: #f5f5f6;
+  --ds-surface-3: #efeff1;
+  --ds-chip: #efeff1;
+  --ds-hover: #f9f9fa;
+  --ds-line: #e8e8ea;
+  --ds-line-2: #f0f0f2;
+  --ds-line-strong: #dcdce0;
+  --ds-line-hover: #d4d4d8;
+  --ds-ink: #111110;
+  --ds-body: #2b2a28;
+  --ds-muted: #6b6b70;
+  --ds-subtle: #74747a;
+  --ds-faint: #b9b9be;
+
+  /* Primary action (buttons, send) and its text. Press is one shade darker
+   * on light buttons and one step lighter on the black one; nothing moves. */
+  --ds-accent: #111110;
+  --ds-accent-hover: #2c2c2a;
+  --ds-accent-press: #3a3a37;
+  --ds-on-accent: #ffffff;
+  --ds-focus: #6f95d6;
+  --ds-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #6f95d6;
+  /* Dim behind dialogs and sheets. */
+  --ds-scrim: rgba(17, 17, 16, 0.24);
+
+  /* Status: only on dots, pills, notice strips and status cells.
+   *   amber  needs you        lilac  someone else has it, the reviewer
+   *   green  done             red    errors and failing checks only
+   *   blue   neutral info */
+  --ds-red-bg: #fbe6e2;
+  --ds-red-fg: #a8321f;
+  --ds-red-solid: #c2412b;
+  --ds-red-bd: #f0d0ca;
+  --ds-red-soft: #fbebe7;
+  --ds-red-line: #d9705c;
+  --ds-amber-bg: #fbf0d2;
+  --ds-amber-fg: #865a05;
+  --ds-amber-dot: #d59a1c;
+  --ds-amber-solid: #e2a83a;
+  --ds-amber-bd: #efd9a0;
+  --ds-amber-ring: #e2b54a;
+  --ds-amber-soft: #fbf3dd;
+  --ds-amber-row: #fbf1d6;
+  --ds-amber-row-hover: #f8eac4;
+  --ds-amber-chip: #fdf6e6;
+  --ds-amber-chip-bd: #f1e2bd;
+  --ds-amber-chip-fg: #7a5410;
+  --ds-green-bg: #e4f2ea;
+  --ds-green-fg: #26704f;
+  --ds-green-solid: #2f8a5f;
+  --ds-green-soft: #eef6f1;
+  --ds-green-bd: #cfe5d8;
+  --ds-green-ink: #1e4d36;
+  --ds-green-line: #6fb08d;
+  --ds-blue-bg: #e8eef9;
+  --ds-blue-fg: #2b4f8c;
+  --ds-blue-soft: #eef3fa;
+  /* Lilac: someone else has it; the reviewer's colour. */
+  --ds-lilac-bg: #efebfa;
+  --ds-lilac-fg: #5b4bb7;
+  --ds-lilac-soft: #f4f2fc;
+  --ds-lilac-bd: #dcd6f4;
+  --ds-lilac-ink: #3a2f80;
+  --ds-lilac-line: #8b7fd6;
+  --ds-lilac-ring: #9d92de;
+  --ds-lilac-quote: #c9c1ee;
+  /* Older name for lilac, kept so existing screens follow. */
+  --ds-violet-bg: var(--ds-lilac-bg);
+  --ds-violet-fg: var(--ds-lilac-fg);
+  --ds-violet-bd: var(--ds-lilac-bd);
+
+  /* Letter health: green 85 and above, amber 70 to 84, red below 70. */
+  --ds-health-good: #2f8a5f;
+  --ds-health-mid: #c98a12;
+  --ds-health-low: #c2412b;
+  --ds-health-track: #ececef;
+
+  /* Six pastel tints with an ink partner each. Letter-type marks and paper
+   * icons only; they never carry status. */
+  --ds-tint-lavender: #efebfa; --ds-tint-lavender-ink: #5b4bb7;
+  --ds-tint-mint: #e4f2ea;     --ds-tint-mint-ink: #2e6b4f;
+  --ds-tint-peach: #fbe9de;    --ds-tint-peach-ink: #a4532b;
+  --ds-tint-butter: #faf1cf;   --ds-tint-butter-ink: #8a6a00;
+  --ds-tint-sky: #e4eef9;      --ds-tint-sky-ink: #2d5a8c;
+  --ds-tint-rose: #f8e6ea;     --ds-tint-rose-ink: #9b3550;
+
+  /* Initial tiles (workspace and matter logos) */
+  --ds-tile: #111110;
+  --ds-on-tile: #ffffff;
+
+  /* Avatar palette: soft cool tones, each with its own ink, hash-indexed. */
+  --ds-av-1: #e9eef6; --ds-av-1-fg: #29436b;
+  --ds-av-2: #f6ebef; --ds-av-2-fg: #7a2f4b;
+  --ds-av-3: #f3ece2; --ds-av-3-fg: #6b4a1f;
+  --ds-av-4: var(--ds-tint-lavender); --ds-av-4-fg: var(--ds-tint-lavender-ink);
+  --ds-av-5: var(--ds-tint-mint); --ds-av-5-fg: var(--ds-tint-mint-ink);
+  --ds-av-6: #eef0f3; --ds-av-6-fg: #3b3a37;
+  --ds-av-7: var(--ds-tint-sky); --ds-av-7-fg: var(--ds-tint-sky-ink);
+  --ds-av-8: var(--ds-tint-peach); --ds-av-8-fg: var(--ds-tint-peach-ink);
+  --ds-av-fg: #2b2a28;
+
+  /* Shadows (soft, only on floating things), radii, gradients */
+  --ds-shadow-s: 0 1px 2px rgba(17, 17, 16, 0.05);
+  --ds-shadow-thumb: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --ds-shadow-m: 0 1px 2px rgba(17, 17, 16, 0.04), 0 14px 34px -16px rgba(17, 17, 16, 0.22);
+  --ds-shadow-l: 0 2px 4px rgba(17, 17, 16, 0.04), 0 16px 40px -12px rgba(17, 17, 16, 0.22);
+  --ds-shadow-xl: 0 24px 64px -20px rgba(17, 17, 16, 0.35);
+  --ds-shadow-ask: 0 1px 2px rgba(17, 17, 16, 0.04), 0 10px 30px -14px rgba(17, 17, 16, 0.12);
+  --ds-shadow-paper: 0 0 0 1px rgba(17, 17, 16, 0.05), 0 2px 4px rgba(17, 17, 16, 0.04), 0 18px 40px -18px rgba(17, 17, 16, 0.18);
+  /* The header band's soft mist wash (design/hifi/base.css .band). */
+  --ds-mist: radial-gradient(120% 140% at 78% -10%, #e1e7f0 0%, #f1f4f8 40%, #ffffff 75%);
+  --ds-mist-phone: radial-gradient(130% 120% at 85% -10%, #e1e7f0 0%, #f1f4f8 45%, #ffffff 80%);
+  /* Corners: 7 pills and tags, 9 buttons and fields, 12 menus and toasts,
+   * 16 cards and panels. */
+  --ds-r-s: 7px;
+  --ds-r-m: 9px;
+  --ds-r-l: 12px;
+  --ds-r-xl: 16px;
+
+  /* Motion: quiet everywhere, felt when something lands. */
+  --ds-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ds-dur-quiet: 120ms;
+  --ds-dur-open: 180ms;
 }
 
 @theme inline {
@@ -109,57 +261,22 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* Shadow scale — subtle and warm */
-  --shadow-2xs: 0 1px 0 rgba(15, 23, 42, 0.02);
-  --shadow-xs: 0 1px 2px -1px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 1px 3px -1px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 2px 8px -3px rgba(15, 23, 42, 0.07);
-  --shadow-lg: 0 12px 32px -12px rgba(15, 23, 42, 0.16);
-  --shadow-xl: 0 24px 48px -16px rgba(15, 23, 42, 0.20);
+  /* Shadow scale: soft, cool, only on floating things */
+  --shadow-2xs: 0 1px 0 rgba(17, 17, 16, 0.03);
+  --shadow-xs: 0 1px 2px rgba(17, 17, 16, 0.05);
+  --shadow-sm: 0 1px 2px rgba(17, 17, 16, 0.05);
+  --shadow-md: 0 1px 2px rgba(17, 17, 16, 0.04), 0 14px 34px -16px rgba(17, 17, 16, 0.22);
+  --shadow-lg: 0 2px 4px rgba(17, 17, 16, 0.04), 0 16px 40px -12px rgba(17, 17, 16, 0.22);
+  --shadow-xl: 0 24px 64px -20px rgba(17, 17, 16, 0.35);
 
-  --font-serif: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-serif: "Newsreader Variable", "Newsreader", Georgia, serif;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Code (inline <code>, links, one-time codes): Inter with tabular figures,
+   * set on code below, so the UI keeps to its two typefaces (RULE-067). */
+  --font-mono: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Page titles, card headings and big numbers (see the ds-title utility). */
+  --font-title: "Newsreader Variable", "Newsreader", Georgia, serif;
   --font-heading: var(--font-sans);
-  /* Display serif reserved for the brand wordmark. High-contrast transitional
-   * serif that pairs with the BrandMark glyph in the lockup. */
-  --font-display: "Playfair Display", "Iowan Old Style", "Apple Garamond", Georgia, serif;
-
-  /* DRAFTHR design system tokens. Canonical names mirrored from
-   * /public/design-system.html so React components consume the same vars. */
-  --ds-canvas: oklch(0.987 0.003 250);
-  /* pagedly desk = the editor canvas, so the pagedly editor surface sits on the
-   * same background as the read-only preview (no grey #e8eaed desk mismatch). */
-  --pagedly-desk-background: var(--ds-canvas);
-  --ds-surface: #ffffff;
-  --ds-surface-2: oklch(0.98 0.003 250);
-  --ds-line: oklch(0.93 0.005 250);
-  --ds-line-2: oklch(0.96 0.004 250);
-  --ds-ink: oklch(0.10 0.008 250);
-  --ds-body: oklch(0.30 0.011 250);
-  --ds-muted: oklch(0.50 0.013 250);
-  --ds-subtle: oklch(0.55 0.013 250);
-
-  /* Status — only used on dots, badges, inline status cells */
-  --ds-red-bg: #fef2f2;
-  --ds-red-fg: #b91c1c;
-  --ds-amber-bg: #fffbeb;
-  --ds-amber-fg: #b45309;
-  --ds-green-bg: #f0fdf4;
-  --ds-green-fg: #15803d;
-  --ds-blue-bg: #eff6ff;
-  --ds-blue-fg: #1d4ed8;
-
-  /* Avatar palette — pastel, deterministic, hash-indexed. Ink text on light
-   * backgrounds for readability; matches the soft annotation palette. */
-  --ds-av-1: #f3dca5;  /* warm sand     */
-  --ds-av-2: #c5d8ee;  /* soft blue     */
-  --ds-av-3: #c9e0d1;  /* sage          */
-  --ds-av-4: #ddc9ee;  /* lavender      */
-  --ds-av-5: #f3c9c9;  /* rose          */
-  --ds-av-6: #c2dfe6;  /* mist          */
-  --ds-av-7: #f0d4ad;  /* peach         */
-  --ds-av-8: #ebc6dd;  /* blush         */
-  --ds-av-fg: #3a3a44; /* near-black ink for legibility on pastel chips */
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -187,30 +304,44 @@
   html {
     @apply font-sans;
   }
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  /* Sonner sets its own system-ui stack on the toaster; toasts are Inter. */
+  [data-sonner-toaster],
+  [data-sonner-toast] {
+    font-family: var(--font-sans) !important;
+  }
   body {
     background: var(--background);
-    color: var(--foreground);
+    color: var(--ds-body);
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "cv11";
+    font-size: 14.5px;
+    letter-spacing: -0.006em;
+    font-feature-settings: "cv11", "ss03";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    @apply bg-background text-foreground;
+    @apply bg-background;
   }
 
-  /* Display typography — Source Serif 4 for the marquee headlines, geometric
-   * sans for everything else. Monochrome with very tight tracking, matching
-   * the reference (Compliance Insights / Master Services screens). */
-  .font-serif,
-  [data-radix-themes-heading][data-size="6"],
-  [data-radix-themes-heading][data-size="7"],
-  [data-radix-themes-heading][data-size="8"],
-  [data-radix-themes-heading][data-size="9"] {
-    font-family: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
-    font-weight: 600;
+  /* Newsreader for the letter, page titles and card headings; Inter for
+   * everything else. */
+  .font-serif {
+    font-family: var(--font-serif);
     letter-spacing: -0.012em;
   }
   h1, h2, h3 {
     letter-spacing: -0.018em;
+  }
+
+  /* One focus ring everywhere: a white gap and a soft blue ring (kit.html). */
+  :where(a, button, [role="button"], [role="tab"], [role="menuitem"], [role="option"], summary):focus-visible {
+    outline: none;
+    box-shadow: var(--ds-focus-ring);
   }
 
   /* Tailwind v4 dropped the legacy default `cursor: pointer` on
@@ -344,26 +475,25 @@
     background: var(--ds-red-fg);
   }
 
-  /* Cards: subtle, warm shadow rather than the default Tailwind stack */
+  /* Cards sit flat with a hairline; shadows are only for floating things. */
   [data-slot="card"] {
-    box-shadow: var(--shadow-2xs);
-    transition: box-shadow 200ms ease, border-color 200ms ease;
-  }
-  [data-slot="card"]:hover {
-    box-shadow: var(--shadow-xs);
+    box-shadow: none;
   }
 
-  /* Popover / dropdown / dialog: a touch more elevation */
+  /* Menus and popovers share one shadow; dialogs and sheets a deeper one. */
   [data-slot="popover-content"],
   [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"] {
+    box-shadow: var(--ds-shadow-l) !important;
+  }
   [data-slot="dialog-content"],
   [data-slot="sheet-content"] {
-    box-shadow: var(--shadow-lg) !important;
+    box-shadow: var(--ds-shadow-xl) !important;
   }
 
 }
 
-/* Letter "page" surface — a4-ish, cream paper, ink type */
+/* Letter "page" surface: white A4-ish paper, Newsreader, ink type */
 .letter-page {
   background: var(--letter-paper);
   color: var(--letter-ink);
@@ -371,9 +501,9 @@
   font-size: 11pt;
   line-height: 1.55;
   padding: 4.5rem 4rem;
-  border: 1px solid var(--letter-rule);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md), 0 24px 64px -32px rgba(15, 23, 42, 0.12);
+  border: 0;
+  border-radius: 3px;
+  box-shadow: var(--ds-shadow-paper);
 }
 .letter-page h1, .letter-page h2, .letter-page h3 {
   font-family: var(--font-serif);
@@ -437,36 +567,267 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Night (prototype skin D). Applied by the `dark` class on <html>. The app
+ * theme store currently locks the UI to light (src/lib/theme.ts); these
+ * values are ready for when a dark mode ships.
+ * -------------------------------------------------------------------------*/
 .dark {
-  --background: oklch(0.148 0.004 228.8);
-  --foreground: oklch(0.987 0.002 197.1);
-  --card: oklch(0.218 0.008 223.9);
-  --card-foreground: oklch(0.987 0.002 197.1);
-  --popover: oklch(0.218 0.008 223.9);
-  --popover-foreground: oklch(0.987 0.002 197.1);
-  --primary: oklch(0.925 0.005 214.3);
-  --primary-foreground: oklch(0.218 0.008 223.9);
-  --secondary: oklch(0.275 0.011 216.9);
-  --secondary-foreground: oklch(0.987 0.002 197.1);
-  --muted: oklch(0.275 0.011 216.9);
-  --muted-foreground: oklch(0.723 0.014 214.4);
-  --accent: oklch(0.275 0.011 216.9);
-  --accent-foreground: oklch(0.987 0.002 197.1);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.56 0.021 213.5);
-  --chart-1: oklch(0.872 0.007 219.6);
-  --chart-2: oklch(0.56 0.021 213.5);
-  --chart-3: oklch(0.45 0.017 213.2);
-  --chart-4: oklch(0.378 0.015 216);
-  --chart-5: oklch(0.275 0.011 216.9);
-  --sidebar: oklch(0.218 0.008 223.9);
-  --sidebar-foreground: oklch(0.987 0.002 197.1);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.987 0.002 197.1);
-  --sidebar-accent: oklch(0.275 0.011 216.9);
-  --sidebar-accent-foreground: oklch(0.987 0.002 197.1);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.56 0.021 213.5);
+  color-scheme: dark;
+  --background: #181816;
+  --foreground: #f3f1ec;
+  --card: #181816;
+  --card-foreground: #f3f1ec;
+  --popover: #21201d;
+  --popover-foreground: #f3f1ec;
+  --primary: #f3f1ec;
+  --primary-foreground: #141413;
+  --secondary: #262522;
+  --secondary-foreground: #f3f1ec;
+  --muted: #21201d;
+  --muted-foreground: #9a968d;
+  --accent: #2a2926;
+  --accent-foreground: #f3f1ec;
+  --destructive: #ff8f7c;
+  --destructive-foreground: #141413;
+  --border: #2d2c28;
+  --input: #3d3b36;
+  --ring: #c3b8fb;
+  --chart-1: #3d3b36;
+  --chart-2: #6b6861;
+  --chart-3: #9a968d;
+  --chart-4: #d8d5ce;
+  --chart-5: #f3f1ec;
+  --sidebar: #111110;
+  --sidebar-foreground: #d8d5ce;
+  --sidebar-primary: #f3f1ec;
+  --sidebar-primary-foreground: #141413;
+  --sidebar-accent: #2a2926;
+  --sidebar-accent-foreground: #f3f1ec;
+  --sidebar-border: #2d2c28;
+  --sidebar-ring: #c3b8fb;
+
+  --ds-canvas: #111110;
+  --ds-surface: #181816;
+  --ds-surface-2: #21201d;
+  --ds-surface-3: #2a2926;
+  --ds-chip: #262522;
+  --ds-line: #2d2c28;
+  --ds-line-2: #24231f;
+  --ds-line-strong: #3d3b36;
+  --ds-ink: #f3f1ec;
+  --ds-body: #d8d5ce;
+  --ds-muted: #9a968d;
+  --ds-subtle: #8a867e;
+  --ds-faint: #6b6861;
+  --ds-accent: #f3f1ec;
+  --ds-accent-hover: #dcd9d2;
+  --ds-on-accent: #141413;
+  --ds-focus: #c3b8fb;
+  --ds-red-bg: #36191a;
+  --ds-red-fg: #ff8f7c;
+  --ds-amber-bg: #33270f;
+  --ds-amber-fg: #f0be5a;
+  --ds-amber-dot: #f0be5a;
+  --ds-green-bg: #16291f;
+  --ds-green-fg: #6fd0a2;
+  --ds-blue-bg: #1e2740;
+  --ds-blue-fg: #8fb0ff;
+  --ds-violet-bg: #2e2945;
+  --ds-violet-fg: #c3b8fb;
+  --ds-violet-bd: #433b66;
+  --ds-tint-lavender: #2e2945; --ds-tint-lavender-ink: #c3b8fb;
+  --ds-tint-mint: #17302a;     --ds-tint-mint-ink: #8fdcbc;
+  --ds-tint-peach: #3a2419;    --ds-tint-peach-ink: #f6b591;
+  --ds-tint-butter: #352c10;   --ds-tint-butter-ink: #f1d27a;
+  --ds-tint-sky: #182a3d;      --ds-tint-sky-ink: #9cc5f2;
+  --ds-tint-rose: #3a1d25;     --ds-tint-rose-ink: #f5a3b5;
+  --ds-tile: #d8d5ce;
+  --ds-on-tile: #141413;
+  --ds-av-6: #1f2a2b;
+  --ds-av-8: #2a2926;
+  --ds-av-fg: #f3f1ec;
+  --ds-shadow-s: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --ds-shadow-m: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --ds-shadow-l: 0 2px 4px rgba(0, 0, 0, 0.5), 0 24px 48px -16px rgba(0, 0, 0, 0.7);
+  --ds-mist: radial-gradient(120% 150% at 72% 0%, #26302f 0%, #1d2221 45%, #181816 100%);
+}
+
+/* ---------------------------------------------------------------------------
+ * Type utilities
+ *   ds-title  Newsreader, for page titles and big numbers only.
+ *   ds-mono   Inter with tabular figures, for facts and numbers.
+ * -------------------------------------------------------------------------*/
+@utility ds-title {
+  font-family: var(--font-title);
+  font-weight: 400;
+  letter-spacing: -0.022em;
+  color: var(--ds-ink);
+  font-optical-sizing: auto;
+}
+/* Facts and numbers: dates, counts, scores. Inter with tabular figures, so
+ * columns line up without the look of code. */
+@utility ds-mono {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+/* Serif card and section heading (22px in the mocks; size set at the call). */
+@utility ds-heading {
+  font-family: var(--font-title);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--ds-ink);
+}
+@utility ds-focus {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion (letter-live.html). Quiet: hover and press shade, menus fade.
+ * Felt: a tick draws, a number counts up. Deep, only on send: the seal draws
+ * onto the letter and the page glows once. No bounce. Reduced motion shows
+ * the end state straight away.
+ * -------------------------------------------------------------------------*/
+@keyframes ds-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes ds-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ds-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ds-glow {
+  0% {
+    box-shadow: var(--ds-shadow-paper), 0 0 0 0 rgba(47, 138, 95, 0);
+  }
+  35% {
+    box-shadow: var(--ds-shadow-paper), 0 0 0 6px rgba(47, 138, 95, 0.12);
+  }
+  100% {
+    box-shadow: var(--ds-shadow-paper), 0 0 0 0 rgba(47, 138, 95, 0);
+  }
+}
+.ds-seal .ds-seal-ring {
+  stroke-dasharray: 277;
+  stroke-dashoffset: 277;
+}
+.ds-seal .ds-seal-tick {
+  stroke-dasharray: 46;
+  stroke-dashoffset: 46;
+}
+.ds-seal[data-drawn="true"] .ds-seal-ring,
+.ds-seal[data-drawn="true"] .ds-seal-tick {
+  stroke-dashoffset: 0;
+}
+.ds-seal[data-animate="true"] .ds-seal-ring {
+  animation: ds-draw 0.8s var(--ds-ease) forwards;
+}
+.ds-seal[data-animate="true"] .ds-seal-tick {
+  animation: ds-draw 0.4s ease-out 0.6s forwards;
+}
+.ds-seal[data-animate="true"] .ds-seal-label {
+  opacity: 0;
+  animation: ds-fade-in 0.4s ease 0.9s forwards;
+}
+.ds-glow-once {
+  animation: ds-glow 1.6s ease-out 1;
+}
+.ds-rise-in {
+  animation: ds-rise-in 0.4s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-seal .ds-seal-ring,
+  .ds-seal .ds-seal-tick {
+    stroke-dashoffset: 0 !important;
+    animation: none !important;
+  }
+  .ds-seal .ds-seal-label {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+  .ds-glow-once,
+  .ds-rise-in {
+    animation: none !important;
+  }
+}
+
+/* A scroll area that runs behind something fixed under it (the side panel
+ * behind the Ask DraftHR chips and box, and under its tabs): while there is
+ * more beyond an edge, that edge fades rather than cutting a line in half. */
+.ai-panel-scroll[data-more-below] {
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - 36px), transparent);
+}
+.ai-panel-scroll[data-more-above] {
+  -webkit-mask-image: linear-gradient(to top, black calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to top, black calc(100% - 20px), transparent);
+}
+.ai-panel-scroll[data-more-above][data-more-below] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 36px), transparent);
+}
+/* While the Send step's button is pinned to the foot of the panel it is the
+ * bottom edge, and fades what scrolls under it itself, so the panel's bottom
+ * fade would only fade the button (SEND-X5, SEND-X30). When the step ends
+ * the panel, the pinned bar's own padding is the panel's foot, so the step
+ * fits wherever it can. */
+.ai-panel-scroll[data-more-below]:has([data-slot="send-button-bar"][data-stuck]) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.lw-progress:has(> :last-child [data-slot="send-button-bar"]) {
+  padding-bottom: 0;
+}
+.ai-panel-scroll[data-more-above][data-more-below]:has([data-slot="send-button-bar"][data-stuck]) {
+  -webkit-mask-image: linear-gradient(to top, black calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to top, black calc(100% - 20px), transparent);
+}
+/* The Send step's button in its place, just above the panel's foot, with
+ * "Open full page" following it out of view: the fade covers only the room
+ * under the button (--send-foot-fade, set by the step), so the card fades
+ * and the button never does (SEND-X30). */
+.ai-panel-scroll[data-more-below]:has([data-slot="send-button-bar"][data-near-foot]) {
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--send-foot-fade, 36px)), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--send-foot-fade, 36px)), transparent);
+}
+.ai-panel-scroll[data-more-above][data-more-below]:has([data-slot="send-button-bar"][data-near-foot]) {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - var(--send-foot-fade, 36px)), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - var(--send-foot-fade, 36px)), transparent);
+}
+
+/* The paged letter on a phone (PagedlyDocEditor): the page narrows to the
+ * screen with smaller margins, so the words keep their size instead of the
+ * A4 page being shrunk to a few pixels a letter. */
+[data-phone-page] .pagedly-editor {
+  --pagedly-page-width: var(--dhr-phone-page-w) !important;
+  --pagedly-page-height: var(--dhr-phone-page-h) !important;
+  --pagedly-page-padding: 32px 22px !important;
+}
+[data-phone-page] .pagedly-ce-page {
+  width: var(--dhr-phone-page-w) !important;
+  min-height: var(--dhr-phone-page-h) !important;
+  padding: 32px 22px !important;
+}
+[data-phone-page] .pagedly-ce-footer {
+  width: var(--dhr-phone-page-w) !important;
+  max-width: 100%;
+}
+[data-phone-page] .pagedly-ce-editor {
+  padding-top: 16px !important;
 }

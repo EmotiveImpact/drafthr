@@ -78,7 +78,7 @@ describe("POST /api/marketplace/billing-portal", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ url: "https://billing.stripe.com/p/session" });
     expect(portalCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ customer: "cus_ws", return_url: "https://app.test/settings" }),
+      expect.objectContaining({ customer: "cus_ws", return_url: "https://app.test/settings?tab=billing" }),
     );
   });
 
@@ -125,7 +125,7 @@ describe("POST /api/marketplace/billing-portal", () => {
   it("only returns to known app pages", async () => {
     state.body = { returnTo: "https://evil.example" };
     await POST(req);
-    expect(portalCreate).toHaveBeenCalledWith(expect.objectContaining({ return_url: "https://app.test/settings" }));
+    expect(portalCreate).toHaveBeenCalledWith(expect.objectContaining({ return_url: "https://app.test/settings?tab=billing" }));
     state.body = { returnTo: "/pricing" };
     await POST(req);
     expect(portalCreate).toHaveBeenLastCalledWith(expect.objectContaining({ return_url: "https://app.test/pricing" }));

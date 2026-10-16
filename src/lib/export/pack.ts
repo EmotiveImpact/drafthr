@@ -8,7 +8,9 @@ import {
 import { renderLetterPdfBlob, filenameFor as pdfFilenameFor, letterBodyHtml } from "./pdf";
 import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { formatDateOnly } from "@/lib/date-only";
 import { loadTemplate } from "@/lib/letters/templates";
+import { displayTitleFor, letterTypeLabelFor, recipientNameFor } from "@/lib/letters/display";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -164,26 +166,26 @@ function buildAudit(draft: Draft): Record<string, unknown> {
   };
 }
 
-function buildReadme(
+export function buildReadme(
   draft: Draft,
   attestation: ExportAttestation | undefined,
   evidence: EvidenceItem[],
   letterFiles: { pdf?: string; docx?: string },
 ): string {
   const lines: string[] = [];
-  lines.push(`DRAFTHR EXPORT PACK`);
-  lines.push(`====================`);
+  lines.push(`DRAFTHR EVIDENCE PACK`);
+  lines.push(`=====================`);
   lines.push("");
-  lines.push(`Letter type:    ${draft.letterType}`);
-  lines.push(`Mode:           ${draft.mode}`);
+  lines.push(`Letter type:    ${letterTypeLabelFor(draft)}`);
+  lines.push(`Written by:     ${modeLabel(draft)}`);
   lines.push(`Jurisdiction:   ${draft.context.jurisdiction}`);
-  lines.push(`Issue date:     ${draft.context.issueDate}`);
-  lines.push(`Generated:      ${new Date().toISOString()}`);
+  lines.push(`Issue date:     ${packDate(draft, draft.context.issueDate)}`);
+  lines.push(`Generated:      ${packDateTime(draft, Date.now())}`);
   lines.push("");
   if (attestation) {
-    lines.push(`Counsel review: ${attestation.reviewedBy} on ${attestation.reviewedOn}`);
+    lines.push(`Counsel review: ${attestation.reviewedBy} on ${packDate(draft, attestation.reviewedOn)}`);
   } else {
-    lines.push(`Counsel review: not attested`);
+    lines.push(`Counsel review: none recorded`);
   }
   lines.push("");
   lines.push(`CONTENTS`);
@@ -191,23 +193,22 @@ function buildReadme(
   // List the letter files actually in the ZIP, under their real names.
   if (letterFiles.pdf) lines.push(`  ${letterFiles.pdf}`, `                        Print-ready PDF of the letter.`);
   if (letterFiles.docx) lines.push(`  ${letterFiles.docx}`, `                        Editable Word version.`);
-  lines.push(`  pack-summary.html     One-page summary: review checklist, quality`);
-  lines.push(`                        report, change timeline. Open in any browser.`);
-  lines.push(`  manifest.json         Machine-readable index of the pack.`);
-  lines.push(`  audit.json            Version history, comments, prior exports.`);
+  lines.push(`  pack-summary.html     Summary of the letter: the checklist, the`);
+  lines.push(`                        section checks and the history. Open it in`);
+  lines.push(`                        any web browser.`);
+  lines.push(`  manifest.json         A list of what is in this pack.`);
+  lines.push(`  audit.json            Earlier versions, comments and downloads.`);
   if (evidence.length > 0) {
     lines.push(`  evidence/             ${evidence.length} item${evidence.length === 1 ? "" : "s"} of evidence at original quality.`);
-    lines.push(`  evidence/index.html   Paginated bundle with captions.`);
+    lines.push(`  evidence/index.html   Index of the evidence, with captions.`);
   }
   lines.push("");
-  lines.push(`USE`);
-  lines.push(`---`);
-  lines.push(`This pack is self-contained. Send the ZIP, the recipient gets:`);
-  lines.push(`the letter in two formats, every piece of evidence at full quality,`);
-  lines.push(`and a tribunal-grade index for navigation. The audit.json + manifest.json`);
-  lines.push(`make the pack reproducible from a clean DRAFTHR install.`);
-  lines.push("");
-  lines.push(`Questions? Reply to the email this pack was attached to.`);
+  lines.push(`USING THIS PACK`);
+  lines.push(`---------------`);
+  lines.push(`Everything is in this one ZIP file. Whoever you send it to gets the`);
+  lines.push(`letter${letterFiles.pdf && letterFiles.docx ? " in two formats" : ""}, every piece of evidence at full quality and an index`);
+  lines.push(`of the evidence. manifest.json and audit.json keep a record of the`);
+  lines.push(`letter for your files; you do not need to open them.`);
   return lines.join("\n");
 }
 
@@ -221,7 +222,7 @@ function buildReadme(
  * Figures get their effective label (auto Fig N or user override) as the
  * heading. Each item also notes which letter sections it backs up.
  */
-function buildEvidenceIndexHtml(draft: Draft): string {
+export function buildEvidenceIndexHtml(draft: Draft): string {
   const evidence = draft.evidence ?? [];
   const figures = evidence.filter((e) => displayModeOf(e) === "figure");
   const attachments = evidence.filter((e) => displayModeOf(e) === "attached");
@@ -230,7 +231,7 @@ function buildEvidenceIndexHtml(draft: Draft): string {
 
   return `<!doctype html>
 <html><head><meta charset="utf-8">
-<title>Exhibit Index — ${escapeHtml(draft.letterType)}</title>
+<title>${escapeHtml(`Exhibit index: ${packLetterName(draft)}`)}</title>
 <style>
   body{font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:14px;color:#0f172a;max-width:920px;margin:32px auto;padding:0 24px;line-height:1.55}
   h1{font-size:24px;margin:0 0 4px 0}
@@ -246,8 +247,8 @@ function buildEvidenceIndexHtml(draft: Draft): string {
   a{color:#0f172a}
   .empty{color:#94a3b8;font-style:italic}
 </style></head><body>
-<h1>Exhibit Index</h1>
-<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · ${escapeHtml(draft.letterType)} · Generated ${escapeHtml(packDateTime(draft, Date.now()))}</p>
+<h1>Exhibit index</h1>
+<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · ${escapeHtml(packLetterName(draft))} · Generated ${escapeHtml(packDateTime(draft, Date.now()))}</p>
 
 ${
   figures.length > 0
@@ -395,7 +396,7 @@ export function buildExportPackHtml(
   attestation?: ExportAttestation
 ): string {
   const generatedAt = packDateTime(draft, Date.now());
-  const quality = buildTemplateQualityReport(draft);
+  const checks = packSectionChecks(buildTemplateQualityReport(draft));
   const timeline = buildDraftTimeline(draft).slice().reverse();
   const evidence = draft.evidence ?? [];
   const checklist = buildReviewChecklist(draft, attestation);
@@ -463,22 +464,22 @@ export function buildExportPackHtml(
   <main>
     <header>
       <h1>${escapeHtml(packTitle(draft))}</h1>
-      <p class="meta">Generated ${escapeHtml(generatedAt)} · ${escapeHtml(draft.context.jurisdiction)} · ${escapeHtml(draft.context.issueDate)}</p>
+      <p class="meta">Generated ${escapeHtml(generatedAt)} · ${escapeHtml(draft.context.jurisdiction)} · Issued ${escapeHtml(packDate(draft, draft.context.issueDate))}</p>
     </header>
 
     <section class="section">
-      <h2>Draft Summary</h2>
+      <h2>Summary</h2>
       <div class="grid">
-        ${summaryCard("Letter type", draft.letterType)}
+        ${summaryCard("Letter type", letterTypeLabelFor(draft))}
         ${summaryCard(draft.mode === "employer" ? "Recipient" : "Employer", draft.mode === "employer" ? draft.employee.legalName : draft.employer.legalName)}
-        ${summaryCard("Issue date", draft.context.issueDate)}
+        ${summaryCard("Issue date", packDate(draft, draft.context.issueDate))}
         ${summaryCard("Evidence items", String(evidence.length))}
-        ${summaryCard("Counsel review", attestation ? `${attestation.reviewedBy} on ${attestation.reviewedOn}` : draft.context.counselReviewRequired ? "Required" : "Not required")}
+        ${summaryCard("Counsel review", attestation ? `${attestation.reviewedBy} on ${packDate(draft, attestation.reviewedOn)}` : draft.context.counselReviewRequired ? "Required" : "Not required")}
       </div>
     </section>
 
     <section class="section">
-      <h2>Review Checklist</h2>
+      <h2>Review checklist</h2>
       <ul class="clean">
         ${checklist.map(renderChecklistItem).join("")}
       </ul>
@@ -496,7 +497,7 @@ export function buildExportPackHtml(
     </section>
 
     <section class="section">
-      <h2>Evidence List</h2>
+      <h2>Evidence list</h2>
       ${
         evidence.length === 0
           ? `<p class="muted">No evidence items have been added to this draft.</p>`
@@ -505,10 +506,10 @@ export function buildExportPackHtml(
     </section>
 
     <section class="section">
-      <h2>Template Quality Inspector</h2>
-      <p class="small muted">${quality.summary.covered} covered · ${quality.summary.missing} missing · ${quality.summary.needsReview} need review · ${quality.summary.guardrails} guardrails</p>
+      <h2>Section checks</h2>
+      <p class="small muted">${sectionChecksSummary(checks)}</p>
       <ul class="clean">
-        ${quality.sections
+        ${checks
           .filter((section) => section.requirements.length > 0)
           .map(
             ({ section, requirements }) => `<li>
@@ -540,7 +541,7 @@ export function buildExportPackHtml(
                   <div class="timeline-time">${escapeHtml(packDateTime(draft, event.createdAt))}</div>
                   <strong>${escapeHtml(event.title)}</strong>
                   ${event.sectionTitle ? `<div class="small muted">${escapeHtml(event.sectionTitle)}</div>` : ""}
-                  ${event.detail ? `<p class="small muted">${escapeHtml(event.detail)}</p>` : ""}
+                  ${event.detail ? `<p class="small muted">${escapeHtml(timelineDetail(draft, event.detail))}</p>` : ""}
                 </li>`
               )
               .join("")}</ul>`
@@ -549,6 +550,29 @@ export function buildExportPackHtml(
   </main>
 </body>
 </html>`;
+}
+
+/** The template's requirements per section, as the pack shows them (packRequirementText). */
+function packSectionChecks(quality: ReturnType<typeof buildTemplateQualityReport>) {
+  return quality.sections.map(({ section, requirements }) => ({
+    section,
+    requirements: requirements.flatMap((requirement) => {
+      const text = packRequirementText(requirement.text);
+      return text === null ? [] : [{ ...requirement, text }];
+    }),
+  }));
+}
+
+function sectionChecksSummary(checks: ReturnType<typeof packSectionChecks>): string {
+  const all = checks.flatMap((section) => section.requirements);
+  const count = (status: TemplateRequirementStatus) => all.filter((r) => r.status === status).length;
+  const rules = count("guardrail");
+  return [
+    `${count("covered")} covered`,
+    `${count("missing")} missing`,
+    `${count("needs_review")} to check`,
+    `${rules} ${rules === 1 ? "rule" : "rules"} to keep`,
+  ].join(" · ");
 }
 
 function buildReviewChecklist(
@@ -577,16 +601,16 @@ function buildReviewChecklist(
       status: placeholderCount === 0 ? "ok" : "check",
       detail:
         placeholderCount === 0
-          ? "No [TBD] placeholders detected."
-          : `${placeholderCount} [TBD] placeholder${placeholderCount === 1 ? "" : "s"} remain.`,
+          ? "No [TBD] blanks left to fill in."
+          : `${placeholderCount} [TBD] blank${placeholderCount === 1 ? "" : "s"} still to fill in.`,
     },
     {
       label: "Rights and compliance checks",
       status: complianceMissing.length === 0 ? "ok" : "check",
       detail:
         complianceMissing.length === 0
-          ? "No missing live compliance rules detected."
-          : complianceMissing.map((item) => item.rule.label).join(", "),
+          ? "Nothing missing."
+          : complianceMissing.map((item) => plainPunctuation(item.rule.label)).join(", "),
     },
     {
       label: "Evidence and attachments",
@@ -603,8 +627,8 @@ function buildReviewChecklist(
           ? "check"
           : "ok",
       detail: attestation
-        ? `Current export attested by ${attestation.reviewedBy} on ${attestation.reviewedOn}.`
-        : latestReview(draft) ?? (draft.context.counselReviewRequired ? "Counsel review is required before issuance." : "No counsel-review gate required for this draft."),
+        ? `Signed off by ${attestation.reviewedBy} on ${packDate(draft, attestation.reviewedOn)}.`
+        : latestReview(draft) ?? (draft.context.counselReviewRequired ? "This letter needs a counsel review before it is sent." : "This letter does not need a counsel review."),
     },
   ];
 }
@@ -614,12 +638,12 @@ function latestReview(draft: Draft): string | undefined {
     .filter((event) => event.reviewedBy)
     .sort((a, b) => b.exportedAt - a.exportedAt)[0];
   if (!reviewed?.reviewedBy) return undefined;
-  return `Prior export attested by ${reviewed.reviewedBy}${reviewed.reviewedOn ? ` on ${reviewed.reviewedOn}` : ""}.`;
+  return `Signed off by ${reviewed.reviewedBy}${reviewed.reviewedOn ? ` on ${packDate(draft, reviewed.reviewedOn)}` : ""}, for an earlier download.`;
 }
 
 function renderChecklistItem(item: ChecklistItem): string {
   return `<li>
-    <span class="pill ${item.status}">${escapeHtml(item.status)}</span>
+    <span class="pill ${item.status}">${escapeHtml(CHECKLIST_LABEL[item.status])}</span>
     <strong>${escapeHtml(item.label)}</strong>
     <p class="small muted">${escapeHtml(item.detail)}</p>
   </li>`;
@@ -631,9 +655,9 @@ function renderEvidenceItem(draft: Draft, item: EvidenceItem, index: number): st
   return `<li>
     <span class="label">Evidence ${index + 1} · ${escapeHtml(item.kind)}</span>
     <h3>${escapeHtml(item.filename || labelForEvidence(item))}</h3>
-    <p class="small muted">Added ${escapeHtml(packDateTime(draft, item.uploadedAt))} · ${escapeHtml(links || "General draft evidence")}</p>
+    <p class="small muted">Added ${escapeHtml(packDateTime(draft, item.uploadedAt))} · ${escapeHtml(links || "Not linked to a section")}</p>
     <p>${escapeHtml(item.parsedSummary || item.content || "No summary supplied.")}</p>
-    <p class="small muted">AI prompt use: ${item.includeVerbatim ? "verbatim content included" : "summary only"}</p>
+    <p class="small muted">DraftHR used ${item.includeVerbatim ? "the full text of this" : "a summary of this"} when drafting</p>
     ${image ? `<img class="evidence-img" src="${escapeAttribute(image)}" alt="" />` : ""}
   </li>`;
 }
@@ -647,7 +671,31 @@ function summaryCard(label: string, value: string | undefined): string {
 
 function statusLabel(status: TemplateRequirementStatus): string {
   if (status === "needs_review") return "Check";
+  if (status === "guardrail") return "Rule";
   return status[0].toUpperCase() + status.slice(1);
+}
+
+/** The checklist's status pills in words, not the status codes. */
+const CHECKLIST_LABEL: Record<ChecklistStatus, string> = {
+  ok: "Done",
+  check: "Check",
+  missing: "Missing",
+};
+
+/** A template rule about the letter's HTML (written for the drafting model, such as "inside a single <p> separated by <br>"). */
+const MARKUP_RULE = /<\/?[a-z][a-z0-9]*\b[^>]*>/i;
+
+/**
+ * A template requirement as the pack shows it to people (SEND-X43): rules
+ * about the letter's HTML are for the drafting model and are left out
+ * (null), and the rest read in sentence case ("Must use...", not "MUST
+ * use...") with plain punctuation.
+ */
+export function packRequirementText(text: string): string | null {
+  if (MARKUP_RULE.test(text)) return null;
+  return plainPunctuation(text)
+    .replace(/^MUST NOT\b/, "Must not")
+    .replace(/^MUST\b/, "Must");
 }
 
 function statusClass(status: TemplateRequirementStatus): string {
@@ -667,9 +715,49 @@ export function packDateTime(draft: Pick<Draft, "context">, at: number | string 
   return new Date(at).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/**
+ * A calendar date (YYYY-MM-DD) in words for the pack, in the letter's
+ * jurisdiction: "14 Oct 2026" (UK), "Oct 14, 2026" (US). Anything that is
+ * not a date-only string is shown as it is (SEND-X37).
+ */
+export function packDate(draft: Pick<Draft, "context">, iso: string | undefined): string {
+  if (!iso) return "";
+  const locale = draft.context?.jurisdiction === "US" ? "en-US" : "en-GB";
+  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" }, locale);
+}
+
+/** A timeline line's detail: a bare date (a counsel review's "reviewed on") in words. */
+function timelineDetail(draft: Pick<Draft, "context">, detail: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(detail) ? `Reviewed on ${packDate(draft, detail)}` : detail;
+}
+
+/** Who the letter is written as, in words (never the "employer" slug). */
+function modeLabel(draft: Pick<Draft, "mode">): string {
+  return draft.mode === "employee" ? "Employee" : "HR team";
+}
+
+/**
+ * Template guidance shown to people in the pack (the quality inspector's
+ * requirements, compliance rule names) is written for the drafting model
+ * and uses dashes; the pack shows it with plain punctuation (SEND-X37).
+ */
+export function plainPunctuation(text: string): string {
+  return text.replace(/\s+[\u2014\u2013]\s+/g, ": ").replace(/\u2014/g, ", ");
+}
+
 function packTitle(draft: Draft): string {
-  const party = draft.mode === "employer" ? draft.employee.legalName : draft.employer.legalName;
-  return `${draft.letterType} export pack${party ? ` - ${party}` : ""}`;
+  return `Evidence pack: ${packLetterName(draft)}`;
+}
+
+/**
+ * The letter as people name it in the pack ("Final written warning · Jordan
+ * Hale"): its title, with who it is for when the title does not say, never
+ * the type's internal id (SEND-X33).
+ */
+function packLetterName(draft: Draft): string {
+  const title = displayTitleFor(draft);
+  const who = recipientNameFor(draft);
+  return who && !title.toLowerCase().includes(who.toLowerCase()) ? `${title} · ${who}` : title;
 }
 
 function filenameForPack(draft: Draft): string {
