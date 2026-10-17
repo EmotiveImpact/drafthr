@@ -16,7 +16,7 @@
 import { forwardRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, Check, Eye, EyeOff, ShieldCheck, XCircle } from "lucide-react";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { Wordmark } from "@/components/ds";
 import { AuthSplitShell } from "./AuthSplitShell";
 import { cn } from "@/lib/utils";
 
@@ -61,8 +61,7 @@ export function AuthShell({
             aria-label="DraftHR home"
             className={`inline-flex items-center gap-2.5 ${withSlideshow ? "lg:hidden" : ""}`}
           >
-            <BrandMark size={48} />
-            <Wordmark size={28} />
+            <Wordmark size={40} />
           </Link>
           <section
             aria-labelledby="auth-heading"

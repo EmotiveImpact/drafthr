@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { Wordmark } from "@/components/ds";
 
 /**
  * Crossfade slideshow that lives in the left column of the /sign-in and
@@ -184,8 +184,7 @@ export function SignInSlideshow() {
         aria-label="DraftHR home"
         className="absolute left-10 top-9 z-20 inline-flex items-center gap-2.5 transition-opacity hover:opacity-80"
       >
-        <BrandMark size={32} variant={photos ? "outline" : "solid"} />
-        <Wordmark size={22} tone={photos ? "inherit" : "ink"} />
+        <Wordmark size={30} tone={photos ? "inherit" : "ink"} />
       </Link>
 
       {/* Pagination: bottom-left, aligned with the footer line on the right. */}

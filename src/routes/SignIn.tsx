@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { Wordmark } from "@/components/ds";
 import { safeInternalRedirect } from "@/routes/AuthCallback";
 import {
   AUTH_HEADING_CLASS,
@@ -221,8 +221,7 @@ export function SignIn() {
            * same screen is visual noise. Mobile/tablet (slideshow off)
            * still shows it above the card. */}
           <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5 lg:hidden">
-            <BrandMark size={48} />
-            <Wordmark size={28} />
+            <Wordmark size={40} />
           </Link>
           <section
             aria-labelledby="signin-heading"

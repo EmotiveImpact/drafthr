@@ -2,7 +2,6 @@ import "@fontsource-variable/manrope";
 import "@fontsource-variable/newsreader/opsz.css";
 import "@fontsource-variable/geist-mono";
 import "./case-interview.css";
-import markUrl from "./drafthr-mark.png";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -12,6 +11,7 @@ import { rebuildCaseFile } from "@/lib/case-engine/history";
 import { PLAYBOOKS } from "@/lib/case-engine/playbooks";
 import { runPlaybook } from "@/lib/case-engine/runner";
 import { letterTypeFor, wizardAnswers } from "@/lib/case-engine/handoff";
+import { Wordmark } from "@/components/ds/Wordmark";
 import {
   CHAPTERS,
   EXAMPLE_STORY,
@@ -105,8 +105,7 @@ function Shell(p: ShellProps) {
     <div className={`ci ${fileOpen ? "file-open" : ""}`}>
       <nav className="ci-side" aria-label="Interview">
         <a className="ci-logo" href="/hr" onClick={(e) => (e.preventDefault(), nav("/hr"))}>
-          <img src={markUrl} alt="" />
-          <b>DRAFTHR</b>
+          <Wordmark size={24} tone="inherit" />
         </a>
         <div className="ci-side-case">
           <span className="ci-preview" title="Not yet checked by an employment lawyer">Preview</span>
