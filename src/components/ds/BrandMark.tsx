@@ -7,14 +7,19 @@ import { cn } from "@/lib/utils";
  *   <BrandMark />               // default 32px
  *   <BrandMark size={28} />     // smaller (sidebar header, message avatar)
  *   <BrandMark variant="outline" />  // ink-on-paper ring (rare)
+ *   <BrandMark onDark />        // on a dark ground: a solid white D and a
+ *                               // faint ring (/logo-on-dark.png), since the
+ *                               // usual D is a see-through cut-out
  */
 export function BrandMark({
   size = 32,
   variant = "solid",
+  onDark = false,
   className,
 }: {
   size?: number;
   variant?: "solid" | "outline";
+  onDark?: boolean;
   className?: string;
 }) {
   return (
@@ -28,7 +33,7 @@ export function BrandMark({
       aria-label="DRAFTHR"
     >
       <img
-        src="/logo.png"
+        src={onDark ? "/logo-on-dark.png" : "/logo.png"}
         alt="DRAFTHR"
         width={size}
         height={size}
