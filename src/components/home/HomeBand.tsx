@@ -343,6 +343,9 @@ const TAB_ICONS: Partial<Record<HomeTabId, LucideIcon>> = {
   activity: History,
 };
 
+const PHONE_LINK =
+  "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[13px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-focus)]";
+
 /**
  * Phone Home has no tab row (mock phone-home), so the other Home tabs are
  * small links instead: Needs approval (with the same count as the tab's
@@ -351,6 +354,12 @@ const TAB_ICONS: Partial<Record<HomeTabId, LucideIcon>> = {
 export function PhoneHomeTabLinks({ approvals, className }: { approvals: number; className?: string }) {
   return (
     <nav aria-label="More on Home" className={cn("flex flex-wrap gap-1.5 md:hidden", className)}>
+      {/* The band's buttons are hidden on phones, so Start a case lives here too. */}
+      <Link to="/hr/cases/new" className={PHONE_LINK}>
+        <MessagesSquare className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />
+        Start a case
+        <span className="text-[9.5px] uppercase tracking-[0.12em] text-[var(--ds-muted)]">Preview</span>
+      </Link>
       {TABS.filter((t) => t.id !== "overview").map((t) => {
         const Icon = TAB_ICONS[t.id];
         const count = t.id === "approvals" ? approvals : 0;
@@ -358,7 +367,7 @@ export function PhoneHomeTabLinks({ approvals, className }: { approvals: number;
           <Link
             key={t.id}
             to={t.href}
-            className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[13px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-focus)]"
+            className={PHONE_LINK}
           >
             {Icon && <Icon className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />}
             {t.label}
