@@ -14,7 +14,7 @@ import { runPlaybook } from "@/lib/case-engine/runner";
 import { letterTypeFor, wizardAnswers } from "@/lib/case-engine/handoff";
 import {
   CHAPTERS,
-  EXAMPLE_STORY,
+  EXAMPLE_STORIES,
   SITUATION_NAMES,
   caseTitle,
   chapterOf,
@@ -233,6 +233,7 @@ function NewCase() {
   const [situation, setSituation] = useState<SituationId>("disciplinary");
   const [where, setWhere] = useState<Where>("england-wales");
   const [story, setStory] = useState("");
+  const [example, setExample] = useState(-1);
   const words = story.trim() ? story.trim().split(/\s+/).length : 0;
 
   const start = () => {
@@ -267,8 +268,20 @@ function NewCase() {
             OK <Icon name="check" />
           </button>
           <span className="ci-bar-sp" />
-          <button type="button" className="ci-link" onClick={() => setStory(EXAMPLE_STORY)}>
-            <Icon name="spark" /> Use the example story
+          <button
+            type="button"
+            className="ci-link"
+            onClick={() => {
+              const next = (example + 1) % EXAMPLE_STORIES.length;
+              const ex = EXAMPLE_STORIES[next]!;
+              setExample(next);
+              setSituation(ex.situation);
+              setWhere(ex.where);
+              setStory(ex.text);
+            }}
+          >
+            <Icon name="spark" />{" "}
+            {example < 0 ? "Try an example" : `Another example (${example + 1} of ${EXAMPLE_STORIES.length})`}
           </button>
         </>
       }

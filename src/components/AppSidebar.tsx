@@ -48,6 +48,7 @@ import {
   Inbox,
   Layers,
   LibraryBig,
+  MessagesSquare,
   LogOut,
   MoreHorizontal,
   PanelLeft,
@@ -91,7 +92,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
  *   Top     logo and DRAFTHR (the workspace switcher when there are several),
  *           then search, the notifications bell and collapse.
  *           A "New letter" button under it.
- *   Body    Home, Letters (the three most recent letters nested, each with a
+ *   Body    Home, Start a case (HR), Letters (the three most recent letters nested, each with a
  *           small journey dot, then "View all"), Matters (matters nested),
  *           Employees, Templates, Experts, Reports. The employee and
  *           consultant variants show their own short lists.
@@ -598,7 +599,7 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const mattersLoading = pulling && matterList.matters.length === 0;
   const plan = fitSubLists({
     available,
-    rows: employer ? 7 : 4,
+    rows: employer ? 8 : 4,
     letterRows:
       (lettersLoading ? LOADING_ROWS : recent.length > 0 ? recent.length + 1 : 1) +
       (under(path, "/bulk") ? 1 : 0),
@@ -623,6 +624,13 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
       <SidebarGroupContent>
         <SidebarMenu className="gap-0.5 group-data-[collapsible=icon]:items-center">
           <NavRow it={{ href: prefix, label: "Home", Icon: House }} isActive={homeActive} />
+          {employer && (
+            // The case interview (Preview until a lawyer has checked it).
+            <NavRow
+              it={{ href: "/hr/cases/new", label: "Start a case", Icon: MessagesSquare, tooltip: "Start a case (Preview)" }}
+              isActive={under(path, "/hr/cases")}
+            />
+          )}
           <NavLetters
             mode={letterMode}
             recent={recent}
