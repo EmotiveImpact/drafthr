@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DraftHR Front Page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* One DraftHR look: paper, ink and a claret seal. Serif for what we say, sans for what you do, mono for clause marks. */
+:root{
+  --paper:#F4F1EA; --paper-2:#ECE7DC; --card:#FBF9F5;
+  --ink:#16181B; --ink-2:#3B3E43; --mute:#7A776F; --line:#D9D2C4; --line-soft:#E5DFD3;
+  --night:#131416; --night-2:#1C1D20; --night-line:#2E2F33; --night-text:#ECE7DC; --night-mute:#9C978C;
+  --seal:#7B2D25; --seal-soft:#F1E3DE; --ok:#3E6B4E;
+  --serif:"Newsreader",Georgia,serif; --sans:"Geist",system-ui,sans-serif; --mono:"Geist Mono",ui-monospace,monospace;
+  --wrap:1200px; --gut:clamp(16px,4vw,40px); --r:4px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font:400 16px/1.6 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{display:block;max-width:100%}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--gut)}
+.serif{font-family:var(--serif)}
+
+/* Type */
+h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.015em;line-height:1.08}
+h1{font-size:clamp(44px,7vw,92px);font-weight:300;letter-spacing:-.025em}
+h2{font-size:clamp(34px,4.6vw,58px);font-weight:300}
+h3{font-size:24px;line-height:1.2}
+h2 em,h1 em{font-style:italic;font-weight:300}
+.lede{font-size:18px;color:var(--ink-2);max-width:56ch}
+.clause{display:flex;align-items:center;gap:12px;font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--seal);margin-bottom:28px}
+.clause::after{content:"";flex:0 0 48px;height:1px;background:currentColor;opacity:.5}
+.dark .clause{color:#D9A89E}
+
+/* Buttons: one shape, two weights. Pressing darkens a shade, nothing moves. */
+.btn{display:inline-flex;align-items:center;gap:10px;height:46px;padding:0 22px;border-radius:var(--r);font:500 15px/1 var(--sans);border:1px solid transparent;transition:background .18s,border-color .18s,color .18s;white-space:nowrap}
+.btn svg{width:16px;height:16px;transition:transform .2s}
+.btn:hover svg{transform:translateX(3px)}
+.btn-solid{background:var(--ink);color:var(--paper)}
+.btn-solid:hover{background:#2A2D31}.btn-solid:active{background:#000}
+.btn-line{border-color:var(--line);color:var(--ink)}
+.btn-line:hover{border-color:var(--ink)}.btn-line:active{background:var(--paper-2)}
+.dark .btn-solid,.hero .btn-solid{background:var(--paper);color:var(--ink)}
+.dark .btn-solid:hover,.hero .btn-solid:hover{background:#fff}.dark .btn-solid:active,.hero .btn-solid:active{background:var(--paper-2)}
+.dark .btn-line,.hero .btn-line{border-color:rgba(236,231,220,.35);color:var(--night-text)}
+.dark .btn-line:hover,.hero .btn-line:hover{border-color:var(--night-text)}
+:focus-visible{outline:2px solid var(--seal);outline-offset:3px}
+
+/* Seal mark */
+.seal{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--seal);color:#F6E9E4;font:italic 500 18px/1 var(--serif);box-shadow:inset 0 0 0 3px #7B2D25,inset 0 0 0 4px rgba(246,233,228,.45)}
+.brand{display:flex;align-items:center;gap:10px;font:500 21px/1 var(--serif);letter-spacing:-.01em}
+
+/* Nav */
+.nav{position:absolute;inset:0 0 auto;z-index:5;color:var(--night-text)}
+.nav .wrap{display:flex;align-items:center;justify-content:space-between;height:84px}
+.nav ul{display:flex;gap:34px;list-style:none;font-size:14.5px}
+.nav ul a{opacity:.82}.nav ul a:hover{opacity:1}
+.nav .right{display:flex;align-items:center;gap:22px;font-size:14.5px}
+.nav .btn{height:40px;padding:0 18px}
+.menu{display:none;width:40px;height:40px;border:1px solid rgba(236,231,220,.35);border-radius:var(--r)}
+.menu span{display:block;width:16px;height:1px;background:currentColor;margin:4px auto}
+
+/* Hero */
+.hero{position:relative;min-height:min(900px,100svh);display:flex;align-items:flex-end;color:var(--night-text);background:var(--night) url(img/hero.jpg) 62% 40%/cover no-repeat;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(15,14,13,.88) 0%,rgba(15,14,13,.62) 42%,rgba(15,14,13,.15) 75%),linear-gradient(0deg,rgba(15,14,13,.7),rgba(15,14,13,0) 45%)}
+.hero .wrap{position:relative;width:100%;padding-bottom:clamp(56px,9vh,104px);padding-top:140px}
+.hero h1{max-width:12.5ch;margin-bottom:28px}
+.hero p{font-size:19px;max-width:44ch;color:rgba(236,231,220,.82);margin-bottom:38px}
+.hero .ctas{display:flex;gap:12px;flex-wrap:wrap}
+.hero .note{margin-top:30px;font:400 12.5px/1.4 var(--mono);letter-spacing:.04em;color:var(--night-mute)}
+
+/* For strip */
+.for{border-bottom:1px solid var(--line)}
+.for .wrap{display:grid;grid-template-columns:1.3fr repeat(4,1fr);align-items:stretch}
+.for .lead{padding:30px 24px 30px 0;font:400 19px/1.3 var(--serif);color:var(--ink-2)}
+.for .item{padding:30px 24px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.for .item b{font:500 15px/1.3 var(--sans)}
+.for .item small{font:400 12px/1.3 var(--mono);color:var(--mute);letter-spacing:.04em}
+
+section{padding:clamp(80px,11vw,144px) 0}
+.head{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:end;margin-bottom:64px}
+.head p{color:var(--ink-2);max-width:46ch;justify-self:end}
+
+/* What DraftHR is: capability cards with drawn product views */
+.caps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.cap{background:var(--card);border:1px solid var(--line-soft);border-radius:6px;overflow:hidden;display:flex;flex-direction:column}
+.cap .view{height:250px;background:var(--paper-2);border-bottom:1px solid var(--line-soft);position:relative;overflow:hidden;padding:26px 26px 0}
+.cap .body{padding:26px}
+.cap h3{margin-bottom:10px}
+.cap p{color:var(--ink-2);font-size:15px}
+
+/* Shared drawn UI pieces */
+.sheet{background:#fff;border:1px solid var(--line-soft);border-radius:5px 5px 0 0;box-shadow:0 1px 0 rgba(0,0,0,.02),0 12px 30px -18px rgba(40,30,20,.25);height:100%;padding:18px 20px;font-size:12.5px;line-height:1.5}
+.tag{display:inline-flex;align-items:center;gap:6px;font:500 10.5px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--mute);padding:5px 7px;border:1px solid var(--line-soft);border-radius:3px;background:var(--card)}
+.tag.seal-t{color:var(--seal);border-color:#E4C9C2;background:var(--seal-soft)}
+.tag.ok{color:var(--ok);border-color:#C9DCCF;background:#EAF2EC}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.row{display:flex;align-items:center;gap:10px}
+.sec{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft)}
+.sec:last-child{border-bottom:0}
+.sec i{font:400 10.5px/1 var(--mono);color:var(--mute);width:18px;font-style:normal}
+.sec span{flex:1}
+.tick{width:16px;height:16px;border-radius:50%;background:var(--ink);display:grid;place-items:center}
+.tick svg{width:9px;height:9px;stroke:#fff}
+.pending{width:16px;height:16px;border-radius:50%;border:1px dashed var(--mute)}
+.ln{height:6px;border-radius:3px;background:var(--line-soft);margin:7px 0}
+
+/* Letter types (tiles) */
+.letters{background:var(--paper-2)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.tile{display:flex;flex-direction:column;gap:18px}
+.tile .ph{aspect-ratio:3/4;border-radius:999px 999px 6px 6px;overflow:hidden;background:var(--night)}
+.tile .ph img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.05) brightness(.92) sepia(.12);transition:transform 1.2s cubic-bezier(.2,.7,.2,1),filter .6s}
+.tile:hover .ph img{transform:scale(1.03);filter:grayscale(.6) contrast(1.05) brightness(.95) sepia(.15)}
+.tile h3{font-size:26px;display:flex;justify-content:space-between;align-items:baseline}
+.tile h3 small{font:400 12px/1 var(--mono);color:var(--mute);letter-spacing:.04em}
+.tile p{color:var(--ink-2);font-size:15px}
+.letters .more{margin-top:48px;display:flex;justify-content:space-between;align-items:center;gap:20px;border-top:1px solid var(--line);padding-top:26px;color:var(--ink-2)}
+
+/* How it works: step tabs swapping a drawn workspace */
+.how{background:var(--night);color:var(--night-text)}
+.how .head p{color:var(--night-mute)}
+.how-grid{display:grid;grid-template-columns:.85fr 1.4fr;gap:48px;align-items:start}
+.steps{display:flex;flex-direction:column;border-top:1px solid var(--night-line)}
+.step{text-align:left;padding:24px 0;border-bottom:1px solid var(--night-line);display:grid;grid-template-columns:44px 1fr;gap:4px 8px;color:var(--night-mute);transition:color .25s}
+.step b{font:400 28px/1.15 var(--serif);color:inherit}
+.step i{font:400 12px/2.6 var(--mono);font-style:normal;letter-spacing:.06em}
+.step p{grid-column:2;font-size:15px;line-height:1.55;max-height:0;overflow:hidden;opacity:0;transition:max-height .45s ease,opacity .35s,margin .35s}
+.step[aria-selected=true]{color:var(--night-text)}
+.step[aria-selected=true] i{color:#D9A89E}
+.step[aria-selected=true] p{max-height:140px;opacity:1;margin-top:8px;color:rgba(236,231,220,.75)}
+.step:hover{color:var(--night-text)}
+.stage{position:relative;background:var(--night-2);border:1px solid var(--night-line);border-radius:8px;padding:clamp(14px,2.4vw,28px);min-height:520px}
+.win{background:var(--paper);color:var(--ink);border-radius:6px;overflow:hidden;box-shadow:0 30px 60px -30px rgba(0,0,0,.6)}
+.win-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line-soft);background:var(--card);font-size:12.5px}
+.win-bar .crumb{color:var(--mute)}.win-bar .crumb b{color:var(--ink);font-weight:500}
+.pane{display:none;grid-template-columns:200px 1fr;min-height:420px}
+.pane.on{display:grid;animation:fade .35s ease}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.side{border-right:1px solid var(--line-soft);padding:16px;font-size:12.5px;background:var(--card)}
+.side h6{font:500 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:4px 0 10px}
+.main{padding:22px 26px;font:400 13.5px/1.65 var(--serif);position:relative}
+.main .meta{font:400 11px/1 var(--mono);color:var(--mute);letter-spacing:.04em;margin-bottom:14px}
+.main p{margin-bottom:10px}
+.main .hl{background:var(--seal-soft);box-shadow:-8px 0 0 var(--seal-soft),8px 0 0 var(--seal-soft);border-radius:2px}
+.field{border:1px solid var(--line-soft);border-radius:4px;background:#fff;padding:8px 10px;margin-bottom:10px}
+.field small{display:block;font:400 10.5px/1.3 var(--mono);color:var(--mute);margin-bottom:3px}
+.prop{position:absolute;right:18px;bottom:18px;width:min(270px,70%);background:#fff;border:1px solid var(--line);border-radius:6px;padding:14px;font:400 12.5px/1.5 var(--sans);box-shadow:0 18px 40px -20px rgba(40,30,20,.45)}
+.prop .acts{display:flex;gap:8px;margin-top:10px}
+.mini{height:28px;padding:0 11px;font-size:12px;border-radius:3px;display:inline-flex;align-items:center}
+.mini.solid{background:var(--ink);color:var(--paper)}.mini.line{border:1px solid var(--line)}
+.person{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-soft)}
+.av{width:26px;height:26px;border-radius:50%;background:var(--paper-2);display:grid;place-items:center;font:500 10.5px/1 var(--sans);color:var(--ink-2);border:1px solid var(--line-soft)}
+.person div{flex:1;line-height:1.3}.person small{color:var(--mute);font-size:11.5px}
+.choice{border:1px solid var(--line);border-radius:5px;padding:12px;margin-bottom:10px;font:400 12.5px/1.45 var(--sans);display:flex;gap:10px}
+.choice.sel{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.radio{flex:0 0 14px;height:14px;border-radius:50%;border:1px solid var(--mute);margin-top:2px}
+.choice.sel .radio{border:4px solid var(--ink)}
+.stamp{position:absolute;right:26px;top:70px;width:92px;height:92px;border-radius:50%;background:var(--seal);color:#F6E9E4;display:grid;place-items:center;text-align:center;font:italic 400 13px/1.15 var(--serif);transform:rotate(-8deg);box-shadow:inset 0 0 0 5px var(--seal),inset 0 0 0 6px rgba(246,233,228,.45)}
+.stamp b{display:block;font:italic 500 30px/1 var(--serif)}
+
+/* Numbers */
+.nums{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--ink)}
+.num{padding:30px 24px 0 0;border-right:1px solid var(--line)}
+.num+.num{padding-left:24px}.num:last-child{border-right:0}
+.num small{display:block;font:400 12px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin-bottom:46px}
+.num b{display:block;font:300 clamp(56px,7vw,96px)/.9 var(--serif);letter-spacing:-.03em}
+.num p{margin-top:16px;font-size:14.5px;color:var(--ink-2);max-width:24ch}
+
+/* Pricing: hairline table */
+.pricing{border-top:1px solid var(--line)}
+.bill{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);padding:3px;gap:2px;margin-bottom:40px}
+.bill button{height:36px;padding:0 16px;border-radius:3px;font-size:14px;color:var(--ink-2)}
+.bill button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+.bill em{font-style:normal;font:400 11.5px/1 var(--mono);color:var(--seal);margin-left:6px}
+.bill button[aria-pressed=true] em{color:#E7BBB1}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--ink);border-bottom:1px solid var(--line)}
+.plan{padding:34px 30px 34px 0;display:flex;flex-direction:column}
+.plan+.plan{padding-left:30px;border-left:1px solid var(--line)}
+.plan .name{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.plan .name h3{font-size:28px}
+.plan .price{font:300 64px/1 var(--serif);letter-spacing:-.03em}
+.plan .per{font:400 13px/1 var(--mono);color:var(--mute);margin:10px 0 18px;letter-spacing:.03em}
+.plan .fit{color:var(--ink-2);font-size:15px;min-height:48px;margin-bottom:26px}
+.plan ul{list-style:none;border-top:1px solid var(--line);margin-bottom:30px;flex:1}
+.plan li{padding:11px 0;border-bottom:1px solid var(--line-soft);font-size:14.5px;display:flex;gap:10px;align-items:baseline}
+.plan li::before{content:"§";font:400 12px/1 var(--mono);color:var(--seal)}
+.plan .btn{justify-content:center}
+.plan.pro{background:linear-gradient(var(--card),var(--card)) padding-box}
+.single{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:26px 0;flex-wrap:wrap}
+.single p{font:400 22px/1.3 var(--serif)}.single p span{color:var(--mute)}
+
+/* FAQ */
+.faq-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:64px}
+.faq-grid .aside p{color:var(--ink-2);margin:18px 0 28px;max-width:34ch}
+details{border-bottom:1px solid var(--line)}
+details:first-child{border-top:1px solid var(--line)}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:20px;padding:24px 0;font:400 21px/1.3 var(--serif)}
+summary::-webkit-details-marker{display:none}
+summary .pm{flex:0 0 28px;height:28px;border:1px solid var(--line);border-radius:50%;position:relative;transition:transform .3s,background .2s}
+summary .pm::before,summary .pm::after{content:"";position:absolute;left:50%;top:50%;width:10px;height:1px;background:var(--ink);transform:translate(-50%,-50%)}
+summary .pm::after{transform:translate(-50%,-50%) rotate(90deg);transition:transform .3s}
+details[open] .pm::after{transform:translate(-50%,-50%) rotate(0)}
+details[open] summary .pm{background:var(--paper-2)}
+details p{padding:0 48px 26px 0;color:var(--ink-2);max-width:62ch}
+
+/* Closing call to action */
+.close{background:var(--night);color:var(--night-text);padding:clamp(80px,10vw,128px) 0;overflow:hidden}
+.close .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
+.close h2{margin-bottom:22px}
+.close p{color:var(--night-mute);font-size:18px;margin-bottom:36px}
+.close .ctas{display:flex;gap:12px;flex-wrap:wrap}
+.letter{position:relative;background:var(--paper);color:var(--ink);border-radius:4px;padding:38px 40px 46px;font:400 14.5px/1.7 var(--serif);box-shadow:0 40px 80px -40px rgba(0,0,0,.8);transform:rotate(1.2deg)}
+.letter .from{font:400 11px/1.5 var(--mono);color:var(--mute);letter-spacing:.03em;margin-bottom:22px}
+.letter p{margin-bottom:12px}
+.letter .sign{margin-top:22px;font-style:italic}
+.letter .stamp{top:auto;bottom:-26px;right:30px}
+
+/* Footer */
+footer{background:var(--paper);padding:72px 0 28px}
+.fcols{display:grid;grid-template-columns:1.4fr repeat(4,1fr);gap:32px;padding-bottom:56px;border-bottom:1px solid var(--line)}
+.fcols p{color:var(--ink-2);max-width:30ch;margin-top:14px;font-size:15px}
+.fcols h6{font:500 11.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin-bottom:16px}
+.fcols ul{list-style:none;display:flex;flex-direction:column;gap:9px;font-size:15px}
+.fcols a:hover{color:var(--seal)}
+.word{font:300 clamp(80px,21vw,300px)/.8 var(--serif);letter-spacing:-.05em;padding:40px 0 30px;color:var(--ink);white-space:nowrap;text-align:center}
+.word em{font-style:italic;color:var(--seal)}
+.legal{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font:400 12.5px/1.5 var(--mono);color:var(--mute);border-top:1px solid var(--line);padding-top:22px}
+
+/* Quiet reveal */
+.js .rv{opacity:0;transform:translateY(14px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1)}
+.js .rv.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}.js .rv{opacity:1;transform:none}}
+
+/* Tablet */
+@media (max-width:1020px){
+  .nav ul{display:none}.menu{display:block}.nav .login{display:none}
+  .for .wrap{grid-template-columns:1fr 1fr}.for .lead{grid-column:1/-1;border-bottom:1px solid var(--line);padding:24px 0}
+  .for .item:nth-child(2){border-left:0;padding-left:0}
+  .for .item:nth-child(n+4){border-top:1px solid var(--line)}
+  .for .item:nth-child(4){border-left:0;padding-left:0}
+  .head{grid-template-columns:1fr}.head p{justify-self:start}
+  .caps{grid-template-columns:1fr}
+  .tiles{grid-template-columns:1fr 1fr}
+  .how-grid{grid-template-columns:1fr}
+  .nums{grid-template-columns:1fr 1fr}.num:nth-child(2){border-right:0}.num:nth-child(3){padding-left:0}.num:nth-child(n+3){border-top:1px solid var(--line);margin-top:30px}
+  .plans{grid-template-columns:1fr}.plan,.plan+.plan{padding:30px 0;border-left:0}.plan+.plan{border-top:1px solid var(--line)}
+  .faq-grid{grid-template-columns:1fr;gap:32px}
+  .close .wrap{grid-template-columns:1fr}
+  .fcols{grid-template-columns:1fr 1fr}.fcols>div:first-child{grid-column:1/-1}
+}
+/* Phone */
+@media (max-width:640px){
+  .nav .right .btn{display:none}
+  .hero{background-position:70% 30%}
+  .hero::before{background:linear-gradient(0deg,rgba(15,14,13,.92) 0%,rgba(15,14,13,.6) 55%,rgba(15,14,13,.35))}
+  .hero p{font-size:17px}
+  .for .wrap{grid-template-columns:1fr}.for .item,.for .item:nth-child(n){border-left:0;padding:16px 0;border-top:1px solid var(--line)}
+  .cap .view{height:220px}
+  .tiles{grid-template-columns:1fr 1fr;gap:14px}.tile h3{font-size:20px;flex-direction:column;gap:6px}.tile p{font-size:13.5px}
+  .letters .more{flex-direction:column;align-items:flex-start}
+  .stage{min-height:0;padding:10px}
+  .pane{grid-template-columns:1fr;min-height:400px}.side{display:none}
+  .main{padding:18px}
+  .prop{position:relative;right:auto;bottom:auto;width:100%;margin-top:14px}
+  .stamp{width:76px;height:76px;top:56px;right:14px}.stamp b{font-size:24px}
+  .nums{grid-template-columns:1fr}.num,.num+.num{padding:24px 0;border-right:0;margin-top:0;border-top:1px solid var(--line)}.num:first-child{border-top:0}.num small{margin-bottom:18px}
+  details p{padding-right:0}summary{font-size:19px}
+  .letter{padding:28px 24px 40px;transform:none}
+  .fcols{grid-template-columns:1fr 1fr}
+  .btn{height:48px}
+}
+
+/* Three looks for the mockup round. Same layout, different identity. */
+html[data-look="2"]{--paper:#F2F3F1;--paper-2:#E6E8E5;--card:#FAFBFA;--ink:#14213A;--ink-2:#3A4558;--mute:#7A8090;--line:#D3D7DC;--line-soft:#E2E5E8;--night:#0F1A2E;--night-2:#16223A;--night-line:#26324A;--night-text:#ECEDEA;--night-mute:#98A0B0;--seal:#9A7432;--seal-soft:#F3ECDD;--serif:"EB Garamond",Georgia,serif;--sans:"Inter Tight",system-ui,sans-serif}
+html[data-look="2"] h1,html[data-look="2"] h2{font-weight:400}
+html[data-look="2"] .dark .clause{color:#D4B67E}
+html[data-look="2"] .step[aria-selected=true] i{color:#D4B67E}
+html[data-look="2"] .seal,html[data-look="2"] .stamp{background:#9A7432;box-shadow:inset 0 0 0 3px #9A7432,inset 0 0 0 4px rgba(255,248,232,.5)}
+html[data-look="2"] .tile .ph{border-radius:6px}
+html[data-look="2"] .btn{border-radius:0}
+html[data-look="3"]{--paper:#EFEEE8;--paper-2:#E4E2D9;--card:#F8F7F3;--ink:#1B2520;--ink-2:#3D4741;--mute:#7D847E;--line:#D2D2C7;--line-soft:#E0DFD6;--night:#1B2520;--night-2:#232F29;--night-line:#34413A;--night-text:#EFEEE8;--night-mute:#A2AAA3;--seal:#B4532A;--seal-soft:#F5E4DA;--serif:"Instrument Serif",Georgia,serif;--sans:"Geist",system-ui,sans-serif;--r:999px}
+html[data-look="3"] h1{font-weight:400;letter-spacing:-.02em}
+html[data-look="3"] h2{font-weight:400}
+html[data-look="3"] .dark .clause,html[data-look="3"] .step[aria-selected=true] i{color:#E59A72}
+html[data-look="3"] .seal,html[data-look="3"] .stamp{background:#B4532A;box-shadow:inset 0 0 0 3px #B4532A,inset 0 0 0 4px rgba(255,240,230,.5)}
+html[data-look="3"] .tile .ph{border-radius:12px}
+html[data-look="3"] .cap,html[data-look="3"] .stage{border-radius:14px}
+html[data-look="3"] .bill button{border-radius:999px}
+html[data-look="3"] .hero::before{background:linear-gradient(90deg,rgba(20,30,25,.9) 0%,rgba(20,30,25,.6) 45%,rgba(20,30,25,.1) 80%),linear-gradient(0deg,rgba(20,30,25,.7),rgba(20,30,25,0) 45%)}
+/* Look picker */
+.picker{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;display:flex;gap:4px;align-items:center;background:#111;color:#eee;border-radius:999px;padding:5px;font:500 13px/1 var(--sans);box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:calc(100vw - 32px)}
+.picker span{padding:0 10px 0 12px;opacity:.7;white-space:nowrap}
+.picker button{height:34px;padding:0 14px;border-radius:999px;color:#ccc;white-space:nowrap}
+.picker button[aria-pressed=true]{background:#fff;color:#111}
+@media (max-width:640px){.picker span{display:none}.picker button{padding:0 11px;font-size:12px}}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="seal">D</span>DraftHR</a>
+    <ul>
+      <li><a href="#what">Product</a></li>
+      <li><a href="#letters">Letters</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#faq">Questions</a></li>
+    </ul>
+    <div class="right">
+      <a class="login" href="#">Log in</a>
+      <a class="btn btn-solid" href="#">Start a letter</a>
+      <button class="menu" aria-label="Menu"><span></span><span></span><span></span></button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <!-- 1. Top of page -->
+  <section class="hero" style="padding:0">
+    <div class="wrap">
+      <h1 class="rv">HR letters that stand up to <em>scrutiny.</em></h1>
+      <p class="rv">AI drafting for UK and US HR letters. Every section structured, checked and kept on record, and nothing is sent until you say so.</p>
+      <div class="ctas rv">
+        <a class="btn btn-solid" href="#">Start a letter <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+        <a class="btn btn-line" href="#how">See how it works</a>
+      </div>
+      <div class="note rv">DraftHR drafts, you decide. Not legal advice.</div>
+    </div>
+  </section>
+
+  <div class="for">
+    <div class="wrap">
+      <div class="lead">Built for the people who put it in writing.</div>
+      <div class="item"><small>01</small><b>HR teams</b></div>
+      <div class="item"><small>02</small><b>Employees</b></div>
+      <div class="item"><small>03</small><b>HR consultants</b></div>
+      <div class="item"><small>04</small><b>UK and US</b></div>
+    </div>
+  </div>
+
+  <!-- 2. What DraftHR is -->
+  <section id="what">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <div class="clause rv">§ 1 &nbsp;What DraftHR is</div>
+          <h2 class="rv">Careful tools for the letters <em>that matter.</em></h2>
+        </div>
+        <p class="rv">Every letter is drafted in the right structure, checked as you go and kept with the matter it belongs to.</p>
+      </div>
+      <div class="caps">
+        <article class="cap rv">
+          <div class="view"><div class="sheet">
+            <div class="row" style="justify-content:space-between;margin-bottom:8px"><b style="font-weight:500">Grievance letter</b><span class="tag">UK</span></div>
+            <div class="sec"><i>1</i><span>Background</span><span class="tick"><svg viewBox="0 0 10 10" fill="none" stroke-width="1.6"><path d="M2 5.2l2 2 4-4.4"/></svg></span></div>
+            <div class="sec"><i>2</i><span>What happened</span><span class="tick"><svg viewBox="0 0 10 10" fill="none" stroke-width="1.6"><path d="M2 5.2l2 2 4-4.4"/></svg></span></div>
+            <div class="sec"><i>3</i><span>Impact on you</span><span class="tag seal-t"><span class="dot"></span>Drafting</span></div>
+            <div class="sec"><i>4</i><span>What you are asking for</span><span class="pending"></span></div>
+            <div class="sec"><i>5</i><span>Next steps</span><span class="pending"></span></div>
+          </div></div>
+          <div class="body"><h3>Section by section</h3><p>Grievances, resignations and settlement replies broken into clear sections, so nothing important is missed.</p></div>
+        </article>
+        <article class="cap rv">
+          <div class="view"><div class="sheet">
+            <div class="row" style="justify-content:space-between;margin-bottom:10px"><b style="font-weight:500">Choose a letter</b><span style="color:var(--mute);font-size:11.5px">35 templates</span></div>
+            <div class="sec"><span>Formal grievance</span><span class="tag">UK</span><span class="tag">US</span></div>
+            <div class="sec"><span>Response to a settlement offer</span><span class="tag">UK</span></div>
+            <div class="sec"><span>Flexible working request</span><span class="tag">UK</span></div>
+            <div class="sec"><span>Resignation letter</span><span class="tag">UK</span><span class="tag">US</span></div>
+            <div class="sec"><span>Appeal against dismissal</span><span class="tag">UK</span></div>
+          </div></div>
+          <div class="body"><h3>35 letter templates</h3><p>From resignations to flexible working requests, shaped for the UK or the US.</p></div>
+        </article>
+        <article class="cap rv">
+          <div class="view"><div class="sheet">
+            <div class="row" style="justify-content:space-between;margin-bottom:10px"><b style="font-weight:500">Matter: J. Carter grievance</b><span class="tag ok"><span class="dot"></span>Open</span></div>
+            <div class="sec"><i style="width:44px">2 Sep</i><span>Grievance letter sent</span></div>
+            <div class="sec"><i style="width:44px">9 Sep</i><span>Reply received, attached</span></div>
+            <div class="sec"><i style="width:44px">16 Sep</i><span>Meeting notes added</span></div>
+            <div class="sec"><i style="width:44px">20 Sep</i><span>Evidence pack signed</span><span class="tag seal-t">Signed</span></div>
+          </div></div>
+          <div class="body"><h3>Matters and evidence</h3><p>Letters, replies and dates kept together, with evidence packs you can sign.</p></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Letter types -->
+  <section id="letters" class="letters">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <div class="clause rv">§ 2 &nbsp;What we draft</div>
+          <h2 class="rv">Four families of <em>HR correspondence.</em></h2>
+        </div>
+        <p class="rv">35 letter templates in all, each shaped for the jurisdiction you choose and the tone the moment needs.</p>
+      </div>
+      <div class="tiles">
+        <a class="tile rv" href="#"><div class="ph"><img src="img/tile-grievances.jpg" alt="Two people in a meeting room" loading="lazy"></div><h3>Grievances <small>UK · US</small></h3><p>Formal complaints with the structure a fair process expects.</p></a>
+        <a class="tile rv" href="#"><div class="ph"><img src="img/tile-settlements.jpg" alt="Stone columns" loading="lazy"></div><h3>Settlements <small>UK</small></h3><p>Measured replies to offers, with the reasoning set out clearly.</p></a>
+        <a class="tile rv" href="#"><div class="ph"><img src="img/tile-flexible.jpg" alt="Misty hills" loading="lazy"></div><h3>Flexible working <small>UK</small></h3><p>Requests and responses that cover what the law asks for.</p></a>
+        <a class="tile rv" href="#"><div class="ph"><img src="img/tile-resignations.jpg" alt="A wide landscape at dusk" loading="lazy"></div><h3>Resignations <small>UK · US</small></h3><p>Notice, final pay and next steps, put plainly.</p></a>
+      </div>
+      <div class="more rv"><span>Also appeals, disciplinary responses, references and more.</span><a class="btn btn-line" href="#">See all 35 letters</a></div>
+    </div>
+  </section>
+
+  <!-- 4. How it works -->
+  <section id="how" class="how dark">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <div class="clause rv">§ 3 &nbsp;How it works</div>
+          <h2 class="rv">From blank page to sent, <em>in four steps.</em></h2>
+        </div>
+        <p class="rv">A deliberate process for letters that may be read again later, by a manager, a tribunal or a court.</p>
+      </div>
+      <div class="how-grid">
+        <div class="steps" role="tablist">
+          <button class="step" role="tab" aria-selected="true" data-step="0"><i>01</i><b>Draft</b><p>Pick one of 35 templates and answer a few plain questions. DraftHR writes a first version in the right structure.</p></button>
+          <button class="step" role="tab" aria-selected="false" data-step="1"><i>02</i><b>Review</b><p>Work through it section by section. Ask for changes in your own words, use AI critique, or bring in a teammate or an expert from the marketplace.</p></button>
+          <button class="step" role="tab" aria-selected="false" data-step="2"><i>03</i><b>Approve</b><p>Every AI change is a proposal you accept or reject. Teams can route the finished letter to the right person to sign off.</p></button>
+          <button class="step" role="tab" aria-selected="false" data-step="3"><i>04</i><b>Send</b><p>Download it and send it yourself, or email it from DraftHR. Either way it is kept on record, with an evidence pack when you need one.</p></button>
+        </div>
+        <div class="stage rv">
+          <div class="win">
+            <div class="win-bar"><span class="crumb">Letters / <b>Formal grievance</b></span><span class="tag" id="state">Draft</span></div>
+
+            <div class="pane on">
+              <div class="side">
+                <h6>Your answers</h6>
+                <div class="field"><small>Who is the letter to?</small>Priya Shah, Head of People</div>
+                <div class="field"><small>What happened?</small>Repeated comments in team meetings since June</div>
+                <div class="field"><small>Jurisdiction</small>England and Wales</div>
+              </div>
+              <div class="main">
+                <div class="meta">SECTION 2 OF 5 · WHAT HAPPENED</div>
+                <p>Dear Ms Shah,</p>
+                <p>I am writing to raise a formal grievance about comments made to me in team meetings between June and September.</p>
+                <p>On three occasions, set out below with dates, remarks were made about my work in front of colleagues that I found undermining.</p>
+                <div class="ln" style="width:92%"></div><div class="ln" style="width:84%"></div><div class="ln" style="width:58%"></div>
+              </div>
+            </div>
+
+            <div class="pane">
+              <div class="side">
+                <h6>Sections</h6>
+                <div class="sec"><i>1</i><span>Background</span></div>
+                <div class="sec" style="font-weight:500"><i>2</i><span>What happened</span></div>
+                <div class="sec"><i>3</i><span>Impact</span></div>
+                <div class="sec"><i>4</i><span>Outcome sought</span></div>
+                <h6 style="margin-top:18px">Reviewers</h6>
+                <div class="person"><span class="av">AK</span><div>Ama K.<br><small>Teammate</small></div></div>
+              </div>
+              <div class="main">
+                <div class="meta">SECTION 2 OF 5 · WHAT HAPPENED</div>
+                <p>I am writing to raise a formal grievance about comments made to me in team meetings between June and September.</p>
+                <p><span class="hl">The comments were clearly intended to humiliate me.</span> On three occasions, set out below with dates, remarks were made about my work in front of colleagues.</p>
+                <div class="prop">
+                  <div class="row" style="justify-content:space-between"><b style="font-weight:500">Proposed change</b><span class="tag seal-t">AI critique</span></div>
+                  <div style="color:var(--ink-2);margin-top:6px">Describe the effect rather than the intent: "I found the comments undermining and upsetting."</div>
+                  <div class="acts"><span class="mini solid">Apply</span><span class="mini line">Dismiss</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="pane">
+              <div class="side">
+                <h6>Checks</h6>
+                <div class="sec"><span>All sections complete</span><span class="tick"><svg viewBox="0 0 10 10" fill="none" stroke-width="1.6"><path d="M2 5.2l2 2 4-4.4"/></svg></span></div>
+                <div class="sec"><span>3 proposals applied</span><span class="tick"><svg viewBox="0 0 10 10" fill="none" stroke-width="1.6"><path d="M2 5.2l2 2 4-4.4"/></svg></span></div>
+                <div class="sec"><span>Review finished</span><span class="tick"><svg viewBox="0 0 10 10" fill="none" stroke-width="1.6"><path d="M2 5.2l2 2 4-4.4"/></svg></span></div>
+              </div>
+              <div class="main" style="font-family:var(--sans);font-size:13px">
+                <div class="meta">APPROVAL</div>
+                <div class="person"><span class="av">AK</span><div>Ama K. reviewed it<br><small>Two comments, both resolved</small></div><span class="tag ok"><span class="dot"></span>Done</span></div>
+                <div class="person"><span class="av">JO</span><div>James O., Head of HR<br><small>Asked to approve before sending</small></div><span class="tag seal-t"><span class="dot"></span>Waiting</span></div>
+                <div class="acts" style="display:flex;gap:8px;margin-top:18px"><span class="mini solid">Approve letter</span><span class="mini line">Ask for changes</span></div>
+                <p style="margin-top:18px;color:var(--mute);font-size:12px">Every AI edit was a proposal. Nothing reached the letter until someone applied it.</p>
+              </div>
+            </div>
+
+            <div class="pane">
+              <div class="side">
+                <h6>Send</h6>
+                <div class="choice sel"><span class="radio"></span><span><b style="font-weight:500">Download and send it yourself</b><br><span style="color:var(--mute)">PDF or Word</span></span></div>
+                <div class="choice"><span class="radio"></span><span><b style="font-weight:500">Email it from DraftHR</b><br><span style="color:var(--mute)">Sent and logged for you</span></span></div>
+              </div>
+              <div class="main">
+                <div class="meta">FINAL · APPROVED 13 OCT 2026</div>
+                <p>Dear Ms Shah,</p>
+                <p>I am writing to raise a formal grievance about comments made to me in team meetings between June and September.</p>
+                <p>I would be grateful for a meeting to discuss this, and I would like to be accompanied by a colleague.</p>
+                <p style="font-style:italic">Yours sincerely,<br>Jordan Carter</p>
+                <div class="stamp"><span><b>D</b>Sent<br>13.10.26</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Records and numbers -->
+  <section id="numbers">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <div class="clause rv">§ 4 &nbsp;In numbers</div>
+          <h2 class="rv">Clear records for every <em>letter you send.</em></h2>
+        </div>
+        <p class="rv">Each step leaves a trail you can stand behind: who drafted, who reviewed, who approved and when.</p>
+      </div>
+      <div class="nums">
+        <div class="num rv"><small>Letter templates</small><b>35</b><p>Grievances, settlements, flexible working, resignations and more.</p></div>
+        <div class="num rv"><small>Jurisdictions</small><b>UK<span style="color:var(--seal)">·</span>US</b><p>The right structure and terms for where you work.</p></div>
+        <div class="num rv"><small>Steps to send</small><b>4</b><p>Draft, review, approve, send. You sign off every one.</p></div>
+        <div class="num rv"><small>For employees</small><b>£9.99</b><p>A single letter, no subscription needed.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Pricing -->
+  <section id="pricing" class="pricing">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <div class="clause rv">§ 5 &nbsp;Pricing</div>
+          <h2 class="rv">Plain pricing, <em>no surprises.</em></h2>
+        </div>
+        <p class="rv">Find the plan that fits how often you write. Marketplace access is included on every plan.</p>
+      </div>
+      <div class="bill rv" role="group" aria-label="Billing">
+        <button aria-pressed="true" data-bill="m">Monthly</button>
+        <button aria-pressed="false" data-bill="y">Yearly<em>1 month free</em></button>
+      </div>
+      <div class="plans">
+        <div class="plan rv">
+          <div class="name"><h3>Starter</h3></div>
+          <div class="price" data-m="£29" data-y="£319">£29</div>
+          <div class="per" data-m="per month" data-y="per year">per month</div>
+          <p class="fit">For small businesses writing a few letters each month.</p>
+          <ul><li>5 letters a month</li><li>All 35 templates</li><li>Full export</li><li>Marketplace access</li></ul>
+          <a class="btn btn-line" href="#">Choose Starter</a>
+        </div>
+        <div class="plan pro rv">
+          <div class="name"><h3>Pro</h3><span class="tag seal-t">Most chosen</span></div>
+          <div class="price" data-m="£79" data-y="£869">£79</div>
+          <div class="per" data-m="per month" data-y="per year">per month</div>
+          <p class="fit">For HR teams and consultants drafting every week.</p>
+          <ul><li>Unlimited letters</li><li>20 AI critique credits a month</li><li>Evidence pack signing</li><li>Marketplace access</li></ul>
+          <a class="btn btn-solid" href="#">Choose Pro</a>
+        </div>
+        <div class="plan rv">
+          <div class="name"><h3>Business</h3></div>
+          <div class="price" data-m="£199" data-y="£2,189">£199</div>
+          <div class="per" data-m="per month" data-y="per year">per month</div>
+          <p class="fit">For organisations that review and approve as a team.</p>
+          <ul><li>Everything in Pro</li><li>5 seats and team review</li><li>Audit trail dashboard</li><li>Bulk letters from a CSV</li><li>Approval queue</li></ul>
+          <a class="btn btn-line" href="#">Choose Business</a>
+        </div>
+      </div>
+      <div class="single rv">
+        <p>Writing for yourself? <span>Employees can draft a single letter from £9.99.</span></p>
+        <a class="btn btn-line" href="#">Draft one letter</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Questions -->
+  <section id="faq" style="padding-top:0">
+    <div class="wrap">
+      <div class="faq-grid">
+        <div class="aside">
+          <div class="clause rv">§ 6 &nbsp;Questions</div>
+          <h2 class="rv">Before you <em>begin.</em></h2>
+          <p class="rv">Still cannot find what you are looking for? We are happy to help.</p>
+          <a class="btn btn-line rv" href="#">Contact us</a>
+        </div>
+        <div class="rv">
+          <details open><summary>What is DraftHR?<span class="pm"></span></summary><p>An AI drafting tool for HR letters in the UK and the US. It helps HR teams, employees and consultants write letters that are clear, well structured and ready to send.</p></details>
+          <details><summary>Is DraftHR legal advice?<span class="pm"></span></summary><p>No. DraftHR drafts, you decide. For complex or high stakes matters, speak to a qualified employment adviser, or book one through the DraftHR marketplace.</p></details>
+          <details><summary>Does it cover the UK and the US?<span class="pm"></span></summary><p>Yes. Choose the jurisdiction when you start and the letter follows the right structure and terms for it.</p></details>
+          <details><summary>Can I change what the AI writes?<span class="pm"></span></summary><p>Always. Edit any section directly, or describe the change you want and apply it only if you are happy with it.</p></details>
+          <details><summary>Can someone check my letter before I send it?<span class="pm"></span></summary><p>Yes. Send it to a teammate or someone you trust to review, or choose an HR expert from the marketplace. You can go back and forth until it is right.</p></details>
+          <details><summary>I am an employee. Do I need a plan?<span class="pm"></span></summary><p>No. Employees can draft a single letter from £9.99 without a subscription.</p></details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. Closing call to action -->
+  <div class="close dark">
+    <div class="wrap">
+      <div>
+        <div class="clause rv">§ 7 &nbsp;Begin</div>
+        <h2 class="rv">Put it in writing, with <em>clarity and care.</em></h2>
+        <p class="rv">Your first draft is a few questions away.</p>
+        <div class="ctas rv">
+          <a class="btn btn-solid" href="#">Start a letter <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+          <a class="btn btn-line" href="#pricing">See pricing</a>
+        </div>
+      </div>
+      <div class="letter rv">
+        <div class="from">JORDAN CARTER<br>13 OCTOBER 2026</div>
+        <p>Dear Ms Shah,</p>
+        <p>Thank you for meeting with me on 9 October. I am writing to confirm what we agreed and the next steps.</p>
+        <p>I would be grateful for a written outcome within the timescale set out in the grievance policy.</p>
+        <p class="sign">Yours sincerely,<br>Jordan Carter</p>
+        <div class="stamp"><span><b>D</b>Approved</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- 9. Footer -->
+<footer>
+  <div class="wrap">
+    <div class="fcols">
+      <div><a class="brand" href="#top"><span class="seal">D</span>DraftHR</a><p>AI drafting for UK and US HR letters, for HR teams, employees and consultants.</p></div>
+      <div><h6>Letters</h6><ul><li><a href="#letters">Grievances</a></li><li><a href="#letters">Settlements</a></li><li><a href="#letters">Flexible working</a></li><li><a href="#letters">Resignations</a></li></ul></div>
+      <div><h6>Product</h6><ul><li><a href="#how">How it works</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#">Marketplace</a></li><li><a href="#faq">Questions</a></li></ul></div>
+      <div><h6>Company</h6><ul><li><a href="#">About</a></li><li><a href="#">Contact</a></li><li><a href="#">LinkedIn</a></li></ul></div>
+      <div><h6>Legal</h6><ul><li><a href="#">Terms</a></li><li><a href="#">Privacy</a></li></ul></div>
+    </div>
+    <div class="word" aria-hidden="true">Draft<em>HR</em></div>
+    <div class="legal"><span>DraftHR drafts, you decide. Not legal advice.</span><span>© 2026 DraftHR</span></div>
+  </div>
+</footer>
+
+<div class="picker" role="group" aria-label="Look"><span>Look</span>
+<button data-look="1" aria-pressed="true">1 · Claret seal</button>
+<button data-look="2" aria-pressed="false">2 · Navy and brass</button>
+<button data-look="3" aria-pressed="false">3 · Green and clay</button></div>
+<script>
+document.documentElement.classList.add('js');
+// Quiet reveal
+(function(){
+  var els=document.querySelectorAll('.rv');
+  if(!('IntersectionObserver' in window)){els.forEach(function(e){e.classList.add('in')});return}
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{rootMargin:'0px 0px -8% 0px'});
+  els.forEach(function(e){io.observe(e)});
+})();
+// How it works tabs
+(function(){
+  var steps=document.querySelectorAll('.step'),panes=document.querySelectorAll('.pane'),state=document.getElementById('state');
+  var names=['Draft','In review','Awaiting approval','Sent'];
+  steps.forEach(function(s,i){s.addEventListener('click',function(){
+    steps.forEach(function(x,j){x.setAttribute('aria-selected',j===i)});
+    panes.forEach(function(p,j){p.classList.toggle('on',j===i)});
+    state.textContent=names[i];
+    state.className='tag'+(i===3?' ok':i>0?' seal-t':'');
+  })});
+})();
+// Billing switch
+(function(){
+  var bs=document.querySelectorAll('[data-bill]');
+  bs.forEach(function(b){b.addEventListener('click',function(){
+    var k=b.dataset.bill;
+    bs.forEach(function(x){x.setAttribute('aria-pressed',x===b)});
+    document.querySelectorAll('[data-m][data-y]').forEach(function(el){el.textContent=el.dataset[k]});
+  })});
+})();
+// Look picker (mockup round only)
+(function(){
+  var bs=document.querySelectorAll('.picker button');
+  function set(k){document.documentElement.dataset.look=k;bs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset.look===k)});try{localStorage.setItem('drafthr-look',k)}catch(e){}}
+  bs.forEach(function(b){b.addEventListener('click',function(){set(b.dataset.look)})});
+  var k=null;try{k=localStorage.getItem('drafthr-look')}catch(e){}
+  var q=(location.hash.match(/look=(\d)/)||[])[1];set(q||k||'1');
+})();
+</script>
+</body>
+</html>

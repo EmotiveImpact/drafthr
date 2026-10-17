@@ -1,0 +1,914 @@
+{
+ "novera": {
+  "title": "Novera – A premium AI-Powered LegalTech & SaaS Platforms Template",
+  "height": 11873,
+  "bodyBg": "rgb(254, 250, 243)",
+  "bgs": [
+   [
+    "rgb(242, 234, 221)",
+    21
+   ],
+   [
+    "rgb(250, 244, 235)",
+    14
+   ],
+   [
+    "rgb(31, 22, 16)",
+    13
+   ],
+   [
+    "rgba(31, 22, 16, 0.12)",
+    10
+   ],
+   [
+    "rgb(255, 255, 255)",
+    5
+   ],
+   [
+    "rgba(255, 255, 255, 0.16)",
+    4
+   ],
+   [
+    "rgb(254, 250, 243)",
+    3
+   ],
+   [
+    "rgba(255, 252, 247, 0)",
+    3
+   ],
+   [
+    "rgb(0, 0, 0)",
+    3
+   ],
+   [
+    "rgba(255, 255, 255, 0.3)",
+    3
+   ],
+   [
+    "rgba(0, 0, 0, 0.5)",
+    1
+   ]
+  ],
+  "colors": [
+   [
+    "rgb(186, 181, 173)",
+    82
+   ],
+   [
+    "rgb(31, 22, 16)",
+    59
+   ],
+   [
+    "rgb(87, 81, 77)",
+    42
+   ],
+   [
+    "rgb(242, 234, 221)",
+    41
+   ],
+   [
+    "rgb(0, 0, 0)",
+    1
+   ],
+   [
+    "rgb(0, 0, 238)",
+    1
+   ]
+  ],
+  "fonts": [
+   [
+    "Inter",
+    203
+   ],
+   [
+    "Petrona",
+    22
+   ],
+   [
+    "sans-serif",
+    1
+   ]
+  ],
+  "radii": [
+   [
+    "64px",
+    24
+   ],
+   [
+    "8px",
+    23
+   ],
+   [
+    "4px",
+    19
+   ],
+   [
+    "6px",
+    14
+   ],
+   [
+    "12px",
+    12
+   ],
+   [
+    "100px",
+    8
+   ],
+   [
+    "2px",
+    3
+   ],
+   [
+    "50px",
+    3
+   ],
+   [
+    "10px",
+    2
+   ],
+   [
+    "11px",
+    2
+   ],
+   [
+    "48px",
+    1
+   ],
+   [
+    "50%",
+    1
+   ]
+  ],
+  "headings": [
+   {
+    "text": "A",
+    "font": "Petrona, \"Petrona Placeholder\", serif",
+    "size": "56px",
+    "weight": "400",
+    "ls": "-2.24px",
+    "lh": "56px",
+    "color": "rgb(242, 234, 221)"
+   },
+   {
+    "text": "smarter",
+    "font": "Petrona, \"Petrona Placeholder\", serif",
+    "size": "56px",
+    "weight": "400",
+    "ls": "-2.24px",
+    "lh": "56px",
+    "color": "rgb(242, 234, 221)"
+   },
+   {
+    "text": "way",
+    "font": "Petrona, \"Petrona Placeholder\", serif",
+    "size": "56px",
+    "weight": "400",
+    "ls": "-2.24px",
+    "lh": "56px",
+    "color": "rgb(242, 234, 221)"
+   },
+   {
+    "text": "to",
+    "font": "Petrona, \"Petrona Placeholder\", serif",
+    "size": "56px",
+    "weight": "400",
+    "ls": "-2.24px",
+    "lh": "56px",
+    "color": "rgb(242, 234, 221)"
+   },
+   {
+    "text": "work",
+    "font": "Petrona, \"Petrona Placeholder\", serif",
+    "size": "56px",
+    "weight": "400",
+    "ls": "-2.24px",
+    "lh": "56px",
+    "color": "rgb(242, 234, 221)"
+   },
+   {
+    "text": "with",
+    "font": "Petrona, \"Petrona Placeholder\", serif",
+    "size": "56px",
+    "weight": "400",
+    "ls": "-2.24px",
+    "lh": "56px",
+    "color": "rgb(242, 234, 221)"
+   },
+   {
+    "text": "law.",
+    "font": "Petrona, \"Petrona Placeholder\", serif",
+    "size": "56px",
+    "weight": "400",
+    "ls": "-2.24px",
+    "lh": "56px",
+    "color": "rgb(242, 234, 221)"
+   },
+   {
+    "text": "Smarter tools for faster, safer legal work.",
+    "font": "Petrona, \"Petrona Placeholder\", serif",
+    "size": "40px",
+    "weight": "500",
+    "ls": "-1.6px",
+    "lh": "44px",
+    "color": "rgb(31, 22, 16)"
+   }
+  ],
+  "buttons": [
+   {
+    "text": "novera",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "0px"
+   },
+   {
+    "text": "Resources",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(242, 234, 221)",
+    "radius": "0px",
+    "font": "Inter",
+    "size": "16px",
+    "pad": "0px"
+   },
+   {
+    "text": "Integrations",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(242, 234, 221)",
+    "radius": "0px",
+    "font": "Inter",
+    "size": "16px",
+    "pad": "0px"
+   },
+   {
+    "text": "Customers",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(242, 234, 221)",
+    "radius": "0px",
+    "font": "Inter",
+    "size": "16px",
+    "pad": "0px"
+   },
+   {
+    "text": "Pricing",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(242, 234, 221)",
+    "radius": "0px",
+    "font": "Inter",
+    "size": "16px",
+    "pad": "0px"
+   },
+   {
+    "text": "Contact",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(242, 234, 221)",
+    "radius": "0px",
+    "font": "Inter",
+    "size": "16px",
+    "pad": "0px"
+   },
+   {
+    "text": "Login",
+    "bg": "rgba(255, 252, 247, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "6px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "8px"
+   },
+   {
+    "text": "Get Started",
+    "bg": "rgba(255, 252, 247, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "6px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "8px"
+   },
+   {
+    "text": "Try Novera",
+    "bg": "rgb(242, 234, 221)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "6px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "16px"
+   },
+   {
+    "text": "Meet our customers",
+    "bg": "rgb(31, 22, 16)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "6px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "16px"
+   }
+  ],
+  "text": "novera Resources Integrations Customers Pricing Contact Login Get Started A smarter way to work with law. An AI-powered platform built to read, understand, and safeguard your contracts. Try Novera Trusted by 100+ lawyers and teams Meet our customers Core Capabilities Smarter tools for faster, safer legal work. Streamline your workflow with intelligent features designed to make every contract more accurate, compliant, and effortless. AI Contract Review Instantly detect risks, missing clauses, and inconsistencies, powered by legal-grade AI. Drafting Automation Generate and edit contracts in minutes with AI-assisted templates tailored to your needs. Compliance Insights Ensure regulatory alignment with automated checks and clear audit trails. Core Capabilities Everything you need to manage contracts intelligently. From drafting to compliance, every step of your legal process is powered by precision, collaboration, and security. Contract Review Instantly analyze complex contracts and detect missing clauses, inconsistencies, or potential risks using advanced legal AI models trained on real-world data. Drafting Assistant Compliance Monitoring Collaboration Hub Integrations Get started Trust & Safety Enterprise-grade protection for every contract. Novera ensures your legal data remains private, encrypted, and compliant with international standards. Get started GDPR & ISO Compliance Built to align with GDPR and ISO 27001 principles for reliable data privacy. End-to-End Encryption All data is encrypted in transit and at rest to prevent unauthorized access. Access Control & Audit Logs Manage user roles and track activity with audit logs. Regional Data Hosting Choose EU or US hosting to match compliance and client needs. Pricing Simple and transparent pricing Find the plan that fits your legal team Monthly Yearly 20% OFF Free €0 /month Perfect for small teams exploring AI-powered contract management. Start for Free Features Up to 3 active contracts Basic AI review Standard support Secure storage Pro Popular €39 €39 /month Ideal for growing legal teams that need speed, automation, and collaboration. Upgrade to Pro Features Unlimited contracts Advanced AI review & drafting Team collaboration Document version history Enterprise Custom Tailored solutions for large organizations with advanced compliance needs. Contact sales Features Dedicated success manager Custom integrations Audit logs & compliance reports On-premise or private cloud setup 24/7 enterprise support Need h"
+ },
+ "thornhill": {
+  "title": "Thornhill - Law Firm Framer Template",
+  "height": 6515,
+  "bodyBg": "rgb(13, 13, 13)",
+  "bgs": [
+   [
+    "rgb(15, 15, 15)",
+    12
+   ],
+   [
+    "rgb(250, 250, 249)",
+    9
+   ],
+   [
+    "rgb(13, 13, 13)",
+    3
+   ],
+   [
+    "rgb(0, 0, 0)",
+    3
+   ],
+   [
+    "rgba(115, 115, 114, 0.2)",
+    3
+   ],
+   [
+    "rgb(8, 8, 8)",
+    2
+   ],
+   [
+    "rgba(255, 255, 255, 0.2)",
+    2
+   ],
+   [
+    "rgba(8, 8, 8, 0)",
+    1
+   ],
+   [
+    "rgba(10, 19, 28, 0)",
+    1
+   ],
+   [
+    "rgb(228, 228, 226)",
+    1
+   ],
+   [
+    "rgba(255, 255, 255, 0.5)",
+    1
+   ],
+   [
+    "rgba(59, 59, 59, 0.4)",
+    1
+   ]
+  ],
+  "colors": [
+   [
+    "rgb(15, 15, 15)",
+    47
+   ],
+   [
+    "rgb(250, 250, 249)",
+    38
+   ],
+   [
+    "rgb(51, 49, 44)",
+    33
+   ],
+   [
+    "rgb(143, 139, 133)",
+    18
+   ],
+   [
+    "rgba(255, 252, 245, 0.5)",
+    4
+   ],
+   [
+    "rgb(15, 14, 13)",
+    3
+   ],
+   [
+    "rgb(233, 233, 232)",
+    3
+   ],
+   [
+    "rgb(160, 156, 151)",
+    1
+   ],
+   [
+    "rgb(0, 0, 0)",
+    1
+   ],
+   [
+    "rgb(0, 0, 238)",
+    1
+   ]
+  ],
+  "fonts": [
+   [
+    "\"TASA Orbiter\"",
+    92
+   ],
+   [
+    "Sentient",
+    55
+   ],
+   [
+    "\"BDO Grotesk Variable\"",
+    1
+   ],
+   [
+    "sans-serif",
+    1
+   ]
+  ],
+  "radii": [
+   [
+    "6px",
+    2
+   ],
+   [
+    "11px",
+    2
+   ],
+   [
+    "45px",
+    1
+   ],
+   [
+    "10px",
+    1
+   ]
+  ],
+  "headings": [
+   {
+    "text": "Counsel Without Compromise",
+    "font": "Sentient, \"Sentient Placeholder\", serif",
+    "size": "94.0239px",
+    "weight": "300",
+    "ls": "-3.76096px",
+    "lh": "103.426px",
+    "color": "rgb(250, 250, 249)"
+   },
+   {
+    "text": "Thornhill",
+    "font": "Sentient, \"Sentient Placeholder\", serif",
+    "size": "38px",
+    "weight": "300",
+    "ls": "-1.4px",
+    "lh": "45.6px",
+    "color": "rgb(15, 15, 15)"
+   },
+   {
+    "text": "is",
+    "font": "Sentient, \"Sentient Placeholder\", serif",
+    "size": "38px",
+    "weight": "300",
+    "ls": "-1.4px",
+    "lh": "45.6px",
+    "color": "rgb(15, 15, 15)"
+   },
+   {
+    "text": "a",
+    "font": "Sentient, \"Sentient Placeholder\", serif",
+    "size": "38px",
+    "weight": "300",
+    "ls": "-1.4px",
+    "lh": "45.6px",
+    "color": "rgb(15, 15, 15)"
+   },
+   {
+    "text": "pre-eminent",
+    "font": "Sentient, \"Sentient Placeholder\", serif",
+    "size": "38px",
+    "weight": "300",
+    "ls": "-1.4px",
+    "lh": "45.6px",
+    "color": "rgb(15, 15, 15)"
+   },
+   {
+    "text": "law",
+    "font": "Sentient, \"Sentient Placeholder\", serif",
+    "size": "38px",
+    "weight": "300",
+    "ls": "-1.4px",
+    "lh": "45.6px",
+    "color": "rgb(15, 15, 15)"
+   },
+   {
+    "text": "firm",
+    "font": "Sentient, \"Sentient Placeholder\", serif",
+    "size": "38px",
+    "weight": "300",
+    "ls": "-1.4px",
+    "lh": "45.6px",
+    "color": "rgb(15, 15, 15)"
+   },
+   {
+    "text": "serving",
+    "font": "Sentient, \"Sentient Placeholder\", serif",
+    "size": "38px",
+    "weight": "300",
+    "ls": "-1.4px",
+    "lh": "45.6px",
+    "color": "rgb(15, 15, 15)"
+   }
+  ],
+  "buttons": [
+   {
+    "text": "What We Do",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 0)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "0px"
+   },
+   {
+    "text": "About",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "0px"
+   },
+   {
+    "text": "People",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "0px"
+   },
+   {
+    "text": "Case Studies",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "0px"
+   },
+   {
+    "text": "Insights",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "0px"
+   },
+   {
+    "text": "Contact Us",
+    "bg": "rgb(250, 250, 249)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "13px 20px 11px"
+   },
+   {
+    "text": "Partner With Us",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "0px"
+   },
+   {
+    "text": "Partner With Us",
+    "bg": "rgb(15, 15, 15)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "13px 20px 11px"
+   },
+   {
+    "text": "Learn More",
+    "bg": "rgb(15, 15, 15)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "13px 20px 11px"
+   },
+   {
+    "text": "Learn More",
+    "bg": "rgb(250, 250, 249)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "13px 20px 11px"
+   }
+  ],
+  "text": "What We Do About People Case Studies Insights Contact Us Counsel Without Compromise Thornhill is a global law firm with expansive international coverage. Partner With Us Thornhillisapre-eminentlawfirmservingaglobalclientbaseinPrivateCapital,PrivateWealth,M&AandDisputes.Weadvisethemontheirmostsignificanttransactions,theirmostsensitivedisputes,andthelong-termstructuringoftheiraffairs. We do not organise ourselves strictly along departmental lines. Instead, we bring together lawyers from across the firm to form a team suited to the specific demands of each client and matter, so clients get direct access to the right expertise rather than being passed between disconnected specialists. Partner With Us PRACTICES What We Do Four core disciplines, each supported by specialist teams across finance, tax, employment and regulatory work — built to give clients the right combination of expertise for whatever the matter demands, however complex. Learn More Private Capital Advising private capital managers across the full investment life cycle Private Wealth Strategic counsel for entrepreneurs, trustees, family offices and businesses M&A Complex, cross-border transactions backed by leading specialist teams Disputes Complex disputes and investigations where reputation and regulation intersect In Numbers Matters Advised $100b Global Offices 3 Jurisdictions Covered 15+ Wealth Built to Last The families who navigate succession successfully are the ones who start planning early, structure their affairs with intention, and put governance in place before it's needed rather than after. Learn More PERSPECTIVES News & Insights View All INSIGHTS The Macroeconomic Backdrop to Private Capital Markets Shifting rate expectations and a more selective fundraising environment are reshaping how sponsors approach both deployment and exit. NEWS Sep 10, 2026 Thornhill Welcomes Rachel Goodman as Managing Partner Eighteen years in Private Capital, now leading the firm's strategy across three offices. NEWS Jul 16, 2026 Thornhill Welcomes New Partner to Its Private Wealth Practice A new appointment strengthening the firm's continued growth in family office advisory. NEWS Sep 16, 2026 Thornhill Defends Technology Company Founders in a High-Profile Shareholder Claim A multi-week trial resolved in favour of the founders on all counts. Counsel Without Compromise Partner With Us WHAT WE DO Overview Private Capital Private Wealth M&A Disputes Case Studies OUR FIRM About People Careers Insights CONNECT "
+ },
+ "asset": {
+  "title": "Asset",
+  "height": 10115,
+  "bodyBg": "rgb(8, 10, 9)",
+  "bgs": [
+   [
+    "rgb(19, 21, 23)",
+    74
+   ],
+   [
+    "rgb(35, 35, 38)",
+    23
+   ],
+   [
+    "rgb(255, 255, 255)",
+    14
+   ],
+   [
+    "rgb(212, 177, 68)",
+    4
+   ],
+   [
+    "rgb(8, 10, 9)",
+    2
+   ],
+   [
+    "rgb(104, 204, 88)",
+    2
+   ],
+   [
+    "rgb(0, 0, 0)",
+    2
+   ],
+   [
+    "rgb(158, 250, 255)",
+    1
+   ],
+   [
+    "rgb(181, 154, 255)",
+    1
+   ],
+   [
+    "rgb(48, 100, 255)",
+    1
+   ],
+   [
+    "rgb(243, 255, 201)",
+    1
+   ],
+   [
+    "rgb(254, 37, 127)",
+    1
+   ]
+  ],
+  "colors": [
+   [
+    "rgba(255, 255, 255, 0.8)",
+    119
+   ],
+   [
+    "rgb(255, 255, 255)",
+    64
+   ],
+   [
+    "rgb(8, 9, 10)",
+    10
+   ],
+   [
+    "rgba(255, 255, 255, 0.7)",
+    5
+   ],
+   [
+    "rgb(0, 0, 0)",
+    3
+   ],
+   [
+    "rgb(0, 0, 238)",
+    1
+   ]
+  ],
+  "fonts": [
+   [
+    "\"Host Grotesk\"",
+    201
+   ],
+   [
+    "sans-serif",
+    1
+   ]
+  ],
+  "radii": [
+   [
+    "4px",
+    94
+   ],
+   [
+    "999px",
+    33
+   ],
+   [
+    "9999px",
+    20
+   ],
+   [
+    "8px",
+    12
+   ],
+   [
+    "2px",
+    10
+   ],
+   [
+    "100%",
+    8
+   ],
+   [
+    "100px",
+    2
+   ],
+   [
+    "11px",
+    2
+   ],
+   [
+    "48px",
+    1
+   ],
+   [
+    "6px",
+    1
+   ],
+   [
+    "10px",
+    1
+   ]
+  ],
+  "headings": [
+   {
+    "text": "The",
+    "font": "\"Host Grotesk\", \"Host Grotesk Placeholder\", sans-serif",
+    "size": "48px",
+    "weight": "400",
+    "ls": "-1.92px",
+    "lh": "52.8px",
+    "color": "rgb(255, 255, 255)"
+   },
+   {
+    "text": "intelligent",
+    "font": "\"Host Grotesk\", \"Host Grotesk Placeholder\", sans-serif",
+    "size": "48px",
+    "weight": "400",
+    "ls": "-1.92px",
+    "lh": "52.8px",
+    "color": "rgb(255, 255, 255)"
+   },
+   {
+    "text": "platform",
+    "font": "\"Host Grotesk\", \"Host Grotesk Placeholder\", sans-serif",
+    "size": "48px",
+    "weight": "400",
+    "ls": "-1.92px",
+    "lh": "52.8px",
+    "color": "rgb(255, 255, 255)"
+   },
+   {
+    "text": "for",
+    "font": "\"Host Grotesk\", \"Host Grotesk Placeholder\", sans-serif",
+    "size": "48px",
+    "weight": "400",
+    "ls": "-1.92px",
+    "lh": "52.8px",
+    "color": "rgb(255, 255, 255)"
+   },
+   {
+    "text": "investing",
+    "font": "\"Host Grotesk\", \"Host Grotesk Placeholder\", sans-serif",
+    "size": "48px",
+    "weight": "400",
+    "ls": "-1.92px",
+    "lh": "52.8px",
+    "color": "rgb(255, 255, 255)"
+   },
+   {
+    "text": "and",
+    "font": "\"Host Grotesk\", \"Host Grotesk Placeholder\", sans-serif",
+    "size": "48px",
+    "weight": "400",
+    "ls": "-1.92px",
+    "lh": "52.8px",
+    "color": "rgb(255, 255, 255)"
+   },
+   {
+    "text": "financial",
+    "font": "\"Host Grotesk\", \"Host Grotesk Placeholder\", sans-serif",
+    "size": "48px",
+    "weight": "400",
+    "ls": "-1.92px",
+    "lh": "52.8px",
+    "color": "rgb(255, 255, 255)"
+   },
+   {
+    "text": "analysis.",
+    "font": "\"Host Grotesk\", \"Host Grotesk Placeholder\", sans-serif",
+    "size": "48px",
+    "weight": "400",
+    "ls": "-1.92px",
+    "lh": "52.8px",
+    "color": "rgb(255, 255, 255)"
+   }
+  ],
+  "buttons": [
+   {
+    "text": "Asset",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "0px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "0px"
+   },
+   {
+    "text": "Overview",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgba(255, 255, 255, 0.8)",
+    "radius": "0px",
+    "font": "\"Host Grotesk\"",
+    "size": "14px",
+    "pad": "0px"
+   },
+   {
+    "text": "Features",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgba(255, 255, 255, 0.8)",
+    "radius": "0px",
+    "font": "\"Host Grotesk\"",
+    "size": "14px",
+    "pad": "0px"
+   },
+   {
+    "text": "Integrations",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgba(255, 255, 255, 0.8)",
+    "radius": "0px",
+    "font": "\"Host Grotesk\"",
+    "size": "14px",
+    "pad": "0px"
+   },
+   {
+    "text": "Benefits",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgba(255, 255, 255, 0.8)",
+    "radius": "0px",
+    "font": "\"Host Grotesk\"",
+    "size": "14px",
+    "pad": "0px"
+   },
+   {
+    "text": "About",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgba(255, 255, 255, 0.8)",
+    "radius": "0px",
+    "font": "\"Host Grotesk\"",
+    "size": "14px",
+    "pad": "0px"
+   },
+   {
+    "text": "Reviews",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgba(255, 255, 255, 0.8)",
+    "radius": "0px",
+    "font": "\"Host Grotesk\"",
+    "size": "14px",
+    "pad": "0px"
+   },
+   {
+    "text": "Pricing",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgba(255, 255, 255, 0.8)",
+    "radius": "0px",
+    "font": "\"Host Grotesk\"",
+    "size": "14px",
+    "pad": "0px"
+   },
+   {
+    "text": "Get started",
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "8px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "8px 12px"
+   },
+   {
+    "text": "Get started now",
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(0, 0, 238)",
+    "radius": "8px",
+    "font": "sans-serif",
+    "size": "12px",
+    "pad": "8px 12px"
+   }
+  ],
+  "text": "Asset Overview Features Integrations Benefits About Reviews Pricing Get started Artificial Intelligence The intelligent platform for investing and financial analysis. Build investing workflows, create intelligent agents, and automate all finances operations with a platform powered by artificial intelligence. Get started now Contact us Intelligent workspace Centralised intelligence for financial operations Financial agents Autonomous agents for financial workflows Secure ecosystem Institutional security for financial systems Trusted by industry Proven by leading financial organisations Financial Intelligence A financial platform that drives investing forward Built with intelligence to transform how you invest, adapt to change, and deliver consistent financial performance. Automate your workflows Build or use predefined workflows to manage investments, track performance, and adapt efficiently to market conditions. Access prompt library Manage finance agents Chat with data source Connect to internal systems Adaptable Infrastructure Infrastructure that adapts to your workflow Configure the platform to your needs, scaling seamlessly from individual tasks to full team operations. Quick setup Integrate quickly with minimal setup and existing systems. Custom models Build and deploy models tailored to your investment strategies. Trusted data Access reliable, validated data across all financial workflows. Integrated Solution Seamless integrations Connect seamlessly with your existing providers and file systems. Enhance workflows by interacting with your data sources. Get started now Enterprise Ready Made for modern finance teams and organisations Built to support regulated finance teams with security, control, and transparency across every workflow. Tailored workflows Configure workflows around your processes and investment strategies. Audited & tested Continuously audited and tested to meet compliance requirements. Full data visibility Gain complete visibility into data usage and activity. Governance & permissions Manage roles, permissions, and policies across teams. Single tenant deployment Dedicated environments ensuring isolation, performance, and control. End to end encryption Encrypt data across storage, processing, and communication layers. Unified Intelligence Everything you need to manage investing decisions Bring decisions, research, and execution together to act faster with clarity and confidence teams. All your investing decisions and actions in one plac"
+ }
+}

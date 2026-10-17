@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light" data-font="manrope">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DraftHR Front Page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Novera's form, Asset's skin: near-black canvas, graphite panels, type in Manrope throughout,
+   painted landscapes behind real product, one coloured capsule per section label. */
+:root{
+  --bg:#080A09; --panel:#131517; --panel-2:#1B1D20; --raise:#232326; --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+  --white:#FFFFFF; --text:rgba(255,255,255,.92); --soft:rgba(255,255,255,.74); --mute:rgba(255,255,255,.56);
+  --gold:#D4B144; --green:#68CC58; --cyan:#9EFAFF; --violet:#B59AFF;
+  --font:"Manrope",system-ui,sans-serif; --mono:"Manrope",system-ui,sans-serif;
+  --wrap:1200px; --gut:clamp(16px,4vw,40px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font:400 16px/1.55 var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden;
+  background-image:radial-gradient(rgba(255,255,255,.045) 1px,transparent 1.2px);background-size:22px 22px}
+a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--gut)}
+:focus-visible{outline:2px solid var(--white);outline-offset:3px;border-radius:4px}
+
+/* Type */
+h1,h2,h3{font-weight:400;color:var(--white)}
+h1{font-weight:400;font-size:clamp(42px,5.2vw,66px);line-height:1.04;letter-spacing:-.045em}
+h1 em,h2 em{font-style:normal}
+h2{font-weight:400;font-size:clamp(32px,3.4vw,48px);line-height:1.1;letter-spacing:-.04em}
+h3{font-size:20px;line-height:1.25;letter-spacing:-.02em}
+.sub{color:var(--soft);font-size:16px;max-width:46ch}
+.tag{display:inline-flex;align-items:center;gap:9px;font-size:13px;color:var(--soft)}
+.tag::before{content:"";width:14px;height:7px;border-radius:99px;background:var(--c,var(--gold))}
+.tag.g{--c:var(--green)}.tag.c{--c:var(--cyan)}.tag.v{--c:var(--violet)}
+.head{max-width:660px;margin-bottom:64px}
+.head .tag{margin-bottom:22px}
+.head h2{margin-bottom:18px}
+.center{text-align:center;margin-left:auto;margin-right:auto}.center .sub{margin:0 auto}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 18px;border-radius:8px;font:500 14.5px/1 var(--font);white-space:nowrap;transition:background .2s,border-color .2s}
+.btn-white{background:var(--white);color:#08090A}.btn-white:hover{background:#E9E9E9}.btn-white:active{background:#D9D9D9}
+.btn-dark{background:var(--raise);color:var(--white)}.btn-dark:hover{background:#2E2E32}
+.btn-line{background:rgba(255,255,255,.08);color:var(--white)}.btn-line:hover{background:rgba(255,255,255,.14)}
+
+section{padding:clamp(110px,12vw,170px) 0}
+
+/* Nav */
+.nav{position:absolute;inset:0 0 auto;z-index:5}
+.nav .wrap{height:76px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.logo{display:flex;align-items:center;gap:10px;font:600 19px/1 var(--font);letter-spacing:-.03em;color:var(--white);text-box:trim-both cap alphabetic}
+.logo img{width:28px;height:28px;object-fit:cover;object-position:50% 40%;flex:none;display:block;border-radius:8px;box-shadow:0 0 0 1px rgba(255,255,255,.10)}
+.nav ul{display:flex;gap:30px;list-style:none;font-size:14px}
+.nav ul a{color:rgba(255,255,255,.8)}.nav ul a:hover{color:var(--white)}
+.nav .r{display:flex;align-items:center;gap:18px;font-size:14px}
+.nav .r>a:first-child{color:rgba(255,255,255,.8)}
+.nav .btn{height:36px;padding:0 14px;font-size:14px}
+
+/* 1. Hero: full-bleed photograph, headline bottom left */
+.hero{position:relative;height:min(940px,100svh);min-height:640px;background:#0b0b0b;display:flex;align-items:flex-end;overflow:hidden}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,10,9,.86) 0%,rgba(8,10,9,.5) 45%,rgba(8,10,9,.08) 80%),linear-gradient(0deg,rgba(8,10,9,1) 0%,rgba(8,10,9,.4) 26%,rgba(8,10,9,0) 52%),linear-gradient(180deg,rgba(8,10,9,.6),rgba(8,10,9,0) 18%)}
+.hero .wrap{position:relative;z-index:2;width:100%;padding-bottom:clamp(64px,10vh,120px)}
+.hero h1{max-width:12.5ch;margin:22px 0 22px}
+.hero .sub{font-size:17px;max-width:42ch;margin-bottom:34px}
+.hero .acts{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.hero .note{margin-top:22px;font-size:13px;color:var(--mute)}
+
+
+/* Hero sequence: six photographs tell one letter's journey, night to blue hour */
+.hero{background:#0b0b0b!important}
+.hero .bg{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transform:scale(1.05);transition:opacity 1.6s ease,transform 9s linear;z-index:0}
+.hero .bg.on{opacity:1;transform:scale(1)}
+.hero::after{z-index:1}
+.hero h1{transition:opacity .5s ease,transform .6s ease}
+.hero h1.out{opacity:0;transform:translateY(8px)}
+.seq{position:absolute;left:0;right:0;bottom:0;z-index:3}
+.seq .wrap{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding-bottom:28px}
+.seq button{text-align:left;padding-top:14px;position:relative;font-size:12.5px;color:var(--mute);transition:color .3s}
+.seq button::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:rgba(255,255,255,.18);border-radius:2px}
+.seq button i{position:absolute;left:0;top:0;height:2px;width:0;background:var(--white);border-radius:2px}
+.seq button.done i{width:100%}
+.seq button.on{color:var(--white)}
+.seq button.on i{animation:fill var(--dur,7s) linear forwards}
+.seq.paused button.on i{animation-play-state:paused}
+@keyframes fill{to{width:100%}}
+.seq b{display:block;font-weight:400;color:inherit;font-size:12px;opacity:.7;margin-bottom:2px}
+.hero > .wrap{padding-bottom:clamp(120px,16vh,170px)!important}
+@media (max-width:600px){.seq .wrap{gap:6px;padding-bottom:20px}.seq button span{display:none}.seq b{font-size:11px}.hero > .wrap{padding-bottom:96px!important}}
+@media (prefers-reduced-motion:reduce){.hero .bg{transform:none}.seq button.on i{animation:none;width:100%}}
+
+/* 2. Who it is for (where Novera puts its logo strip) */
+.for{padding:24px 0 0}
+.for p{text-align:center;color:var(--mute);font-size:14px;margin-bottom:28px}
+.for ul{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0}
+.for li:first-child{border-left:0}
+.for li{border-left:1px solid var(--line);height:56px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:17px;letter-spacing:-.01em;color:var(--white)}
+.for svg{width:20px;height:20px;stroke:var(--soft);fill:none;stroke-width:1.4}
+
+
+/* Who it is for: three people, one line each */
+.who{padding:clamp(72px,8vw,110px) 0 0}
+.who-lead{text-align:center;color:var(--mute);font-size:14px;margin-bottom:28px}
+.who-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.who-card{background:var(--panel);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;transition:background .2s}
+.who-card:hover{background:var(--panel-2)}
+.who-card .ph{aspect-ratio:4/3;background:#111 center/cover}
+.who-card .wb{padding:22px 24px 26px}
+.who-card h3{margin-bottom:8px}
+.who-card p{color:var(--soft);font-size:15px}
+@media (max-width:1000px){.who-grid{grid-template-columns:1fr}.who-card{display:grid;grid-template-columns:1fr 1.2fr}.who-card .ph{aspect-ratio:auto;min-height:180px}}
+@media (max-width:600px){.who-card{display:flex}.who-card .ph{aspect-ratio:16/10}}
+
+/* 3. Capabilities: painted canvas with real UI, dark caption panel */
+.caps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.cap{background:var(--panel);border-radius:4px;overflow:hidden;}
+.cap .canvas{position:relative;aspect-ratio:4/3;background:#1a1612 center/cover;overflow:hidden}
+.cap .canvas img{position:absolute;border-radius:6px;box-shadow:0 24px 50px -20px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.08)}
+.cap:nth-child(1) .canvas{background-image:url(img/bd-study.jpg)}
+.cap:nth-child(2) .canvas{background-image:url(img/bd-glass.jpg)}
+.cap:nth-child(3) .canvas{background-image:url(img/bd-dusk.jpg)}
+.cap:nth-child(1) .canvas img{left:12%;top:14%;width:96%}
+.cap:nth-child(2) .canvas img{left:20%;top:12%;width:70%}
+.cap:nth-child(3) .canvas img{left:20%;top:12%;width:70%}
+.cap .cap-body{padding:24px 24px 28px}
+.cap h3{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.cap h3::before{content:"";width:6px;height:14px;border-radius:99px;background:var(--c,var(--gold))}
+.cap:nth-child(2) h3{--c:var(--green)}.cap:nth-child(3) h3{--c:var(--cyan)}
+.cap p{color:var(--soft);font-size:15px}
+
+/* 4. How it works: big canvas left, tab list right (Novera), steps from the app */
+.how-grid{display:grid;grid-template-columns:1fr 340px;gap:40px;align-items:start}
+.stage{position:relative;aspect-ratio:16/11;border-radius:6px;overflow:hidden;background:#1a1612 url(img/bd-dusk-wide.jpg) center/cover;}
+.stage img{position:absolute;left:8%;top:9%;width:118%;max-width:none;border-radius:8px;box-shadow:0 40px 80px -30px rgba(0,0,0,.7),0 0 0 1px rgba(0,0,0,.1);opacity:0;transform:translateY(10px);transition:opacity .45s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+.stage img.on{opacity:1;transform:none}
+.tabs{display:flex;flex-direction:column;gap:8px}
+.tab{text-align:left;background:var(--panel);border-radius:4px;padding:18px 20px;transition:background .2s,border-color .2s}
+.tab b{display:flex;align-items:center;justify-content:space-between;font-weight:400;font-size:16px;color:var(--white)}
+.tab b small{font-size:12px;color:var(--mute)}
+.tab p{color:var(--soft);font-size:14.5px;max-height:0;overflow:hidden;opacity:0;transition:max-height .4s ease,opacity .3s,margin .3s}
+.tab[aria-selected=true]{background:var(--raise);box-shadow:inset 2px 0 0 var(--white)}
+.tab[aria-selected=true] p{max-height:120px;opacity:1;margin-top:10px}
+.tab:hover{background:var(--panel-2)}
+.tabs .btn{align-self:flex-start;margin-top:16px}
+
+/* 5. Letter types: painted tiles */
+.letters{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.letter{background:var(--panel);border-radius:4px;overflow:hidden;display:flex;flex-direction:column}
+.letter .art{aspect-ratio:1/1;background:center/cover;position:relative}
+.letter:nth-child(1) .art{background-image:url(img/paint-a.jpg);background-position:20% 40%}
+.letter:nth-child(2) .art{background-image:url(img/paint-b.jpg);background-position:70% 30%}
+.letter:nth-child(3) .art{background-image:url(img/paint-c.jpg);background-position:40% 70%}
+.letter:nth-child(4) .art{background-image:url(img/paint-wide.jpg);background-position:90% 60%}
+.letter .art span{position:absolute;left:16px;top:16px;background:rgba(255,255,255,.92);color:#08090A;font-size:12px;border-radius:99px;padding:5px 10px}
+.letter .lbody{padding:20px 20px 24px}
+.letter h3{font-size:19px;margin-bottom:8px}
+.letter p{color:var(--soft);font-size:14.5px}
+.more{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-top:28px;color:var(--soft);font-size:15px;flex-wrap:wrap}
+
+.letter{position:relative;padding:24px}
+.letter .ico{width:44px;height:44px;border-radius:50%;background:var(--raise);display:grid;place-items:center;margin-bottom:56px}
+.letter .ico svg{width:20px;height:20px;stroke:var(--white);fill:none;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round}
+.letter .jur{position:absolute;right:20px;top:24px;font-size:12px;color:var(--soft);background:var(--raise);border-radius:99px;padding:4px 10px}
+.letter .lbody{padding:0}
+.letter:hover{background:var(--panel-2)}
+#letters h2{max-width:16ch}
+
+/* 6. Records and numbers: Novera's trust band, as a graphite panel */
+.band{background:var(--panel);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.nums{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);margin-top:64px}
+.num{padding:32px 24px 0 0}
+.num+.num{padding-left:24px;border-left:1px solid var(--line)}
+.num b{display:block;font-weight:300;font-size:clamp(44px,4.6vw,64px);line-height:1;letter-spacing:-.05em;color:var(--white)}
+.num small{display:block;font-size:13px;color:var(--mute);margin:14px 0 6px}
+.num p{font-size:14.5px;color:var(--soft);max-width:24ch}
+.records{display:grid;grid-template-columns:repeat(4,1fr);gap:32px;margin-top:64px}
+.records div{display:flex;flex-direction:column;gap:8px}
+.records b{display:flex;align-items:center;gap:10px;font-weight:400;color:var(--white)}
+.records svg{width:18px;height:18px;stroke:var(--white);fill:none;stroke-width:1.4}
+.records p{font-size:14.5px;color:var(--soft)}
+
+/* 7. Pricing */
+.bill{display:inline-flex;align-items:center;gap:14px;margin:4px auto 48px;font-size:16px;color:var(--soft)}
+.sw{width:44px;height:24px;border-radius:99px;background:var(--raise);position:relative;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--white);transition:transform .25s}
+.sw[aria-checked=true]::after{transform:translateX(20px)}
+.bill .off{font-size:12px;background:var(--raise);color:var(--white);padding:5px 9px;border-radius:99px}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:left}
+.plan{background:var(--panel);border-radius:6px;padding:28px;display:flex;flex-direction:column}
+.plan.pro{background:var(--raise)}
+.plan .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.plan .top h3{font-size:20px}
+.plan .pop{font-size:12px;background:var(--white);color:#08090A;padding:4px 10px;border-radius:99px}
+.plan .price{display:flex;align-items:baseline;gap:6px}
+.plan .price b{font-weight:400;font-size:48px;letter-spacing:-.05em;color:var(--white)}
+.plan .price span{color:var(--mute);font-size:14px}
+.plan .fit{color:var(--soft);font-size:14.5px;margin:12px 0 22px;min-height:44px}
+.plan .btn{width:100%;margin-bottom:26px}
+.plan .feat{font-size:12.5px;color:var(--mute);display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.plan .feat::before,.plan .feat::after{content:"";flex:1;height:1px;background:var(--line)}
+.plan ul{list-style:none;display:flex;flex-direction:column;gap:11px;font-size:14.5px;color:var(--soft)}
+.plan li{display:flex;gap:10px;align-items:flex-start}
+.plan li svg{flex:0 0 16px;width:16px;height:16px;margin-top:3px;stroke:var(--white);fill:none;stroke-width:1.5}
+.single{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;background:var(--panel);border-radius:6px;padding:20px 24px;margin-top:16px;text-align:left}
+.single p{color:var(--soft)}.single p b{font-weight:500;color:var(--white)}
+
+/* 8. Questions: two columns, accordion cards */
+.faq{display:grid;grid-template-columns:.85fr 1.15fr;gap:64px;align-items:start}
+.faq .head{margin-bottom:0}
+details{background:var(--panel);border-radius:4px;margin-bottom:8px;transition:background .2s}
+details[open]{background:var(--raise)}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 22px;font-size:16px;color:var(--white)}
+summary::-webkit-details-marker{display:none}
+summary i{flex:0 0 14px;height:14px;position:relative}
+summary i::before,summary i::after{content:"";position:absolute;left:0;top:6.5px;width:14px;height:1.2px;background:var(--white);transition:transform .25s}
+summary i::after{transform:rotate(90deg)}
+details[open] summary i::after{transform:rotate(0)}
+details p{padding:0 22px 22px;color:var(--soft);font-size:15px;max-width:60ch}
+
+/* 9. Closing call to action: Novera's card */
+.cta{background:var(--panel);border-radius:6px;display:grid;grid-template-columns:1fr 1.05fr;overflow:hidden;min-height:400px}
+.cta .txt{padding:clamp(32px,5vw,64px);display:flex;flex-direction:column;justify-content:center}
+.cta h2{margin:20px 0 16px;max-width:13ch}
+.cta .sub{margin-bottom:30px}
+.cta .acts{display:flex;gap:10px;flex-wrap:wrap}
+.cta .pic{position:relative;background:#1a1612 url(img/bd-glass.jpg) center 30%/cover;margin:20px 20px 20px 0;border-radius:4px;overflow:hidden}
+.cta .pic img{position:absolute;left:12%;top:12%;width:150%;max-width:none;border-radius:8px;box-shadow:0 30px 60px -25px rgba(0,0,0,.7)}
+
+/* 10. Footer */
+footer{border-top:1px solid var(--line);padding:64px 0 40px;margin-top:clamp(96px,11vw,150px)}
+.fgrid{display:grid;grid-template-columns:1.5fr repeat(4,1fr);gap:32px}
+.fgrid p{color:var(--soft);font-size:14.5px;max-width:30ch;margin-top:16px}
+.fgrid h6{font-size:13px;font-weight:400;color:var(--mute);margin-bottom:14px}
+.fgrid ul{list-style:none;display:flex;flex-direction:column;gap:10px;font-size:14.5px;color:var(--soft)}
+.fgrid a:hover{color:var(--white)}
+.legal{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:56px;padding-top:24px;font-size:13px;color:var(--mute)}
+
+
+/* ===== v5: editorial rhythm below the hero ===== */
+.sub{font-size:17px;line-height:1.6}
+h2{font-size:clamp(36px,4.2vw,58px);line-height:1.05;letter-spacing:-.045em}
+
+/* Who: portrait photo cards, words on the picture */
+.who-grid{gap:20px}
+.who-card{position:relative;background:#111;border-radius:6px;aspect-ratio:4/5;display:block}
+.who-card .ph{position:absolute;inset:0;aspect-ratio:auto;transition:transform 1.2s cubic-bezier(.2,.7,.2,1)}
+.who-card:hover .ph{transform:scale(1.035)}
+.who-card::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(8,10,9,.94) 0%,rgba(8,10,9,.55) 34%,rgba(8,10,9,0) 62%)}
+.who-card .wb{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:28px}
+.who-card h3{font-size:26px;letter-spacing:-.03em;margin-bottom:10px}
+.who-card p{font-size:15.5px;color:var(--soft);max-width:32ch}
+.who-card .go{display:inline-flex;align-items:center;gap:8px;margin-top:18px;font-size:14px;color:var(--white)}
+.who-card .go svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.6;transition:transform .3s}
+.who-card:hover .go svg{transform:translateX(3px)}
+.who-card:hover{background:#111}
+
+/* Chapters: one letter, four steps, alternating */
+.chapters{display:flex;flex-direction:column;gap:clamp(96px,10vw,150px)}
+.ch{display:grid;grid-template-columns:1.3fr 1fr;gap:clamp(40px,6vw,96px);align-items:center}
+.ch:nth-child(even){grid-template-columns:1fr 1.3fr}
+.ch:nth-child(even) .ch-pic{order:2}
+.ch-pic{position:relative;aspect-ratio:5/4;border-radius:8px;overflow:hidden;background:#111 center/cover}
+.ch-pic::before{content:"";position:absolute;inset:0;background:linear-gradient(200deg,rgba(8,10,9,0) 30%,rgba(8,10,9,.55) 100%)}
+.ch-pic img{position:absolute;left:7%;top:38%;width:96%;max-width:none;border-radius:10px;box-shadow:0 50px 90px -30px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.06)}
+
+.ch-n{display:flex;align-items:center;gap:14px;font-size:14px;color:var(--mute);margin-bottom:26px}
+.ch-n::after{content:"";width:48px;height:1px;background:var(--line-2)}
+.ch h3{font-size:clamp(30px,3vw,42px);line-height:1.08;letter-spacing:-.04em;margin-bottom:20px;max-width:14ch}
+.ch p{color:var(--soft);font-size:17px;line-height:1.6;max-width:40ch}
+.ch ul{list-style:none;margin-top:28px;display:flex;flex-direction:column;gap:12px;font-size:15px;color:var(--text)}
+.ch li{display:flex;gap:12px;align-items:flex-start}
+.ch li::before{content:"";flex:0 0 6px;height:6px;border-radius:50%;background:var(--c,var(--gold));margin-top:9px}
+.ch:nth-child(2){--c:var(--green)}.ch:nth-child(3){--c:var(--cyan)}.ch:nth-child(4){--c:var(--violet)}
+
+/* Statement: full-bleed photograph, one line that matters */
+.statement{position:relative;min-height:min(860px,100svh);display:flex;align-items:flex-end;padding:0;overflow:hidden;background:#0b0b0b center/cover}
+.statement::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,10,9,.92) 0%,rgba(8,10,9,.62) 46%,rgba(8,10,9,.12) 82%),linear-gradient(0deg,rgba(8,10,9,1) 0%,rgba(8,10,9,0) 40%),linear-gradient(180deg,rgba(8,10,9,1) 0%,rgba(8,10,9,0) 22%)}
+.statement .wrap{position:relative;z-index:1;width:100%;padding-bottom:clamp(72px,9vw,120px)}
+.statement h2{font-size:clamp(42px,5.4vw,76px);max-width:13ch;margin:22px 0 22px}
+.statement .sub{max-width:44ch;margin-bottom:56px}
+.statement .records{margin-top:0;padding-top:32px;border-top:1px solid var(--line-2)}
+
+/* Numbers: plain, large, no box */
+.nums{margin-top:0;border-top:0}
+.nums-sec{padding:clamp(72px,8vw,110px) 0 0}
+
+/* Letters: a contents page, not a card grid */
+.index{display:grid;grid-template-columns:.8fr 1.2fr;gap:clamp(40px,6vw,96px);align-items:start}
+.index .head{position:sticky;top:48px;margin-bottom:0}
+.index .head .btn{margin-top:30px}
+.cat{display:grid;grid-template-columns:1fr auto;gap:6px 24px;padding:26px 0;border-top:1px solid var(--line);transition:padding .3s}
+.cat:last-child{border-bottom:1px solid var(--line)}
+.cat h3{font-size:24px;letter-spacing:-.03em}
+.cat .ct{font-size:13px;color:var(--mute);align-self:center}
+.cat p{grid-column:1/-1;color:var(--mute);font-size:15px;line-height:1.7;transition:color .3s}
+.cat:hover p{color:var(--soft)}
+.cat:hover h3{color:var(--white)}
+.juris{display:flex;gap:8px;margin-top:22px}
+.juris span{font-size:12.5px;color:var(--soft);background:var(--raise);border-radius:99px;padding:5px 11px}
+
+/* Closing: full-bleed photograph */
+.close{position:relative;min-height:640px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0;overflow:hidden;background:#0b0b0b center/cover}
+.close::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(8,10,9,.55) 0%,rgba(8,10,9,.88) 70%),linear-gradient(180deg,rgba(8,10,9,1) 0%,rgba(8,10,9,0) 25%,rgba(8,10,9,0) 75%,rgba(8,10,9,1) 100%)}
+.close .wrap{position:relative;z-index:1}
+.close h2{font-size:clamp(42px,5.4vw,76px);max-width:14ch;margin:22px auto 20px}
+.close .sub{margin:0 auto 34px}
+.close .acts{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+footer{margin-top:0}
+
+@media (max-width:1000px){
+  .who-grid{grid-template-columns:1fr 1fr}.who-card{display:block}.who-card:last-child{grid-column:1/-1;aspect-ratio:16/10}
+  .ch,.ch:nth-child(even){grid-template-columns:1fr}
+  .ch:nth-child(even) .ch-pic{order:0}
+  .index{grid-template-columns:1fr}.index .head{position:static}
+}
+@media (max-width:600px){
+  .ch-pic img{top:42%;width:130%}
+  .who-grid{grid-template-columns:1fr}.who-card,.who-card:last-child{aspect-ratio:4/5}
+  .ch-pic{aspect-ratio:4/3.6}
+  .statement .records{grid-template-columns:1fr}
+  .cat{grid-template-columns:1fr}.cat .ct{display:none}
+}
+
+/* Story controls hidden (Edem): photos still advance on their own */
+.seq{display:none}
+.hero > .wrap{padding-bottom:clamp(72px,11vh,130px)!important}
+@media (max-width:600px){.hero > .wrap{padding-bottom:64px!important}}
+
+
+/* ===== Light mode: warm white page; photo sections stay dark ===== */
+html[data-theme=light]{
+  --bg:#F7F6F2; --panel:#EFEDE7; --panel-2:#E8E5DE; --raise:#E3E0D8; --line:rgba(12,12,10,.10); --line-2:rgba(12,12,10,.18);
+  --white:#0C0C0A; --text:rgba(12,12,10,.88); --soft:rgba(12,12,10,.66); --mute:rgba(12,12,10,.52);
+  --gold:#B8901F; --green:#3E9A33; --cyan:#2A9AA3; --violet:#7A5BE0;
+}
+html[data-theme=light] body{background-color:var(--bg);background-image:radial-gradient(rgba(12,12,10,.06) 1px,transparent 1.2px)}
+html[data-theme=light] .btn-white{background:#0C0C0A;color:#fff}
+html[data-theme=light] .btn-white:hover{background:#26261F}
+html[data-theme=light] .btn-line{background:rgba(12,12,10,.06)}
+html[data-theme=light] .btn-line:hover{background:rgba(12,12,10,.11)}
+html[data-theme=light] .plan .pop{background:#0C0C0A;color:#fff}
+html[data-theme=light] .ch-pic img{box-shadow:0 40px 80px -30px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.06)}
+/* Sections that sit on photographs keep the dark palette */
+html[data-theme=light] .nav,html[data-theme=light] .hero,html[data-theme=light] .statement,html[data-theme=light] .close,html[data-theme=light] .plan.pro{
+  --bg:#080A09; --panel:#131517; --panel-2:#1B1D20; --raise:#232326; --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+  --white:#FFFFFF; --text:rgba(255,255,255,.92); --soft:rgba(255,255,255,.74); --mute:rgba(255,255,255,.56);
+  --gold:#D4B144; --green:#68CC58; --cyan:#9EFAFF; --violet:#B59AFF;
+}
+html[data-theme=light] :is(.nav,.hero,.statement,.close,.plan.pro) .btn-white{background:#fff;color:#08090A}
+html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line{background:rgba(255,255,255,.12)}
+html[data-theme=light] .plan.pro{background:#111214;color:var(--text)}
+html[data-theme=light] .plan.pro .pop{background:#fff;color:#08090A}
+html[data-theme=light] .statement,html[data-theme=light] .close{margin:0 clamp(8px,1.2vw,16px);border-radius:10px}
+html[data-theme=light] .statement::after{background:linear-gradient(90deg,rgba(8,10,9,.92) 0%,rgba(8,10,9,.62) 46%,rgba(8,10,9,.12) 82%),linear-gradient(0deg,rgba(8,10,9,.95) 0%,rgba(8,10,9,0) 40%)}
+html[data-theme=light] .close::after{background:radial-gradient(ellipse at center,rgba(8,10,9,.55) 0%,rgba(8,10,9,.85) 75%)}
+html[data-theme=light] footer{margin-top:clamp(64px,7vw,100px)}
+html[data-theme=light] :focus-visible{outline-color:#0C0C0A}
+
+/* Theme switch (for comparing; not part of the final site) */
+.theme{position:fixed;right:16px;bottom:16px;z-index:50;display:flex;gap:2px;padding:4px;border-radius:99px;background:rgba(20,20,22,.88);backdrop-filter:blur(10px);box-shadow:0 10px 30px -10px rgba(0,0,0,.5)}
+.theme button{height:36px;padding:0 16px;border-radius:99px;font-size:13.5px;color:rgba(255,255,255,.7)}
+.theme button[aria-pressed=true]{background:#fff;color:#08090A}
+
+
+/* ===== Polish round: sticky menu, editorial questions, sharper pricing, footer wordmark ===== */
+.bar{position:fixed;inset:0 0 auto;z-index:40;transform:translateY(-100%);transition:transform .35s cubic-bezier(.2,.7,.2,1),background .3s;background:rgba(8,10,9,.78);backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);box-shadow:0 1px 0 var(--line)}
+.bar.on{transform:none}
+.bar .wrap{height:64px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.bar ul{display:flex;gap:30px;list-style:none;font-size:14px}
+.bar ul a{color:var(--soft)}.bar ul a:hover,.bar ul a.cur{color:var(--white)}
+.bar .r{display:flex;align-items:center;gap:18px;font-size:14px}
+.bar .r>a:first-child{color:var(--soft)}
+.bar .btn{height:36px;padding:0 14px;font-size:14px}
+html[data-theme=light] .bar{background:rgba(247,246,242,.82)}
+html[data-theme=light] .bar .btn-white{background:#0C0C0A;color:#fff}
+@media (max-width:1000px){.bar ul{display:none}}
+@media (max-width:600px){.bar .r>a:first-child{display:none}}
+
+/* Questions: a hairline list, larger questions */
+.faq{grid-template-columns:.8fr 1.2fr;gap:clamp(40px,6vw,96px)}
+details,details[open]{background:none;border-radius:0;margin:0;border-top:1px solid var(--line)}
+details:last-of-type{border-bottom:1px solid var(--line)}
+summary{padding:26px 0;font-size:clamp(18px,1.6vw,21px);letter-spacing:-.02em}
+summary:hover{color:var(--white);opacity:.8}
+details p{padding:0 0 28px;font-size:16px;line-height:1.65}
+summary i{flex:0 0 32px;height:32px;border-radius:50%;background:var(--panel);transition:background .2s,transform .3s}
+summary i::before,summary i::after{left:10px;top:15.4px;width:12px}
+details[open] summary i{background:var(--white)}
+details[open] summary i::before,details[open] summary i::after{background:var(--bg)}
+
+/* Pricing: calmer cards, clear hierarchy */
+.plans{gap:20px}
+.plan{padding:32px;border-radius:10px}
+.plan .top h3{font-size:18px;color:var(--soft)}
+.plan .price b{font-size:clamp(48px,4.4vw,60px);font-weight:300}
+.plan .feat{display:none}
+.plan .btn{margin-bottom:28px;height:46px}
+.plan ul{border-top:1px solid var(--line);padding-top:24px;gap:13px;font-size:15px}
+.single{border-radius:10px;padding:24px 32px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-2)}
+.single p{font-size:16px}
+
+/* Footer: big quiet wordmark */
+.mark{font-weight:400;font-size:clamp(84px,25vw,368px);line-height:.78;letter-spacing:-.065em;color:var(--white);opacity:.07;margin-top:56px;user-select:none;white-space:nowrap;overflow:hidden}
+html[data-theme=light] .mark{opacity:.09}
+
+
+/* ===== Style round (Edem's reference): mono labels, pill outline buttons, bold tight headlines, black and white photos, stat cards ===== */
+.tag{font:500 12px/1.2 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--soft);gap:0}
+.tag::before{display:none}
+h1,h2{font-weight:600;letter-spacing:-.058em}
+h1{line-height:1}
+h2{line-height:1.02}
+.ch h3,.who-card h3,.cat h3{font-weight:500}
+.btn{border-radius:99px;font:500 12.5px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;height:44px;padding:0 22px}
+.nav .btn,.bar .btn{height:38px;padding:0 16px;font-size:12px}
+.btn-line,.btn-dark{background:transparent!important;box-shadow:inset 0 0 0 1px var(--white);color:var(--white)}
+.btn-line:hover,.btn-dark:hover{background:var(--white)!important;color:var(--bg)}
+html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line{background:transparent!important}
+html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{background:#fff!important;color:#08090A}
+.plan .btn-dark{box-shadow:inset 0 0 0 1px var(--line-2)}
+.num b,.plan .price b{font-weight:500;letter-spacing:-.06em}
+.ch-n{font:500 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase}
+.cat .ct,.who-lead,.plan .top h3,.fgrid h6,.bill .off{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12px}
+.plan .pop{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:6px 10px}
+.juris span{font:500 11.5px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;padding:7px 12px}
+/* Black and white photographs below the hero (the hero story keeps its colour) */
+/* Photos stay in full colour (Edem) */
+
+/* Who: stat cards, photo on top */
+.who-top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:48px;flex-wrap:wrap}
+.who-top h2{max-width:15ch;margin-top:20px}
+.who-grid{gap:20px}
+.who-card{aspect-ratio:auto!important;display:flex!important;flex-direction:column;background:var(--panel);border-radius:4px;overflow:hidden}
+.who-card::after{display:none}
+.who-card .ph{position:relative;inset:auto;aspect-ratio:16/10;background-size:cover}
+.who-card .wb{position:static;padding:32px 32px 34px;display:flex;flex-direction:column;flex:1}
+.who-card .stat{font-weight:600;font-size:clamp(52px,5vw,72px);line-height:.95;letter-spacing:-.06em;color:var(--white)}
+.who-card h3{font-size:18px;font-weight:500;letter-spacing:-.01em;margin:14px 0 22px}
+.who-card p{font-size:16px;color:var(--mute);max-width:34ch;flex:1}
+.who-card .go{align-self:flex-start;margin-top:30px;height:40px;padding:0 18px;border-radius:99px;box-shadow:inset 0 0 0 1px var(--white);font:500 12px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;display:inline-flex;align-items:center;transition:background .2s,color .2s}
+.who-card .go svg{display:none}
+.who-card:hover .go{background:var(--white);color:var(--bg)}
+.who-card:hover .ph{transform:none}
+@media (max-width:1000px){.who-grid{grid-template-columns:1fr}.who-card:last-child{grid-column:auto}}
+
+
+/* ===== Levels: three panels, stone stepping to ink (Edem's reference, DraftHR colours) ===== */
+.lv-head{display:grid;grid-template-columns:1.25fr 1fr;gap:clamp(32px,5vw,80px);align-items:start;margin-bottom:clamp(48px,6vw,80px)}
+.lv-head h2{font-size:clamp(44px,5.6vw,80px);line-height:.98;max-width:12ch;margin-top:20px}
+.lv-head .intro{color:var(--mute);font-size:clamp(17px,1.5vw,20px);line-height:1.5;padding-top:44px;max-width:40ch}
+.lv-head .intro p+p{margin-top:18px}
+.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-radius:6px;overflow:hidden}
+.lvl{position:relative;display:flex;flex-direction:column;min-height:700px;padding:40px 36px 0;overflow:hidden;--ink:#121210;--ink-2:rgba(18,18,16,.66);color:var(--ink)}
+.lvl:nth-child(1){background:#ECE9E2}
+.lvl:nth-child(2){background:#DCD7CC}
+.lvl:nth-child(3){background:#121210;--ink:#fff;--ink-2:rgba(255,255,255,.68)}
+.lvl .ln{font:500 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin-bottom:24px}
+.lvl h3{font-weight:600;font-size:clamp(26px,2.4vw,34px);line-height:1.05;letter-spacing:-.05em;color:var(--ink);margin-bottom:22px;max-width:14ch}
+.lvl p{font-size:16px;line-height:1.55;color:var(--ink);max-width:36ch}
+.lvl p+p{margin-top:14px;color:var(--ink-2)}
+.lvl .shot{position:relative;margin:auto -36px 0;height:340px;overflow:hidden}
+.lvl .shot>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.lvl .shot::after{content:"";position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(0,0,0,0) 30%,rgba(0,0,0,.35) 100%)}
+/* Crisp product moment floating on the photo (real app wording, set as live text) */
+.ui{position:absolute;left:24px;right:24px;bottom:24px;z-index:2;background:#fff;color:#16171A;border-radius:14px;padding:16px 16px 14px;font:500 13px/1.45 var(--font);box-shadow:0 24px 50px -18px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.04);max-width:360px}
+.ui-doc{font:400 14px/1.55 Georgia,"Source Serif 4",serif;color:#24252A}
+.ui-doc s{color:#C2412F;text-decoration-thickness:1px}
+.ui-doc ins{text-decoration:none;color:#1E6B45;background:#E5F3EA;border-bottom:1px solid #7FBF98}
+.ui-doc mark{background:#FBEFC4;color:inherit;padding:0 1px}
+.ui-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #EEEEF0}
+.ui-who{display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px}
+.ui-who i{width:22px;height:22px;border-radius:6px;background:#16171A;display:grid;place-items:center;color:#fff;font-style:normal;font-size:12px}
+.ui-who i.av{border-radius:50%;background:#ECEAF6;color:#4B4A7A;font-size:9.5px;font-weight:700}
+.ui-btns{display:flex;gap:6px}
+.ui-btns b,.ui-btns em{font:600 12px/1 var(--font);font-style:normal;padding:7px 11px;border-radius:7px}
+.ui-btns b{background:#16171A;color:#fff}.ui-btns em{box-shadow:inset 0 0 0 1px #DADBDF;color:#16171A}
+.ui-note{font-size:13px;color:#4A4B52;margin-top:8px}
+.ui-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.ui-head strong{font:400 15px/1.3 Georgia,"Source Serif 4",serif}
+.ui-head span{font-size:11.5px;color:#6A6B72;display:block;margin-top:2px;font-family:var(--font)}
+.ui-stamp{flex:none;font:700 10px/1 var(--font);letter-spacing:.08em;color:#1E7A4C;padding:7px 9px;border-radius:99px;box-shadow:inset 0 0 0 1.5px #1E7A4C;transform:rotate(-4deg)}
+.ui-log{list-style:none;margin-top:12px;padding-top:10px;border-top:1px solid #EEEEF0;display:grid;gap:7px}
+.ui-log li{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.ui-log li::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#2E9A62;transform:translateY(-1px)}
+.ui-log li span{color:#6A6B72;margin-left:auto;white-space:nowrap;padding-left:8px}
+.aud{display:inline-flex;gap:2px;padding:4px;border-radius:99px;background:var(--panel-2);margin-bottom:20px}
+.aud button{height:40px;padding:0 18px;border-radius:99px;font:600 14px/1 var(--font);color:var(--soft);transition:background .25s,color .25s}
+.aud button[aria-pressed=true]{background:var(--white);color:var(--bg)}
+.levels[hidden]{display:none}
+.levels.swap .lvl{animation:lvin .5s cubic-bezier(.2,.7,.2,1) both}
+.levels.swap .lvl:nth-child(2){animation-delay:.06s}.levels.swap .lvl:nth-child(3){animation-delay:.12s}
+@keyframes lvin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.levels.swap .lvl{animation:none}}
+@media (max-width:1000px){.lv-head{grid-template-columns:1fr}.lv-head .intro{padding-top:0}.levels{grid-template-columns:1fr}.lvl{min-height:0}.lvl .shot{height:380px;margin-top:36px}}
+@media (max-width:600px){.lvl{padding:30px 22px 0}.lvl .shot{height:340px;margin:30px -22px 0}.ui{left:16px;right:16px;bottom:16px}}
+
+/* ===== Footer (Edem's reference): black, grouped columns, quiet bottom row ===== */
+footer{background:#000;border-top:0;padding:72px 0 0;margin-top:clamp(96px,10vw,140px);
+  --white:#fff;--text:rgba(255,255,255,.92);--soft:rgba(255,255,255,.62);--mute:rgba(255,255,255,.5);--line:rgba(255,255,255,.12)}
+html[data-theme=light] footer{margin-top:clamp(96px,10vw,140px)}
+.fcols{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px;align-items:start}
+.fcols .logo{opacity:.6;font-size:17px}.fcols .logo img{width:26px;height:26px;filter:grayscale(1)}
+.fgroup+.fgroup{margin-top:36px}
+.fgroup h6{font:500 14.5px/1 var(--font);color:#fff;margin-bottom:14px;letter-spacing:-.005em;text-transform:none}
+.fgroup ul{list-style:none;display:flex;flex-direction:column;gap:9px;font-size:14px;color:var(--soft)}
+.fgroup a:hover{color:#fff}
+.fbottom{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px;border-top:1px solid var(--line);margin-top:96px;padding:48px 0 64px;align-items:start}
+.fbottom .fnote{font-size:13px;max-width:22ch;color:var(--mute)}
+.fbottom h6{font:500 14px/1 var(--font);color:#fff;margin-bottom:10px;text-transform:none;letter-spacing:0}
+.fbottom p{font-size:15px;color:var(--mute)}
+.fbottom .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#D4B144;margin-right:8px;vertical-align:1px}
+footer .mark{color:#fff;opacity:.06;margin-top:0;padding-bottom:8px}
+@media (max-width:1000px){.fcols,.fbottom{grid-template-columns:1fr 1fr}.fcols>div:first-child,.fbottom>div:first-child{grid-column:1/-1}.fbottom>div:first-child{order:9}}
+
+html[data-theme=light] .who-card{background:#fff;box-shadow:0 1px 0 rgba(12,12,10,.04),0 20px 40px -30px rgba(12,12,10,.25)}
+html[data-theme=light] .who-card p{color:var(--soft)}
+
+
+/* ===== Type: Manrope throughout ===== */
+:root{--font-h:var(--font);--hw:600;--hls:-.058em}
+html[data-font=manrope]{--font:"Manrope",system-ui,sans-serif;--font-h:"Manrope",system-ui,sans-serif;--mono:"Manrope",system-ui,sans-serif;--hw:700;--hls:-.045em}
+body{font-family:var(--font)}
+h1,h2,h3,.who-card .stat,.num b,.plan .price b,.logo,.cat h3{font-family:var(--font-h)}
+h1,h2,.lv-head h2,.statement h2,.close h2,.lvl h3,.who-card .stat{font-weight:var(--hw);letter-spacing:var(--hls)}
+.num b,.plan .price b{letter-spacing:var(--hls)}
+html[data-font=manrope] :is(.tag,.btn,.ch-n,.lvl .ln,.cat .ct,.who-lead,.plan .top h3,.bill .off,.plan .pop,.juris span,.who-card .go){letter-spacing:.06em;font-weight:600}
+/* Reveal */
+.js .rv{opacity:0;transform:translateY(16px);transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
+.js .rv.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}.js .rv{opacity:1;transform:none}}
+
+/* Tablet */
+@media (max-width:1000px){
+  .nav ul{display:none}
+  .for ul{grid-template-columns:1fr 1fr}
+  .caps,.letters{grid-template-columns:1fr 1fr}
+  .caps .cap:last-child{grid-column:1/-1}
+  .how-grid{grid-template-columns:1fr}
+  .nums,.records{grid-template-columns:1fr 1fr}
+  .num:nth-child(3){padding-left:0;border-left:0}
+  .num:nth-child(n+3){border-top:1px solid var(--line);margin-top:32px}
+  .plans{grid-template-columns:1fr}
+  .faq{grid-template-columns:1fr;gap:32px}
+  .cta{grid-template-columns:1fr}.cta .pic{min-height:300px;margin:0 20px 20px}
+  .fgrid{grid-template-columns:1fr 1fr}.fgrid>div:first-child{grid-column:1/-1}
+}
+/* Phone */
+@media (max-width:600px){
+  .nav .r>a:first-child{display:none}
+  .hero{background-position:78% 40%}
+  .hero::after{background:linear-gradient(0deg,rgba(8,10,9,1) 0%,rgba(8,10,9,.75) 40%,rgba(8,10,9,.35) 75%,rgba(8,10,9,.55) 100%)}
+  .hero .sub{font-size:16px}
+  .for li{height:52px;font-size:15px}
+  .for li:nth-child(3){border-left:0}
+  .caps,.letters{grid-template-columns:1fr}
+  .caps .cap:last-child{grid-column:auto}
+  .stage{aspect-ratio:4/3.6}.stage img{width:170%}
+  .nums,.records{grid-template-columns:1fr}
+  .num,.num+.num{padding:24px 0 0;border-left:0}
+  .num+.num{border-top:1px solid var(--line);margin-top:24px}
+  .btn{height:44px}
+  .fgrid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<header class="nav"><div class="wrap">
+  <a class="logo" href="#top"><img src="img/logo-mark.png" alt="">DraftHR</a>
+  <ul><li><a href="#how">How it works</a></li><li><a href="#letters">Letters</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#faq">Questions</a></li></ul>
+  <div class="r"><a href="#">Log in</a><a class="btn btn-white" href="#">Start a letter</a></div>
+</div></header>
+
+<header class="bar" aria-hidden="true"><div class="wrap">
+  <a class="logo" href="#top" tabindex="-1"><img src="img/logo-mark.png" alt="">DraftHR</a>
+  <ul><li><a href="#how" tabindex="-1">How it works</a></li><li><a href="#letters" tabindex="-1">Letters</a></li><li><a href="#pricing" tabindex="-1">Pricing</a></li><li><a href="#faq" tabindex="-1">Questions</a></li></ul>
+  <div class="r"><a href="#" tabindex="-1">Log in</a><a class="btn btn-white" href="#" tabindex="-1">Start a letter</a></div>
+</div></header>
+
+<main id="top">
+  <!-- 1. Top of page -->
+  <section class="hero" style="padding:0" data-hero="0">
+    <div class="wrap">
+      <span class="tag rv">AI drafting for UK and US HR letters</span>
+      <h1 class="rv" data-k="h">Some letters start late at night.</h1>
+      <p class="sub rv">For HR teams, and for employees raising a concern. DraftHR writes each letter in the right structure, and you approve every word before it is sent.</p>
+      <div class="acts rv"><a class="btn btn-white" href="#">Start a letter</a><a class="btn btn-line" href="#how">See how it works</a></div>
+      <p class="note rv">From £9.99 a letter. DraftHR drafts, you decide. Not legal advice.</p>
+    </div>
+    <div class="bgs"></div><div class="seq" aria-label="Story"><div class="wrap"></div></div>
+  </section>
+
+  <section class="who"><div class="wrap">
+    <div class="who-top"><div><span class="tag rv">Built for the people who put it in writing</span><h2 class="rv">One careful way to write the letters that matter.</h2></div><a class="btn btn-line rv" href="#pricing">See pricing</a></div>
+    <div class="who-grid">
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/story-1-night.jpg);background-position:72% 35%"></div><div class="wb"><div class="stat">£9.99</div><h3>a letter for employees, no subscription</h3><p>Raise a concern clearly, in the structure a fair process expects.</p><span class="go">Write your letter</span></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/hr-team.jpg);background-position:55% 30%"></div><div class="wb"><div class="stat">4 steps</div><h3>for HR teams, from draft to sent</h3><p>Every manager starts from the same careful structure, reviewed and approved before it goes out.</p><span class="go">For HR teams</span></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/hr-consultant.jpg);background-position:46% 30%"></div><div class="wb"><div class="stat">35</div><h3>letters for consultants, UK and US</h3><p>Draft for clients in the right structure, with a record they can rely on.</p><span class="go">For consultants</span></div></a>
+    </div>
+  </div></section>
+
+  <!-- How it works: three levels of care -->
+  <section id="how"><div class="wrap">
+    <div class="lv-head">
+      <div><span class="tag rv">How it works</span><h2 class="rv">Every letter, checked before it goes.</h2></div>
+      <div class="intro rv"><p>Some letters need a quick first draft. Some need a second pair of eyes. Some need a manager to sign them off.</p><p>Whatever the letter, DraftHR drafts it in the right structure, brings in the right people, and keeps a record of who decided what.</p></div>
+    </div>
+    <div class="aud rv" role="group" aria-label="Show the steps for"><button type="button" data-a="emp" aria-pressed="true">For employees</button><button type="button" data-a="hr" aria-pressed="false">For HR teams</button></div>
+    <div class="levels" data-aud="emp">
+      <article class="lvl"><div class="ln">01 Draft</div><h3>Your concern, put clearly</h3>
+        <p>Pick the letter you need, such as a grievance or a flexible working request, and answer a few plain questions.</p>
+        <p>DraftHR writes it in the right structure. Every suggested change waits until you accept it.</p>
+        <div class="shot"><img src="img/story-1-night.jpg" alt="" loading="lazy" style="object-position:62% 30%">
+          <div class="ui" role="img" aria-label="In a grievance letter, DraftHR suggests a clearer sentence, with Accept and Reject">
+            <div class="ui-doc"><s>My manager has been treating me unfairly.</s> <ins>On 3 September my shifts were changed without notice, and I was not given a reason.</ins></div>
+            <div class="ui-row"><span class="ui-who"><i>&#10022;</i>DraftHR suggests</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
+          </div></div></article>
+      <article class="lvl"><div class="ln">02 Review</div><h3>Read by someone on your side</h3>
+        <p>Share it with someone you trust, or book an HR expert from the marketplace.</p>
+        <p>Their notes sit beside the words they are about, so you can fix it before anyone at work sees it.</p>
+        <div class="shot"><img src="img/h-two-sides.jpg" alt="" loading="lazy" style="object-position:80% 40%">
+          <div class="ui" role="img" aria-label="A trusted reviewer's note beside the highlighted words in the letter">
+            <div class="ui-doc">&hellip;and I would like this to be dealt with <mark>under the formal grievance procedure</mark>.</div>
+            <div class="ui-row"><span class="ui-who"><i class="av">SM</i>Sam, your reviewer</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
+            <div class="ui-note">Good. Ask for a meeting date in writing too, so there is a clear next step.</div>
+          </div></div></article>
+      <article class="lvl"><div class="ln">03 Send</div><h3>Sent, and kept on record</h3>
+        <p>When you are happy with every word, download it and send it yourself, or email it from DraftHR.</p>
+        <p>Your letter and its history stay together in one place, in case you need them later.</p>
+        <div class="shot"><img src="img/story-2-sign.jpg" alt="" loading="lazy" style="object-position:60% 88%">
+          <div class="ui" role="img" aria-label="A sent grievance letter stamped Sent, with its history">
+            <div class="ui-head"><div><strong>Formal grievance</strong><span>To the HR team</span></div><div class="ui-stamp">SENT &middot; 14 OCT</div></div>
+            <ul class="ui-log"><li>Read by Sam<span>13 Oct</span></li><li>You approved the final wording<span>09:02</span></li><li>Emailed to HR from DraftHR<span>09:05</span></li></ul>
+          </div></div></article>
+    </div>
+    <div class="levels" data-aud="hr" hidden>
+      <article class="lvl"><div class="ln">01 Draft</div><h3>Drafted in the right structure</h3>
+        <p>Pick one of 35 letters for the UK or the US and answer a few plain questions.</p>
+        <p>DraftHR writes it section by section. Every AI change waits as a proposal until you accept it.</p>
+        <div class="shot"><img src="img/h-employee.jpg" alt="" loading="lazy">
+          <div class="ui" role="img" aria-label="In the letter, DraftHR suggests replacing one sentence, with Accept and Reject">
+            <div class="ui-doc"><s>This warning will remain on your file indefinitely.</s> <ins>This warning will remain live for 12 months, in line with our Disciplinary Policy.</ins></div>
+            <div class="ui-row"><span class="ui-who"><i>&#10022;</i>DraftHR suggests</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
+          </div></div></article>
+      <article class="lvl"><div class="ln">02 Review</div><h3>Read by someone you trust</h3>
+        <p>Send it to a teammate, someone outside your organisation, or an HR expert from the marketplace.</p>
+        <p>Their suggestions come back beside the words they are about. Go back and forth until it is right.</p>
+        <div class="shot"><img src="img/bd-meeting.jpg" alt="" loading="lazy">
+          <div class="ui" role="img" aria-label="A reviewer's note beside the highlighted words in the letter, with Accept and Reject">
+            <div class="ui-doc">&hellip;a final written warning for persistent lateness<mark>, in breach of our Attendance Policy</mark>.</div>
+            <div class="ui-row"><span class="ui-who"><i class="av">CD</i>Claire Donnelly</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
+            <div class="ui-note">Name the policy that was broken. It makes the warning easier to stand behind at an appeal.</div>
+          </div></div></article>
+      <article class="lvl"><div class="ln">03 Approve and send</div><h3>Signed off, sent and on record</h3>
+        <p>The right person approves it. Then download it and send it yourself, or email it from DraftHR.</p>
+        <p>Appeal windows go in your calendar, and the record stays with the matter.</p>
+        <div class="shot"><img src="img/h-sign.jpg" alt="" loading="lazy" style="object-position:72% 70%">
+          <div class="ui" role="img" aria-label="A sent letter stamped Sent, with its record: approved, handed over, and the appeal window in the calendar">
+            <div class="ui-head"><div><strong>Final written warning</strong><span>Jordan Hale &middot; Warehouse operative</span></div><div class="ui-stamp">SENT &middot; 14 OCT</div></div>
+            <ul class="ui-log"><li>Approved by Priya Shah<span>16:05</span></li><li>Handed over in person<span>16:20</span></li><li>Appeal window closes 21 Oct<span>In your calendar</span></li></ul>
+          </div></div></article>
+    </div>
+  </div></section>
+
+  <!-- Letters: a contents page -->
+  <section id="letters" style="padding-top:0"><div class="wrap index">
+    <div class="head">
+      <span class="tag c rv">What we draft</span>
+      <h2 class="rv">35 letters, for the UK and the US.</h2>
+      <p class="sub rv">From the first offer to the last reply. Each letter follows the structure and terms of the jurisdiction you choose.</p>
+      <div class="juris rv"><span>United Kingdom</span><span>United States</span></div>
+      <a class="btn btn-line rv" href="#">See all 35 letters</a>
+    </div>
+    <div>
+      <div class="cat rv"><h3>Grievance and dispute</h3><span class="ct">4 letters</span><p>Formal grievance, appeal against a warning or dismissal, protected disclosure (whistleblowing), flexible working request.</p></div>
+      <div class="cat rv"><h3>Departure</h3><span class="ct">11 letters</span><p>Resignation, resignation with a grievance, constructive resignation, notice of fundamental breach, resignation withdrawal and acceptance, redundancy, consultation response, settlement cover and counter-offer, reference dispute.</p></div>
+      <div class="cat rv"><h3>Performance and conduct</h3><span class="ct">4 letters</span><p>Disciplinary warning, probation outcome, performance plan response, termination.</p></div>
+      <div class="cat rv"><h3>Leave and sickness</h3><span class="ct">6 letters</span><p>Leave approval, holiday request, sickness notification, return to work, reasonable adjustment or ADA accommodation, right to disconnect.</p></div>
+      <div class="cat rv"><h3>Pay and terms</h3><span class="ct">4 letters</span><p>Salary increase, promotion, contract amendment, pay dispute or wage claim.</p></div>
+      <div class="cat rv"><h3>Onboarding</h3><span class="ct">3 letters</span><p>Offer of employment, reference and employment verification, right to work support.</p></div>
+      <div class="cat rv"><h3>Tribunal and legal</h3><span class="ct">3 letters</span><p>ACAS early conciliation (UK) or EEOC charge (US), tribunal or court claim cover, subject access request.</p></div>
+    </div>
+  </div></section>
+
+  <!-- Statement -->
+  <section class="statement" style="background-image:url(img/story-4-corridor.jpg);background-position:72% 40%"><div class="wrap">
+    <span class="tag v rv">Careful by design</span>
+    <h2 class="rv">Every letter may be read again.</h2>
+    <p class="sub rv">By a manager, a tribunal or a court. So each one carries a clear record of who drafted it, who checked it and who approved it.</p>
+    <div class="records">
+      <div class="rv"><b><svg viewBox="0 0 18 18"><path d="M3 9.5l3.5 3.5L15 4.5"/></svg>You approve every edit</b><p>AI changes wait as proposals until you apply them.</p></div>
+      <div class="rv"><b><svg viewBox="0 0 18 18"><path d="M9 1.8l6 2.2v4.4c0 3.8-2.6 6.6-6 7.7-3.4-1.1-6-3.9-6-7.7V4z"/></svg>Evidence pack signing</b><p>Sign the record that goes with a letter.</p></div>
+      <div class="rv"><b><svg viewBox="0 0 18 18"><path d="M2.5 15.5h13M5 12V7M9 12V3.5M13 12V9"/></svg>Audit trail</b><p>Who drafted, reviewed and approved, and when.</p></div>
+      <div class="rv"><b><svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7"/><path d="M9 5.5v4l2.5 1.5"/></svg>Deadlines kept</b><p>Appeal windows and hearings go in your calendar.</p></div>
+    </div>
+  </div></section>
+
+  <section class="nums-sec"><div class="wrap"><div class="nums">
+      <div class="num rv"><b>35</b><small>Letter templates</small><p>From offers to tribunal covers.</p></div>
+      <div class="num rv"><b>UK, US</b><small>Jurisdictions</small><p>The right structure and terms.</p></div>
+      <div class="num rv"><b>4</b><small>Steps to send</small><p>Draft, review, approve, send.</p></div>
+      <div class="num rv"><b>£9.99</b><small>For employees</small><p>A single letter, no subscription.</p></div>
+  </div></div></section>
+
+  <!-- 6. Pricing -->
+  <section id="pricing" class="center" style="text-align:center"><div class="wrap">
+    <div class="head center">
+      <span class="tag rv">Pricing</span>
+      <h2 class="rv">Simple, transparent pricing.</h2>
+      <p class="sub rv">Find the plan that fits how often you write. Marketplace access is included on every plan.</p>
+    </div>
+    <div class="bill rv"><span>Monthly</span><button class="sw" role="switch" aria-checked="false" aria-label="Yearly billing"></button><span>Yearly</span><span class="off">1 month free</span></div>
+    <div class="plans">
+      <div class="plan rv"><div class="top"><h3>Starter</h3></div>
+        <div class="price"><b data-m="£29" data-y="£319">£29</b><span data-m="/month" data-y="/year">/month</span></div>
+        <p class="fit">For small businesses writing a few letters each month.</p>
+        <a class="btn btn-dark" href="#">Choose Starter</a>
+        <div class="feat">Features</div>
+        <ul><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>5 letters a month</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>All 35 templates</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Full export</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Marketplace access</li></ul></div>
+      <div class="plan pro rv"><div class="top"><h3>Pro</h3><span class="pop">Popular</span></div>
+        <div class="price"><b data-m="£79" data-y="£869">£79</b><span data-m="/month" data-y="/year">/month</span></div>
+        <p class="fit">For HR teams and consultants drafting every week.</p>
+        <a class="btn btn-white" href="#">Choose Pro</a>
+        <div class="feat">Features</div>
+        <ul><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Unlimited letters</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>20 AI critique credits a month</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Evidence pack signing</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Marketplace access</li></ul></div>
+      <div class="plan rv"><div class="top"><h3>Business</h3></div>
+        <div class="price"><b data-m="£199" data-y="£2,189">£199</b><span data-m="/month" data-y="/year">/month</span></div>
+        <p class="fit">For organisations that review and approve as a team.</p>
+        <a class="btn btn-dark" href="#">Choose Business</a>
+        <div class="feat">Features</div>
+        <ul><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Everything in Pro</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>5 seats and team review</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Audit trail dashboard</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Bulk letters from a CSV</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Approval queue</li></ul></div>
+    </div>
+    <div class="single rv"><p><b>Writing for yourself?</b> Employees can draft a single letter from £9.99.</p><a class="btn btn-line" href="#">Draft one letter</a></div>
+  </div></section>
+
+  <!-- 7. Questions -->
+  <section id="faq" style="padding-top:0"><div class="wrap faq">
+    <div class="head">
+      <span class="tag g rv">Questions</span>
+      <h2 class="rv">All you need to know about DraftHR.</h2>
+      <p class="sub rv" style="margin-bottom:24px">Still cannot find what you are looking for?</p>
+      <a class="btn btn-dark rv" href="#">Contact us</a>
+    </div>
+    <div class="rv">
+      <details open><summary>What is DraftHR?<i></i></summary><p>An AI drafting tool for HR letters in the UK and the US. It helps HR teams, employees and consultants write letters that are clear, well structured and ready to send.</p></details>
+      <details><summary>Is DraftHR legal advice?<i></i></summary><p>No. DraftHR drafts, you decide. For complex or high stakes matters, speak to a qualified employment adviser, or book one through the DraftHR marketplace.</p></details>
+      <details><summary>Does it cover the UK and the US?<i></i></summary><p>Yes. Choose the jurisdiction when you start and the letter follows the right structure and terms for it.</p></details>
+      <details><summary>Can I change what the AI writes?<i></i></summary><p>Always. Edit any section directly, or describe the change you want and apply it only if you are happy with it.</p></details>
+      <details><summary>Can someone check my letter before I send it?<i></i></summary><p>Yes. Send it to a teammate or someone you trust, or choose an HR expert from the marketplace. Go back and forth until it is right.</p></details>
+      <details><summary>I am an employee. Do I need a plan?<i></i></summary><p>No. Employees can draft a single letter from £9.99 without a subscription.</p></details>
+    </div>
+  </div></section>
+
+  <!-- Closing -->
+  <section class="close" style="background-image:url(img/h-envelope.jpg);background-position:70% 55%"><div class="wrap">
+    <span class="tag rv">Start today</span>
+    <h2 class="rv">Put it in writing, with clarity and care.</h2>
+    <p class="sub rv">Your first draft is a few questions away.</p>
+    <div class="acts rv"><a class="btn btn-white" href="#">Start a letter</a><a class="btn btn-line" href="#pricing">See pricing</a></div>
+  </div></section>
+</main>
+
+<!-- 9. Footer -->
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="#top"><img src="img/logo-mark.png" alt="">DraftHR</a></div>
+    <div>
+      <div class="fgroup"><h6>DraftHR</h6><ul><li><a href="#how">How it works</a></li><li><a href="#letters">Letters</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#">Experts marketplace</a></li></ul></div>
+      <div class="fgroup"><h6>Built for</h6><ul><li><a href="#">Employees</a></li><li><a href="#">HR teams</a></li><li><a href="#">HR consultants</a></li></ul></div>
+    </div>
+    <div>
+      <div class="fgroup"><h6>Letters</h6><ul><li><a href="#letters">Grievance and dispute</a></li><li><a href="#letters">Departure</a></li><li><a href="#letters">Performance and conduct</a></li><li><a href="#letters">Leave and sickness</a></li><li><a href="#letters">Pay and terms</a></li><li><a href="#letters">All 35 letters</a></li></ul></div>
+      <div class="fgroup"><h6>Company</h6><ul><li><a href="#">About us</a></li><li><a href="#">Contact us</a></li><li><a href="#faq">Questions</a></li></ul></div>
+    </div>
+    <div>
+      <div class="fgroup"><h6>Legal</h6><ul><li><a href="#">Terms of service</a></li><li><a href="#">Privacy policy</a></li><li><a href="#">Cookie policy</a></li></ul></div>
+    </div>
+  </div>
+  <div class="fbottom">
+    <div><p class="fnote">DraftHR drafts, you decide. Not legal advice.</p></div>
+    <div><h6>Language</h6><p>English (UK)</p></div>
+    <div><h6>Jurisdictions</h6><p>United Kingdom, United States</p></div>
+    <div><h6>DraftHR</h6><p>© 2026 DraftHR</p></div>
+  </div>
+</div></footer>
+
+<div class="theme" role="group" aria-label="Colour mode"><button type="button" data-t="light" aria-pressed="true">Light</button><button type="button" data-t="dark" aria-pressed="false">Dark</button></div>
+<script>
+document.documentElement.classList.add('js');
+(function(){
+  var bs=document.querySelectorAll('.aud button'),ls=document.querySelectorAll('.levels[data-aud]');
+  bs.forEach(function(b){b.addEventListener('click',function(){
+    bs.forEach(function(x){x.setAttribute('aria-pressed',x===b)});
+    ls.forEach(function(l){var on=l.dataset.aud===b.dataset.a;l.hidden=!on;l.classList.toggle('swap',on)});
+  })});
+})();
+
+
+(function(){
+  var root=document.documentElement,bs=document.querySelectorAll('.theme button');
+  function set(t){root.setAttribute('data-theme',t);bs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset.t===t)});try{localStorage.setItem('drafthr-theme',t)}catch(e){}}
+  var q=(location.hash.match(/theme=(light|dark)/)||[])[1],saved=null;try{saved=localStorage.getItem('drafthr-theme')}catch(e){}
+  set(q||saved||'light');
+  bs.forEach(function(b){b.addEventListener('click',function(){set(b.dataset.t)})});
+})();
+(function(){
+  var els=document.querySelectorAll('.rv');
+  if(!('IntersectionObserver' in window)){els.forEach(function(e){e.classList.add('in')});return}
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{rootMargin:'0px 0px -6% 0px'});
+  els.forEach(function(e){io.observe(e)});
+})();
+(function(){
+  var sw=document.querySelector('.sw');
+  sw.addEventListener('click',function(){
+    var y=sw.getAttribute('aria-checked')!=='true';sw.setAttribute('aria-checked',y);
+    document.querySelectorAll('[data-m][data-y]').forEach(function(el){el.textContent=el.dataset[y?'y':'m']});
+  });
+})();
+
+// Sticky menu: appears once the hero has scrolled away; marks the current section
+(function(){
+  var bar=document.querySelector('.bar'),hero=document.querySelector('.hero'),links=bar.querySelectorAll('ul a');
+  function on(v){bar.classList.toggle('on',v);bar.setAttribute('aria-hidden',!v);bar.querySelectorAll('a').forEach(function(a){a.tabIndex=v?0:-1})}
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){on(!es[0].isIntersecting)},{rootMargin:'-80px 0px 0px 0px'}).observe(hero);
+    var secs=['how','letters','pricing','faq'].map(function(id){return document.getElementById(id)});
+    var so=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){links.forEach(function(a){a.classList.toggle('cur',a.getAttribute('href')==='#'+e.target.id)})}})},{rootMargin:'-45% 0px -50% 0px'});
+    secs.forEach(function(s){s&&so.observe(s)});
+  }
+})();
+
+// Hero sequence: one letter's journey, night to blue hour. Advances on its own, pauses on hover.
+(function(){
+  var H=[
+    {img:'img/story-1-night.jpg',pos:'75% 40%',ch:'Night',t:'Deciding',h:'Some letters start late at night.'},
+    {img:'img/story-2-sign.jpg',pos:'80% 40%',ch:'Lamplight',t:'Drafting',h:'Every word checked before you sign.'},
+    {img:'img/h-envelope.jpg',pos:'100% 60%',ch:'Morning',t:'Ready',h:'Ready to send by morning.'},
+    {img:'img/story-4-corridor.jpg',pos:'78% 40%',ch:'Dusk',t:'Prepared',h:'Walk in with a clear record.'},
+    {img:'img/h-two-sides.jpg',pos:'75% 45%',ch:'The meeting',t:'Fair',h:'Fair to both sides of the table.'},
+    {img:'img/h-hr-manager.jpg',pos:'70% 40%',ch:'Blue hour',t:'On record',h:'Still standing when it is read again.'}
+  ];
+  var hero=document.querySelector('.hero'),bgs=hero.querySelector('.bgs'),seq=hero.querySelector('.seq'),row=seq.querySelector('.wrap'),h1=hero.querySelector('[data-k=h]');
+  var DUR=7000,cur=-1,timer=null,paused=false,left=DUR,started=0;
+  var layers=H.map(function(d){var el=document.createElement('div');el.className='bg';el.style.backgroundImage='url('+d.img+')';el.style.backgroundPosition=d.pos;bgs.appendChild(el);return el});
+  var btns=H.map(function(d,i){var b=document.createElement('button');b.innerHTML='<i></i><b>'+(i+1)+' / '+H.length+'</b><span>'+d.ch+'</span>';b.style.setProperty('--dur',DUR+'ms');b.addEventListener('click',function(){go(i,true)});row.appendChild(b);return b});
+  function go(i,user){
+    if(i===cur)return;
+    layers.forEach(function(l,j){l.classList.toggle('on',j===i)});
+    btns.forEach(function(b,j){b.classList.toggle('on',j===i);b.classList.toggle('done',j<i);var n=b.querySelector('i');n.style.animation='none';void n.offsetWidth;n.style.animation=''});
+    if(cur>=0){h1.classList.add('out');setTimeout(function(){h1.textContent=H[i].h;h1.classList.remove('out')},450)}else{h1.textContent=H[i].h}
+    cur=i;schedule(DUR);
+  }
+  function schedule(ms){clearTimeout(timer);left=ms;started=Date.now();if(!paused)timer=setTimeout(function(){go((cur+1)%H.length)},ms)}
+  hero.addEventListener('mouseenter',function(){paused=true;seq.classList.add('paused');clearTimeout(timer);left-=Date.now()-started});
+  hero.addEventListener('mouseleave',function(){paused=false;seq.classList.remove('paused');schedule(Math.max(left,800))});
+  var q=(location.hash.match(/hero=(\d)/)||[])[1];
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){DUR=12000}
+  go(q?Math.min(+q-1,H.length-1):0);
+  if(q){paused=true;clearTimeout(timer)}
+})();
+</script>
+</body>
+</html>
