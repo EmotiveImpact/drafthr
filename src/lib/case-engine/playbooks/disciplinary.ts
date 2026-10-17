@@ -1,4 +1,4 @@
-import type { Condition, FactValue, Lens, LensText, Playbook } from "../types";
+import type { Condition, FactValue, Lens, LensText, Playbook } from "../types.js";
 
 /**
  * Disciplinary playbook, draft 0.2, translated from

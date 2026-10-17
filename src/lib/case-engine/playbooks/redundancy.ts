@@ -1,4 +1,4 @@
-import type { Condition, Playbook } from "../types";
+import type { Condition, Playbook } from "../types.js";
 
 /**
  * Redundancy (individual and collective), version 0.2, from the draft

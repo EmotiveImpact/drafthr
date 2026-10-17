@@ -1,4 +1,4 @@
-import type { FactValue, IsoDate, Jurisdiction, Lens, SituationId } from "../types";
+import type { FactValue, IsoDate, Jurisdiction, Lens, SituationId } from "../types.js";
 
 /**
  * A test story: a made-up case written the way a real user would type it,

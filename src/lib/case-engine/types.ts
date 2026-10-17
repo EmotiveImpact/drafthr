@@ -69,7 +69,31 @@ export type CaseEvent =
   | (EventBase & { type: "fact_forgotten"; key: string; reason?: string })
   | (EventBase & { type: "document_added"; documentId: string; name: string })
   | (EventBase & { type: "letter_drafted"; stepId: string; letterId: string })
-  | (EventBase & { type: "letter_sent"; stepId: string; sentOn: IsoDate });
+  | (EventBase & { type: "letter_sent"; stepId: string; sentOn: IsoDate })
+  /**
+   * What the Reader noticed in a story beyond playbook facts: the people in
+   * it and the dated moments, for the case file's People and Timeline.
+   */
+  | (EventBase & {
+      type: "story_noted";
+      storyEventId: string;
+      title?: string;
+      people: CasePerson[];
+      moments: CaseMoment[];
+    });
+
+/** Someone named in the case, with their part in it. */
+export type CasePerson = { name: string; role: string; quote?: string };
+
+/** A dated moment in the story, for the timeline. */
+export type CaseMoment = {
+  /** "YYYY-MM-DD" when the day is known. */
+  date: IsoDate | null;
+  /** The date as the story gave it, for example "2 Oct" or "last Tuesday". */
+  when: string;
+  what: string;
+  quote?: string;
+};
 
 /** A fact as the case file shows it: current value, sources, earlier values. */
 export type FactEntry = {
@@ -102,6 +126,8 @@ export type CaseFile = {
   letters: { stepId: string; letterId: string; drafted: boolean; sentOn?: IsoDate }[];
   /** Fact keys whose question has been asked at least once. */
   asked: string[];
+  /** People and dated moments the Reader noticed, newest reading wins. */
+  notes: { title?: string; people: CasePerson[]; moments: CaseMoment[] };
 };
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
-import { daysBetween, isIsoDate } from "./dates";
-import type { CaseFile, Condition, DateOperand, FactValue, IsoDate, Lens, LensText } from "./types";
+import { daysBetween, isIsoDate } from "./dates.js";
+import type { CaseFile, Condition, DateOperand, FactValue, IsoDate, Lens, LensText } from "./types.js";
 
 export type EvalContext = {
   file: CaseFile;

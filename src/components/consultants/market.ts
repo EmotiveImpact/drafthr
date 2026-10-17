@@ -251,6 +251,9 @@ export function specialtiesForLetter(draft: Draft | undefined): string[] {
   if (!draft) return [];
   switch (draft.letterType) {
     case "warning":
+    case "suspension_confirmation":
+    case "investigation_meeting_invite":
+    case "disciplinary_hearing_invite":
     case "termination":
     case "probation_outcome":
       return ["Disciplinary", "Performance"];

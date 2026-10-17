@@ -11,7 +11,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { CalendarDays, ChevronRight, ClipboardCheck, FolderPlus, History, Plus, type LucideIcon } from "lucide-react";
+import { CalendarDays, ChevronRight, ClipboardCheck, FolderPlus, History, MessagesSquare, Plus, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useProfileStore } from "@/lib/profile";
 import { avatarColor, avatarInitials, avatarInk } from "@/components/ds";
@@ -515,6 +515,10 @@ export function HomeBand({
           <Link to="/matters" className={BAND_BTN_GHOST}>
             <FolderPlus className="size-4" aria-hidden />
             New matter
+          </Link>
+          <Link to="/hr/cases/new" className={BAND_BTN_GHOST}>
+            <MessagesSquare className="size-4" aria-hidden />
+            Start a case
           </Link>
           <Link to="/hr/new" className={BAND_BTN_DARK} data-tour="new-letter-cta">
             <Plus className="size-4" aria-hidden />

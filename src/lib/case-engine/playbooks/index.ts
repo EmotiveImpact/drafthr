@@ -1,7 +1,7 @@
-import type { Playbook, SituationId } from "../types";
-import { disciplinaryPlaybook } from "./disciplinary";
-import { grievancePlaybook } from "./grievance";
-import { redundancyPlaybook } from "./redundancy";
+import type { Playbook, SituationId } from "../types.js";
+import { disciplinaryPlaybook } from "./disciplinary.js";
+import { grievancePlaybook } from "./grievance.js";
+import { redundancyPlaybook } from "./redundancy.js";
 
 export const PLAYBOOKS: Record<SituationId, Playbook> = {
   disciplinary: disciplinaryPlaybook,

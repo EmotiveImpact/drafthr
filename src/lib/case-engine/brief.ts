@@ -1,4 +1,4 @@
-import { conditionRefs, lensText } from "./conditions";
+import { conditionRefs, lensText } from "./conditions.js";
 import type {
   CaseFile,
   FactValue,
@@ -11,7 +11,7 @@ import type {
   RunResult,
   SituationId,
   Source,
-} from "./types";
+} from "./types.js";
 
 /** The AI steps that receive a brief. */
 export type BriefStep = "reader" | "interviewer" | "drafter" | "checker";

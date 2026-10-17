@@ -1,4 +1,4 @@
-import type { StoryFixture } from "./types";
+import type { StoryFixture } from "./types.js";
 
 /**
  * The five grievance test stories from part 9 of the grievance playbook draft

@@ -1,4 +1,4 @@
-import type { FactValue, IsoDate, RuleFn, RuleResult, UkNation } from "../types";
+import type { FactValue, IsoDate, RuleFn, RuleResult, UkNation } from "../types.js";
 import {
   addDays,
   addMonths,
@@ -15,8 +15,8 @@ import {
   isWorkingDay,
   laterOf,
   lastDayOfMonthsBeginningWith,
-} from "./calendar";
-import { needsResult, notApplicable, readInputs, result, type InputReader } from "./inputs";
+} from "./calendar.js";
+import { needsResult, notApplicable, readInputs, result, type InputReader } from "./inputs.js";
 
 /**
  * UK rules. Great Britain (England and Wales, Scotland) and Northern Ireland

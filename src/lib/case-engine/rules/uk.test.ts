@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { RuleContext, RuleId, RuleInput, UkNation } from "../types";
-import { lastDayOfMonthsBeginningWith } from "./calendar";
-import { runRule } from "./index";
-import { GB_SIX_MONTH_LIMIT_FROM } from "./uk";
+import type { RuleContext, RuleId, RuleInput, UkNation } from "../types.js";
+import { lastDayOfMonthsBeginningWith } from "./calendar.js";
+import { runRule } from "./index.js";
+import { GB_SIX_MONTH_LIMIT_FROM } from "./uk.js";
 
 const uk = (nation: UkNation): RuleContext => ({ jurisdiction: { country: "uk", nation }, today: "2026-10-13" });
 const EW = uk("england-wales");

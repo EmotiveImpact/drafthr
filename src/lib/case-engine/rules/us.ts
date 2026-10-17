@@ -1,6 +1,6 @@
-import type { FactValue, IsoDate, RuleFn, RuleResult } from "../types";
-import { addDays, addMonths, addYears, formatLongDate, holidaysKnownFor, isWeekend, nextBusinessDay } from "./calendar";
-import { needsResult, notApplicable, readInputs, result, type InputReader } from "./inputs";
+import type { FactValue, IsoDate, RuleFn, RuleResult } from "../types.js";
+import { addDays, addMonths, addYears, formatLongDate, holidaysKnownFor, isWeekend, nextBusinessDay } from "./calendar.js";
+import { needsResult, notApplicable, readInputs, result, type InputReader } from "./inputs.js";
 
 /**
  * US rules. Federal rules apply in every state; state rules cover California,

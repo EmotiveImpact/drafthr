@@ -1,8 +1,8 @@
-import type { RuleContext, RuleFn, RuleId, RuleInput, RuleResult } from "../types";
-import { RULE_INPUTS } from "./contract";
-import { needsResult, notApplicable } from "./inputs";
-import * as uk from "./uk";
-import * as us from "./us";
+import type { RuleContext, RuleFn, RuleId, RuleInput, RuleResult } from "../types.js";
+import { RULE_INPUTS } from "./contract.js";
+import { needsResult, notApplicable } from "./inputs.js";
+import * as uk from "./uk.js";
+import * as us from "./us.js";
 
 /** Every rule the playbooks can name. Inputs and returns: see contract.ts. */
 export const RULES: Record<RuleId, RuleFn> = {

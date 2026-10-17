@@ -1,4 +1,4 @@
-import type { IsoDate, UkNation } from "../types";
+import type { IsoDate, UkNation } from "../types.js";
 
 /**
  * Pure date helpers for the rules. Everything works on "YYYY-MM-DD" strings

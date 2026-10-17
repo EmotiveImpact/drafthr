@@ -1,5 +1,5 @@
-import type { FactValue, IsoDate, RuleInput, RuleResult } from "../types";
-import { isIsoDate } from "./calendar";
+import type { FactValue, IsoDate, RuleInput, RuleResult } from "../types.js";
+import { isIsoDate } from "./calendar.js";
 
 /**
  * Reads a rule's inputs and remembers which are missing or unusable, so each

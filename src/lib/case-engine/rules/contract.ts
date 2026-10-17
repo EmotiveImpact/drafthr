@@ -1,4 +1,4 @@
-import type { RuleId } from "../types";
+import type { RuleId } from "../types.js";
 
 /**
  * The inputs each rule takes. Playbooks map their fact keys onto these input

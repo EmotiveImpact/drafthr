@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { historyBuilder, rebuildCaseFile } from "./history";
+import { historyBuilder, rebuildCaseFile } from "./history.js";
 
 const ENGLAND = { country: "uk", nation: "england-wales" } as const;
 

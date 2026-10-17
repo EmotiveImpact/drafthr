@@ -1,6 +1,6 @@
-import { evaluate, isKnown, lensText, type EvalContext } from "./conditions";
-import { daysBetween } from "./dates";
-import { runRule } from "./rules";
+import { evaluate, isKnown, lensText, type EvalContext } from "./conditions.js";
+import { daysBetween } from "./dates.js";
+import { runRule } from "./rules/index.js";
 import type {
   CaseFile,
   Deadline,
@@ -12,7 +12,7 @@ import type {
   RouteEntry,
   RuleInput,
   RunResult,
-} from "./types";
+} from "./types.js";
 
 /**
  * Runs a playbook over a case file. Pure: the same file, playbook and day

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { conditionRefs, evaluate, lensText, type EvalContext } from "./conditions";
-import { historyBuilder, rebuildCaseFile } from "./history";
-import type { Condition, FactValue } from "./types";
+import { conditionRefs, evaluate, lensText, type EvalContext } from "./conditions.js";
+import { historyBuilder, rebuildCaseFile } from "./history.js";
+import type { Condition, FactValue } from "./types.js";
 
 function ctxWith(facts: Record<string, FactValue>, extra: Partial<EvalContext> = {}): EvalContext {
   const h = historyBuilder("2026-10-13T09:00:00Z").open("grievance", "employee", {

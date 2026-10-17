@@ -1,4 +1,4 @@
-import type { StoryFixture } from "./types";
+import type { StoryFixture } from "./types.js";
 
 /**
  * The five disciplinary test stories from part 9 of the playbook draft

@@ -1,12 +1,12 @@
 import { writeFileSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
-import { buildBrief } from "./brief";
-import { historyBuilder, rebuildCaseFile } from "./history";
-import { PLAYBOOKS } from "./playbooks";
-import { runPlaybook } from "./runner";
-import { STORIES } from "./stories";
-import type { StoryFixture } from "./stories/types";
-import type { CaseFile, RunResult } from "./types";
+import { buildBrief } from "./brief.js";
+import { historyBuilder, rebuildCaseFile } from "./history.js";
+import { PLAYBOOKS } from "./playbooks/index.js";
+import { runPlaybook } from "./runner.js";
+import { STORIES } from "./stories/index.js";
+import type { StoryFixture } from "./stories/types.js";
+import type { CaseFile, RunResult } from "./types.js";
 
 /** Plays a story into a history the way the app will: open, story, Reader facts, answers. */
 function runStory(story: StoryFixture): { file: CaseFile; run: RunResult } {

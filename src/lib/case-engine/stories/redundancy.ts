@@ -1,4 +1,4 @@
-import type { StoryFixture } from "./types";
+import type { StoryFixture } from "./types.js";
 
 /**
  * The five redundancy test stories (T1 to T5) from part 9 of the redundancy

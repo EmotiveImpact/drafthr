@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildBrief } from "./brief";
-import { historyBuilder, rebuildCaseFile } from "./history";
-import { runPlaybook } from "./runner";
-import type { Playbook } from "./types";
-import { validatePlaybook } from "./validate";
+import { buildBrief } from "./brief.js";
+import { historyBuilder, rebuildCaseFile } from "./history.js";
+import { runPlaybook } from "./runner.js";
+import type { Playbook } from "./types.js";
+import { validatePlaybook } from "./validate.js";
 
 /** A small made-up playbook that exercises every part of the runner. */
 const mini: Playbook = {

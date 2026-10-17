@@ -46,6 +46,7 @@ const COMPACT_TITLE: Record<string, string> = {
   probation_outcome: "Probation",
   contract_amendment: "Contract change",
   right_to_work: "Right to work",
+  investigation_meeting_invite: "Investigation",
   reference_dispute: "Reference",
   settlement_cover: "Settlement",
   settlement_counter_offer: "Counter-offer",

@@ -1,4 +1,4 @@
-import type { Condition, Playbook, RouteStep } from "../types";
+import type { Condition, Playbook, RouteStep } from "../types.js";
 
 /**
  * Grievance playbook, translated from draft 0.2 for legal review

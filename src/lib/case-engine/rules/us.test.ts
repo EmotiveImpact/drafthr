@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { RuleContext, RuleId, RuleInput } from "../types";
-import { runRule } from "./index";
+import type { RuleContext, RuleId, RuleInput } from "../types.js";
+import { runRule } from "./index.js";
 
 const us = (state: string): RuleContext => ({ jurisdiction: { country: "us", state }, today: "2026-11-09" });
 const IL = us("IL");

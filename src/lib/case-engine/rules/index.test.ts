@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { RuleContext, RuleId, RuleInput } from "../types";
-import { RULE_INPUTS } from "./contract";
-import { RULES, runRule } from "./index";
+import type { RuleContext, RuleId, RuleInput } from "../types.js";
+import { RULE_INPUTS } from "./contract.js";
+import { RULES, runRule } from "./index.js";
 
 const ids = Object.keys(RULE_INPUTS) as RuleId[];
 const today = "2026-10-13";

@@ -1,6 +1,6 @@
-import { conditionRefs } from "./conditions";
-import { RULE_INPUTS } from "./rules/contract";
-import type { Condition, Lens, Playbook } from "./types";
+import { conditionRefs } from "./conditions.js";
+import { RULE_INPUTS } from "./rules/contract.js";
+import type { Condition, Lens, Playbook } from "./types.js";
 
 const LENSES: Lens[] = ["hr", "employee", "consultant"];
 

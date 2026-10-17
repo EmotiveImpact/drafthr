@@ -19,7 +19,7 @@ import {
   UK_BANK_HOLIDAYS,
   US_FEDERAL_HOLIDAYS,
   weekday,
-} from "./calendar";
+} from "./calendar.js";
 
 describe("parse and format", () => {
   it("accepts real dates only", () => {

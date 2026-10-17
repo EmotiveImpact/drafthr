@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { PLAYBOOKS } from "./playbooks";
-import { validatePlaybook } from "./validate";
+import { PLAYBOOKS } from "./playbooks/index.js";
+import { validatePlaybook } from "./validate.js";
 
 const TEMPLATES = path.resolve(__dirname, "../letters/templates");
 

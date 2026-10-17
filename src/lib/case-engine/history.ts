@@ -9,7 +9,7 @@ import type {
   Lens,
   SituationId,
   Source,
-} from "./types";
+} from "./types.js";
 
 function sameValue(a: FactValue, b: FactValue): boolean {
   if (Array.isArray(a) && Array.isArray(b)) {
@@ -49,6 +49,7 @@ export function rebuildCaseFile(caseId: string, history: readonly CaseEvent[]): 
     documents: [],
     letters: [],
     asked: [],
+    notes: { people: [], moments: [] },
   };
   const seen = new Set<string>();
 
@@ -95,9 +96,26 @@ export function rebuildCaseFile(caseId: string, history: readonly CaseEvent[]): 
       case "letter_sent":
         upsertLetter(file, event.stepId, { sentOn: event.sentOn });
         break;
+      case "story_noted":
+        file.notes = {
+          title: event.title ?? file.notes.title,
+          people: mergeBy(file.notes.people, event.people, (p) => p.name.toLowerCase()),
+          moments: mergeBy(file.notes.moments, event.moments, (m) => `${m.date ?? m.when}|${m.what.toLowerCase()}`),
+        };
+        break;
     }
   }
   return file;
+}
+
+function mergeBy<T>(old: T[], added: T[], key: (item: T) => string): T[] {
+  const out = [...old];
+  for (const item of added) {
+    const i = out.findIndex((o) => key(o) === key(item));
+    if (i >= 0) out[i] = item;
+    else out.push(item);
+  }
+  return out;
 }
 
 function retire(entry: FactEntry): FactEntry["earlier"] {
