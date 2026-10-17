@@ -390,7 +390,8 @@ function personRoleLabel(mode: SidebarMode | null): string {
 
 /**
  * "New letter" (.create in the mocks). Only for the two letter-writing modes;
- * consultants review letters rather than write them. A bordered plus in the rail.
+ * consultants review letters rather than write them. In the rail it shrinks to a
+ * 32px square with a 15px plus, so it sits quieter than the 40px nav icons.
  */
 function NewLetterButton({ mode }: { mode: SidebarMode | null }) {
   const loc = useLocation();
@@ -408,7 +409,7 @@ function NewLetterButton({ mode }: { mode: SidebarMode | null }) {
             "h-[42px] md:h-[38px] justify-center gap-2 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[15px] md:text-[14px] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms]",
             "hover:border-[var(--ds-line-hover)] hover:bg-[var(--ds-surface)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-2)] active:text-[var(--ds-ink)]",
             "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:text-[var(--ds-ink)] [&_svg]:size-[17px]",
-            "group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:shadow-none"
+            "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:rounded-[8px] group-data-[collapsible=icon]:shadow-none group-data-[collapsible=icon]:[&_svg]:size-[15px]"
           )}
         >
           {/* Named on the link itself: in the rail its text is hidden and the
