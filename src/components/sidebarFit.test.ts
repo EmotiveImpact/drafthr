@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { fitSubLists, subListHeight } from "./sidebarFit";
+import { fitSubLists, SIDEBAR_SIZES_PHONE, subListHeight } from "./sidebarFit";
 
-// Middle-area heights the sidebar actually gets: 480px at 1366x768, 612px at 1440x900.
+// Middle-area heights for a short and a tall laptop window. The sidebar measured 480px at
+// 1366x768 and 612px at 1440x900 with its old 40px rows; with 36px rows it gets 492px and 624px.
 const HR = { rows: 7, letterRows: 4, matterRows: 3 };
 
 describe("fitSubLists", () => {
-  it("keeps both lists open when everything fits (1440x900)", () => {
+  it("keeps both lists open when everything fits on a tall window", () => {
     expect(fitSubLists({ ...HR, available: 612, prefer: "letters" })).toEqual({ letters: true, matters: true });
   });
 
-  it("folds Matters at 1366x768 so all seven rows stay in view", () => {
-    // 7 rows = 292px, letters 144px, matters 110px: 546 > 480.
+  it("folds Matters on a short window so all seven rows stay in view", () => {
+    // 7 rows = 264px, letters 128px, matters 98px: 490 > 480.
     expect(fitSubLists({ ...HR, available: 480, prefer: "letters" })).toEqual({ letters: true, matters: false });
   });
 
@@ -19,20 +20,20 @@ describe("fitSubLists", () => {
   });
 
   it("keeps a long matter list open on a matter page, cut to what fits (FOUNDATION-X15)", () => {
-    // 292px of rows leave 188px: five nested rows (four matters and View all).
+    // 264px of rows leave 216px: six nested rows (five matters and View all).
     expect(fitSubLists({ rows: 7, letterRows: 4, matterRows: 8, available: 480, prefer: "matters" })).toEqual({
       letters: false,
       matters: true,
-      matterLimit: 5,
+      matterLimit: 6,
     });
   });
 
   it("shows both lists on a tall screen with 13 matters, the matters cut to fit", () => {
-    // 1440x900: 292 + 144 for Letters leaves 176px, four nested matter rows.
+    // Tall window: 264 + 128 for Letters leaves 220px, seven nested matter rows.
     expect(fitSubLists({ rows: 7, letterRows: 4, matterRows: 13, available: 612, prefer: "letters" })).toEqual({
       letters: true,
       matters: true,
-      matterLimit: 4,
+      matterLimit: 7,
     });
   });
 
@@ -42,7 +43,7 @@ describe("fitSubLists", () => {
         for (const keep of [null, "letters", "matters"] as const) {
           const plan = fitSubLists({ rows: 7, letterRows: 4, matterRows, available, prefer: "letters", keep });
           const matters = plan.matters ? subListHeight(plan.matterLimit ?? matterRows) : 0;
-          const used = 7 * 40 + 6 * 2 + (plan.letters ? subListHeight(4) : 0) + matters;
+          const used = 7 * 36 + 6 * 2 + (plan.letters ? subListHeight(4) : 0) + matters;
           expect(used).toBeLessThanOrEqual(available);
         }
       }
@@ -55,6 +56,13 @@ describe("fitSubLists", () => {
 
   it("leaves both open before the area is measured", () => {
     expect(fitSubLists({ ...HR, available: 0, prefer: "letters" })).toEqual({ letters: true, matters: true });
+  });
+
+  it("counts the phone menu's roomier rows", () => {
+    // 7 rows of 40px = 292px leave 188px: five nested rows (four matters and View all).
+    expect(
+      fitSubLists({ rows: 7, letterRows: 4, matterRows: 8, available: 480, prefer: "matters", sizes: SIDEBAR_SIZES_PHONE })
+    ).toEqual({ letters: false, matters: true, matterLimit: 5 });
   });
 
   it("counts the employee's four rows", () => {
@@ -91,7 +99,7 @@ describe("fitSubLists with the person's chevrons", () => {
     expect(fitSubLists({ rows: 7, letterRows: 4, matterRows: 12, available: 480, prefer: "letters", keep: "matters" })).toEqual({
       letters: false,
       matters: true,
-      matterLimit: 5,
+      matterLimit: 6,
     });
   });
 

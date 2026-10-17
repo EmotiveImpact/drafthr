@@ -1,13 +1,14 @@
 /**
  * Which of the sidebar's nested lists (recent letters under Letters, the
  * matters under Matters) can stay open without pushing the main rows out of
- * view. On a 1366x768 laptop the middle of the sidebar has about 480px: all
- * seven rows and both lists need about 546px, so Experts and Reports slid
+ * view. On a 1366x768 laptop the middle of the sidebar had about 480px: all
+ * seven rows and both lists needed about 546px, so Experts and Reports slid
  * under the Settings and Help footer and looked missing (FOUNDATION-X1).
  *
- * The heights are the sidebar's own (40px rows with a 2px gap, 34px nested
- * rows, 8px around each nested list), so the answer is exact and does not
- * depend on measuring the lists themselves. When both lists do not fit, the
+ * The heights are the sidebar's own (36px rows with a 2px gap, 30px nested
+ * rows, 8px around each nested list; the phone menu's rows are 40px and
+ * 34px), so the answer is exact and does not depend on measuring the lists
+ * themselves. When both lists do not fit, the
  * list for the section the person is in stays open and the other folds to
  * its chevron; when even that one does not fit, both fold.
  *
@@ -24,9 +25,12 @@
  * "View all", so it needs no limit.
  */
 
-export const SIDEBAR_ROW_H = 40;
+/** Row and nested-row heights, in px. */
+export type SidebarSizes = { row: number; sub: number };
+export const SIDEBAR_SIZES: SidebarSizes = { row: 36, sub: 30 };
+/** The phone menu keeps its roomier rows. */
+export const SIDEBAR_SIZES_PHONE: SidebarSizes = { row: 40, sub: 34 };
 export const SIDEBAR_ROW_GAP = 2;
-export const SIDEBAR_SUB_ROW_H = 34;
 /** mt-0.5 + mb-1.5 on the nested list. */
 export const SIDEBAR_SUB_LIST_EXTRA = 8;
 
@@ -40,8 +44,8 @@ export type SubListPlan = {
 /** The fewest nested matter rows worth showing: two matters and "View all". */
 export const MIN_MATTER_ROWS = 3;
 
-export function subListHeight(rows: number): number {
-  return rows > 0 ? rows * SIDEBAR_SUB_ROW_H + SIDEBAR_SUB_LIST_EXTRA : 0;
+export function subListHeight(rows: number, sub = SIDEBAR_SIZES.sub): number {
+  return rows > 0 ? rows * sub + SIDEBAR_SUB_LIST_EXTRA : 0;
 }
 
 export function fitSubLists(input: {
@@ -58,21 +62,24 @@ export function fitSubLists(input: {
   want?: SubListPlan;
   /** The list the person last opened with its chevron: it stays open. */
   keep?: "letters" | "matters" | null;
+  /** Row heights (default the desktop sidebar's). */
+  sizes?: SidebarSizes;
 }): SubListPlan {
   const { available, rows, letterRows, matterRows, prefer } = input;
+  const { row, sub } = input.sizes ?? SIDEBAR_SIZES;
   const want = { letters: input.want?.letters ?? true, matters: input.want?.matters ?? true };
   const keep = input.keep && want[input.keep] ? input.keep : null;
   if (!(available > 0)) return { ...want };
-  const base = rows * SIDEBAR_ROW_H + Math.max(0, rows - 1) * SIDEBAR_ROW_GAP;
-  const height = { letters: subListHeight(letterRows), matters: subListHeight(matterRows) };
+  const base = rows * row + Math.max(0, rows - 1) * SIDEBAR_ROW_GAP;
+  const height = { letters: subListHeight(letterRows, sub), matters: subListHeight(matterRows, sub) };
   // Matters can be cut down to fit, so they need only their shortest form.
-  const least = { letters: height.letters, matters: subListHeight(Math.min(matterRows, MIN_MATTER_ROWS)) };
+  const least = { letters: height.letters, matters: subListHeight(Math.min(matterRows, MIN_MATTER_ROWS), sub) };
 
   /** Open these lists, with the matters cut to the room the letters leave. */
   const open = (letters: boolean, matters: boolean): SubListPlan => {
     if (!matters) return { letters, matters };
     const room = available - base - (letters ? height.letters : 0);
-    const fit = Math.floor((room - SIDEBAR_SUB_LIST_EXTRA) / SIDEBAR_SUB_ROW_H);
+    const fit = Math.floor((room - SIDEBAR_SUB_LIST_EXTRA) / sub);
     return matterRows <= fit ? { letters, matters } : { letters, matters, matterLimit: Math.max(MIN_MATTER_ROWS, fit) };
   };
   const fits = (letters: boolean, matters: boolean) =>

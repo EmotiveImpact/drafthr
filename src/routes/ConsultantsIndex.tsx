@@ -556,9 +556,9 @@ export function ConsultantsIndex() {
 }
 
 /** One column on phones, two from about 640px windows up to desktop, three
- *  at desktop widths (a 1440 window gives about 1076px). Three is the most,
+ *  at desktop widths (a 1440 window gives about 1120px). Three is the most,
  *  as in the mock. The two-column step is the content column, not the
- *  window: with the 268px sidebar on from 768 the column is only about 400
+ *  window: with the 224px sidebar on from 768 the column is only about 440
  *  to 600px wide, so two columns start at 400px and the cards tighten their
  *  footer below about 250px (ConsultantCard). A phone's column (about 360px)
  *  stays one. */
