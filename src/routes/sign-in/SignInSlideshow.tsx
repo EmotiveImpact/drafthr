@@ -4,10 +4,13 @@ import { BrandMark, Wordmark } from "@/components/ds";
 
 /**
  * Crossfade slideshow that lives in the left column of the /sign-in and
- * /sign-in/signup pages at lg: and up. Each slide is a small fan of 6B
- * pastel letter thumbnails with a serif headline and a sub-line, on the
- * warm off-white ground. The DraftHR lockup is rendered once outside the
- * slide stack so it doesn't flicker between transitions.
+ * /sign-in/signup pages at lg: and up. Each slide is a full-bleed evening
+ * photo with a serif headline and a sub-line over a dark fade. The DraftHR
+ * lockup is rendered once outside the slide stack so it doesn't flicker
+ * between transitions.
+ *
+ * The earlier look (a small fan of pastel letter thumbnails on the warm
+ * off-white ground) is kept: build with VITE_SIGN_IN_PANEL=cards to use it.
  *
  * Auto-advances every 6s. Pauses while focus or hover is inside the panel
  * so a curious user can read a slide without it changing under them.
@@ -24,14 +27,19 @@ type Slide = {
   id: string;
   headline: string;
   subline: string;
+  /** Full-bleed photo for the default look, served from public/auth/photos. */
+  photo: string;
   thumbs: [Thumb, Thumb, Thumb];
 };
+
+const PANEL: "photos" | "cards" = import.meta.env.VITE_SIGN_IN_PANEL === "cards" ? "cards" : "photos";
 
 const SLIDES: readonly Slide[] = [
   {
     id: "hard-letters",
     headline: "The hard letters, written well.",
     subline: "For the conversations no one wants to draft alone.",
+    photo: "/auth/photos/evening-1.jpg",
     thumbs: [
       { title: "Grievance outcome", meta: "UK, 6 min", tint: "lavender" },
       { title: "Final written warning", meta: "UK, 5 min", tint: "rose" },
@@ -42,6 +50,7 @@ const SLIDES: readonly Slide[] = [
     id: "tribunal-grade",
     headline: "Tribunal-grade. Audit-defensible.",
     subline: "Cited clauses, signed exports, full audit chain.",
+    photo: "/auth/photos/evening-2.jpg",
     thumbs: [
       { title: "Hearing invite", meta: "UK, 3 min", tint: "butter" },
       { title: "Dismissal letter", meta: "UK, 8 min", tint: "sky" },
@@ -52,6 +61,7 @@ const SLIDES: readonly Slide[] = [
     id: "minutes",
     headline: "HR letters, done in minutes.",
     subline: "AI-assisted drafting for HR teams across the UK and US.",
+    photo: "/auth/photos/evening-3.jpg",
     thumbs: [
       { title: "Return to work", meta: "UK, 3 min", tint: "mint" },
       { title: "Offer letter", meta: "UK and US, 4 min", tint: "butter" },
@@ -73,6 +83,7 @@ const FAN = [
 export function SignInSlideshow() {
   const [index, setIndex] = useState(0);
   const reduceMotion = usePrefersReducedMotion();
+  const photos = PANEL === "photos";
   const paused = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -112,9 +123,38 @@ export function SignInSlideshow() {
       onMouseLeave={() => (paused.current = false)}
       onFocusCapture={() => (paused.current = true)}
       onBlurCapture={() => (paused.current = false)}
-      className="relative h-full w-full overflow-hidden bg-[var(--ds-canvas)] text-[var(--ds-ink)]"
+      className={`relative h-full w-full overflow-hidden ${
+        photos ? "bg-[#14161a] text-white" : "bg-[var(--ds-canvas)] text-[var(--ds-ink)]"
+      }`}
     >
-      {SLIDES.map((slide, i) => (
+      {photos && SLIDES.map((slide, i) => (
+        <div
+          key={slide.id}
+          aria-hidden={i !== index}
+          className="absolute inset-0"
+          style={{
+            opacity: i === index ? 1 : 0,
+            transition: reduceMotion ? "none" : `opacity ${FADE_MS}ms ease`,
+          }}
+        >
+          <img
+            src={slide.photo}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* Darken the top for the lockup and the bottom for the words. */}
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.38)_0%,rgba(0,0,0,0)_22%,rgba(0,0,0,0)_48%,rgba(0,0,0,0.74)_100%)]" />
+          <div className="absolute inset-x-12 bottom-28 xl:inset-x-16">
+            <h2 className="ds-title m-0 max-w-[520px] text-[34px] leading-[1.12] text-white">{slide.headline}</h2>
+            <p className="m-0 mt-3 max-w-[440px] text-[15px] leading-[1.55] text-white/80">{slide.subline}</p>
+          </div>
+        </div>
+      ))}
+
+      {!photos && SLIDES.map((slide, i) => (
         <div
           key={slide.id}
           aria-hidden={i !== index}
@@ -144,8 +184,8 @@ export function SignInSlideshow() {
         aria-label="DraftHR home"
         className="absolute left-10 top-9 z-20 inline-flex items-center gap-2.5 transition-opacity hover:opacity-80"
       >
-        <BrandMark size={32} />
-        <Wordmark size={22} />
+        <BrandMark size={32} variant={photos ? "outline" : "solid"} />
+        <Wordmark size={22} tone={photos ? "inherit" : "ink"} />
       </Link>
 
       {/* Pagination: bottom-left, aligned with the footer line on the right. */}
@@ -157,8 +197,12 @@ export function SignInSlideshow() {
             onClick={() => goTo(i)}
             aria-label={`Show slide ${i + 1} of ${SLIDES.length}`}
             aria-current={i === index ? "true" : undefined}
-            className={`h-[3px] w-6 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-canvas)] ${
-              i === index ? "bg-[var(--ds-ink)]" : "bg-[var(--ds-line-strong)] hover:bg-[var(--ds-subtle)]"
+            className={`h-[3px] w-6 rounded-full transition-colors focus:outline-none focus-visible:ring-2 ${
+              photos
+                ? `focus-visible:ring-white ${i === index ? "bg-white" : "bg-white/35 hover:bg-white/60"}`
+                : `focus-visible:ring-[var(--ds-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-canvas)] ${
+                    i === index ? "bg-[var(--ds-ink)]" : "bg-[var(--ds-line-strong)] hover:bg-[var(--ds-subtle)]"
+                  }`
             }`}
           />
         ))}
