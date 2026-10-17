@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The DraftHR wordmark, set in Inter semibold like the rest of the UI (the
- * brief allows only Inter and Newsreader).
+ * The DraftHR wordmark, set in Manrope semibold like the rest of the UI (the
+ * brief allows only Manrope and Newsreader).
  * Pairs with <BrandMark/> to form the brand lockup. Use the wordmark on its
  * own for headers where the glyph would feel redundant.
  *

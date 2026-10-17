@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/manrope";
 @import "@fontsource-variable/newsreader/opsz.css";
 
 @custom-variant dark (&:is(.dark *));
@@ -11,9 +11,11 @@
  * hairline borders, a near-black primary, and status colour only where status
  * is meant: amber needs you, lilac is with someone else (or the reviewer),
  * green is done, red is errors and failing checks only, blue is neutral info.
- * Inter for the whole UI, Newsreader (serif) for page titles, card headings,
+ * Manrope for the whole UI, Newsreader (serif) for page titles, card headings,
  * big numbers and the letter itself. Nothing else: code, the wordmark and
- * toasts are Inter too (the brief allows two typefaces).
+ * toasts are Manrope too (the brief allows two typefaces). Manrope draws
+ * lighter than Inter did, so the UI's weights sit one step up (see the
+ * font-weight tokens and body below); the letter keeps its own weights.
  *
  * Values mirror the approved mocks (design/hifi/base.css and kit.html).
  * Components read the --ds-* tokens or shadcn's variables below; never
@@ -227,6 +229,11 @@
 }
 
 @theme inline {
+  /* Manrope is lighter than Inter at the same weight: each step one notch up
+   * (font-bold stays 700). */
+  --font-weight-normal: 500;
+  --font-weight-medium: 600;
+  --font-weight-semibold: 700;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -270,10 +277,10 @@
   --shadow-xl: 0 24px 64px -20px rgba(17, 17, 16, 0.35);
 
   --font-serif: "Newsreader Variable", "Newsreader", Georgia, serif;
-  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  /* Code (inline <code>, links, one-time codes): Inter with tabular figures,
+  --font-sans: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Code (inline <code>, links, one-time codes): Manrope with tabular figures,
    * set on code below, so the UI keeps to its two typefaces (RULE-067). */
-  --font-mono: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
   /* Page titles, card headings and big numbers (see the ds-title utility). */
   --font-title: "Newsreader Variable", "Newsreader", Georgia, serif;
   --font-heading: var(--font-sans);
@@ -311,7 +318,7 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
-  /* Sonner sets its own system-ui stack on the toaster; toasts are Inter. */
+  /* Sonner sets its own system-ui stack on the toaster; toasts are Manrope. */
   [data-sonner-toaster],
   [data-sonner-toast] {
     font-family: var(--font-sans) !important;
@@ -321,6 +328,7 @@
     color: var(--ds-body);
     font-family: var(--font-sans);
     font-size: 14.5px;
+    font-weight: 500;
     letter-spacing: -0.006em;
     font-feature-settings: "cv11", "ss03";
     -webkit-font-smoothing: antialiased;
@@ -328,12 +336,31 @@
     @apply bg-background;
   }
 
-  /* Newsreader for the letter, page titles and card headings; Inter for
+  /* Newsreader for the letter, page titles and card headings; Manrope for
    * everything else. */
   .font-serif {
     font-family: var(--font-serif);
     letter-spacing: -0.012em;
   }
+  /* The letter keeps its paper weight (400, as it prints) wherever it is
+   * shown, not the UI's lifted 500. A weight utility on an element still
+   * wins, since utilities sit above this layer. */
+  .font-serif,
+  .letter-page,
+  .lw-paper,
+  .pagedly-ce-content,
+  .rv-letter,
+  .final-letter,
+  .mobile-letter {
+    font-weight: 400;
+  }
+
+  /* Icons a touch finer than lucide's default 2px. Icons that set their own
+   * stroke (small ticks, filled stars) keep it. */
+  svg.lucide[stroke-width="2"] {
+    stroke-width: 1.6px;
+  }
+
   h1, h2, h3 {
     letter-spacing: -0.018em;
   }
@@ -656,7 +683,7 @@
 /* ---------------------------------------------------------------------------
  * Type utilities
  *   ds-title  Newsreader, for page titles and big numbers only.
- *   ds-mono   Inter with tabular figures, for facts and numbers.
+ *   ds-mono   Manrope with tabular figures, for facts and numbers.
  * -------------------------------------------------------------------------*/
 @utility ds-title {
   font-family: var(--font-title);
@@ -665,7 +692,7 @@
   color: var(--ds-ink);
   font-optical-sizing: auto;
 }
-/* Facts and numbers: dates, counts, scores. Inter with tabular figures, so
+/* Facts and numbers: dates, counts, scores. Manrope with tabular figures, so
  * columns line up without the look of code. */
 @utility ds-mono {
   font-family: var(--font-sans);
@@ -830,4 +857,62 @@
 }
 [data-phone-page] .pagedly-ce-editor {
   padding-top: 16px !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * The desktop sidebar is dark on the light app. Unlayered, so it wins over
+ * the sidebar's own utility classes. Scoped to the desktop
+ * container ([data-slot="sidebar-container"] exists only there; the phone
+ * sheet and every portaled menu, tooltip and popover live outside it), so
+ * the page itself keeps its light theme. The tokens are re-pointed here,
+ * so every row, icon, label, chevron and divider follows. */
+[data-slot="sidebar-container"] {
+  --sidebar: #151514;
+  --sidebar-foreground: #cfcfca;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #111110;
+  --sidebar-accent: #1f1f1d;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #232321;
+
+  --ds-surface: #151514;   /* sidebar ground; the bell badge's ring */
+  --ds-surface-2: #262624; /* current page row; tool button hover */
+  --ds-surface-3: #2c2c2a; /* pressed; chevron hover */
+  --ds-hover: #1f1f1d;     /* row hover */
+  --ds-chip: #262624;
+  --ds-line: #232321;      /* right edge, nested guide lines, footer rule */
+  --ds-line-2: #1f1f1d;
+  --ds-line-strong: #3a3a37;
+  --ds-line-hover: #3a3a37;
+  --ds-ink: #ffffff;       /* current row, hover text, wordmark, person name */
+  --ds-body: #cfcfca;      /* normal row text */
+  --ds-muted: #a3a39e;     /* nested rows */
+  --ds-subtle: #8d8d88;    /* icons, group labels, quiet text, role */
+  --ds-faint: #5e5e5a;     /* chevrons */
+  /* --ds-accent and --ds-on-accent stay: the bell badge's digit is
+   * --ds-on-accent on red and must stay white. */
+  --ds-shadow-s: none;
+  --ds-focus-ring: 0 0 0 2px #151514, 0 0 0 4px #6f95d6;
+
+  background: #151514;
+  border-color: #232321;
+}
+/* "New letter" in the sidebar: a white button with ink text. */
+[data-slot="sidebar-container"] [data-sidebar="header"] [data-sidebar="menu-button"] {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #111110;
+  box-shadow: none;
+}
+[data-slot="sidebar-container"] [data-sidebar="header"] [data-sidebar="menu-button"]:hover {
+  background: #ececea;
+  border-color: #ececea;
+  color: #111110;
+}
+[data-slot="sidebar-container"] [data-sidebar="header"] [data-sidebar="menu-button"]:active {
+  background: #dededb;
+  border-color: #dededb;
+}
+[data-slot="sidebar-container"] [data-sidebar="header"] [data-sidebar="menu-button"] svg {
+  color: #111110;
 }

@@ -88,7 +88,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 /**
  * The app sidebar (design/hifi shell.mjs `sidebar()`).
  *
- *   Top     logo, the workspace name (the switcher when there are several),
+ *   Top     logo and DRAFTHR (the workspace switcher when there are several),
  *           then search, the notifications bell and collapse.
  *           A "New letter" button under it.
  *   Body    Home, Letters (the three most recent letters nested, each with a
@@ -286,10 +286,6 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
   const { state, isMobile, toggleSidebar, setOpenMobile } = useSidebar();
   const isCollapsed = state === "collapsed" && !isMobile;
   const search = useSearchPaletteToggle();
-  const { activeTenant } = useAuth();
-  const orgName = useProfileStore((s) => s.profile.employer.legalName);
-  const fullName = activeTenant?.name || orgName?.trim() || "DraftHR";
-  const name = shortOrgName(fullName);
   const team = roleLabelFor(mode);
 
   return (
@@ -308,6 +304,7 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
       >
         <BrandMark
           size={28}
+          onDark={!isMobile}
           className={cn(
             "rounded-[7px] transition-opacity duration-150",
             isCollapsed && "group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0"
@@ -327,11 +324,8 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
               subtitle={team}
               name={shortOrgName}
               fallback={
-                <span
-                  title={fullName}
-                  className="truncate text-[15px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)]"
-                >
-                  {name}
+                <span className="truncate text-[14px] font-extrabold tracking-[0.12em] text-[var(--ds-ink)]">
+                  DRAFTHR
                 </span>
               }
             />
