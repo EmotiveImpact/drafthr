@@ -1,46 +1,65 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShallow } from "zustand/react/shallow";
-import { Briefcase, CheckCircle2, ExternalLink, Inbox, Sparkles, TrendingUp, UserCog } from "lucide-react";
+import {
+  ArrowRight,
+  Banknote,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  Inbox,
+  Percent,
+  Sparkles,
+  UserCog,
+} from "lucide-react";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
-import { useBookingsStore, parseSlaHours, type Booking } from "@/lib/bookings";
+import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { ConsultantInbox } from "@/components/consultants/ConsultantInbox";
+import { BTN_LG, BTN_OUTLINE, BTN_PRIMARY } from "@/components/consultants/ui";
+import { ExpertsHeader } from "@/components/consultants/ExpertsHeader";
 import { pullInbox, pullProfile } from "@/lib/marketplaceSync";
+import { cn } from "@/lib/utils";
 
 /** Stable empty ref — see ConsultantInbox for the zustand-v5 rationale. */
 const EMPTY_BOOKINGS: Booking[] = [];
 
 /**
- * Naïve earnings calculation — rate × estimated hours per completed
- * booking, using SLA as a proxy for hours. Real implementation will read
- * actual hours logged + Stripe transfer amounts once payouts land.
+ * Indicative value: the rate is charged once per booking (the server's price
+ * snapshot), so value is the rate times completed reviews. Real figures come
+ * from Stripe transfers once payouts land.
  */
 function computeEarnings(
   bookings: Array<{ status: string }>,
-  ratePerHour: number,
-  slaString: string,
+  ratePerReview: number,
 ): { completed: number; pending: number; lifetime: number } {
-  const hoursPerBooking = parseSlaHours(slaString);
   const completed = bookings.filter((b) => b.status === "completed").length;
   const pending = bookings.filter((b) => ["accepted", "delivered"].includes(b.status)).length;
-  const lifetime = completed * ratePerHour * hoursPerBooking;
+  const lifetime = completed * ratePerReview;
   return { completed, pending, lifetime };
+}
+
+/** Completed reviews per week over the last eight weeks, oldest first, for
+ *  the sparkline on the first stat tile. */
+function weeklyCompleted(bookings: Booking[], weeks = 8): number[] {
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const out = new Array<number>(weeks).fill(0);
+  for (const b of bookings) {
+    if (b.status !== "completed") continue;
+    const at = b.completedAt ?? b.deliveredAt ?? b.bookedAt;
+    const ago = Math.floor((now - at) / week);
+    if (ago >= 0 && ago < weeks) out[weeks - 1 - ago] += 1;
+  }
+  return out;
 }
 
 /**
  * /c — Consultant home dashboard.
  *
- * Two-card shell:
- *  1. Profile completeness banner (calls out to /c/profile if incomplete).
- *  2. Inbound bookings inbox — empty state for now since the backend booking
- *     pipeline isn't wired up yet. The empty state explicitly tells the
- *     consultant their card is live in the marketplace, so they understand
- *     what's happening behind the scenes.
- *
- * Future work — wire to a real bookings table when the marketplace
- * server-side lands. The component is structured so the only thing
- * that changes is the source of `bookings` (today: empty array; later:
- * fetch from /api/bookings).
+ *  1. 2A header ("Welcome back") with the profile actions.
+ *  2. A tinted card when the profile is incomplete or under review.
+ *  3. 7B stat tiles: completed reviews, in progress, value, platform fee.
+ *  4. The inbox (tabs per status, 13B rows) beside an "At a glance" card.
  */
 export function ConsultantHome() {
   const nav = useNavigate();
@@ -81,108 +100,137 @@ export function ConsultantHome() {
   const pendingCount = allBookings.filter((b) => b.status === "requested").length;
   const activeCount = allBookings.filter((b) => b.status === "accepted").length;
   const earnings = profile
-    ? computeEarnings(allBookings, profile.price, profile.sla)
+    ? computeEarnings(allBookings, profile.price)
     : { completed: 0, pending: 0, lifetime: 0 };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12">
-      <div className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-          Consultant
-        </p>
-        <h1 className="mt-2 text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          {profile?.fullName ? `Welcome back, ${profile.fullName.split(" ")[0]}.` : "Welcome to DraftHR."}
-        </h1>
-        <p className="mt-2 max-w-[58ch] text-[14.5px] leading-relaxed text-[var(--ds-body)]">
-          You're signed in as a consultant. HR teams discover you via the marketplace,
-          and DraftHR routes review requests directly to your inbox below.
-        </p>
-      </div>
-
-      {/* ─── Profile-completion banner ───────────────────────────── */}
-      <section
-        className={`mb-6 rounded-[14px] border p-5 sm:p-6 ${
-          complete
-            ? "border-[var(--ds-line)] bg-[var(--ds-surface)]"
-            : "border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)]"
-        }`}
-      >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <span
-              className={`mt-0.5 inline-grid size-9 place-items-center rounded-full ${
-                complete
-                  ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-                  : "bg-white text-[var(--ds-amber-fg)]"
-              }`}
-              aria-hidden
-            >
-              {complete ? <CheckCircle2 className="size-5" /> : <UserCog className="size-5" />}
-            </span>
-            <div>
-              <h2 className="text-[15px] font-semibold text-[var(--ds-ink)]">
-                {!complete
-                  ? "Finish your marketplace card."
-                  : published
-                    ? "Your marketplace card is live."
-                    : "Your profile is under review."}
-              </h2>
-              <p className="mt-1 max-w-[52ch] text-[13.5px] leading-relaxed text-[var(--ds-body)]">
-                {!complete
-                  ? enrolled
-                    ? "Add your specialties, rate, and a short bio — five minutes and you're ready to submit for review."
-                    : "Set up your marketplace card so HR teams can find and book you."
-                  : published
-                    ? "HR teams can find and book you. Edit anytime to change rate, specialties, or bio."
-                    : "Thanks for completing your profile — our team is reviewing it. You'll be listed in the marketplace once it's approved, usually within one business day."}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2 sm:flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => nav("/c/profile")}
-              className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[var(--ds-ink)] px-3.5 text-[12.5px] font-semibold text-white transition hover:-translate-y-px hover:shadow-md"
-            >
-              {complete ? "Edit profile" : "Set up profile"}
-              <span aria-hidden>→</span>
-            </button>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ExpertsHeader
+        crumbs={[{ label: "Consultant" }]}
+        title={profile?.fullName ? `Welcome back, ${profile.fullName.split(" ")[0]}` : "Welcome to DraftHR"}
+        lede="You're signed in as a consultant. HR teams discover you through the marketplace, and DraftHR routes review requests straight to your inbox below."
+        actions={
+          <>
             {published && (
-              <button
-                type="button"
-                onClick={() => nav("/consultants")}
-                className="inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-[var(--ds-line)] bg-white px-3.5 text-[12.5px] font-semibold text-[var(--ds-ink)] transition hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)]"
-              >
+              <button type="button" onClick={() => nav("/consultants")} className={cn(BTN_OUTLINE, BTN_LG)}>
                 View in marketplace
                 <ExternalLink className="size-3.5" aria-hidden />
               </button>
             )}
+            <button type="button" onClick={() => nav("/c/profile")} className={cn(BTN_PRIMARY, BTN_LG)}>
+              {complete ? "Edit profile" : "Set up profile"}
+              <ArrowRight className="size-3.5" aria-hidden />
+            </button>
+          </>
+        }
+      />
+
+      <div className="w-full px-4 pb-24 pt-7 sm:px-8 md:px-12">
+      {/* ─── Profile status ──────────────────────────────────────── */}
+      {published ? (
+        <p className="m-0 mb-8 inline-flex max-w-full items-start gap-2 text-[13px] leading-relaxed text-[var(--ds-body)]">
+          <CheckCircle2 className="mt-[3px] size-3.5 shrink-0 text-[var(--ds-green-fg)]" aria-hidden />
+          <span>
+            <span className="font-medium text-[var(--ds-ink)]">Your marketplace card is live.</span>{" "}
+            HR teams can find and book you. Edit anytime to change rate, specialties, or bio.
+          </span>
+        </p>
+      ) : (
+        <section
+          className="mb-8 flex items-start gap-3.5 rounded-[14px] px-5 py-4 sm:px-6 sm:py-5"
+          style={{
+            background: complete ? "var(--ds-tint-lavender)" : "var(--ds-tint-butter)",
+          }}
+        >
+          <span
+            className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-[var(--ds-surface)]/80"
+            style={{ color: complete ? "var(--ds-tint-lavender-ink)" : "var(--ds-tint-butter-ink)" }}
+            aria-hidden
+          >
+            {complete ? <Clock className="size-4" /> : <UserCog className="size-4" />}
+          </span>
+          <div className="min-w-0">
+            <h2 className="m-0 text-[14.5px] font-medium text-[var(--ds-ink)]">
+              {!complete ? "Finish your marketplace card." : "Your profile is under review."}
+            </h2>
+            <p className="m-0 mt-1 max-w-[60ch] text-[13px] leading-relaxed text-[var(--ds-body)]">
+              {!complete
+                ? enrolled
+                  ? "Add your specialties, rate, and a short bio. Five minutes and you're ready to submit for review."
+                  : "Set up your marketplace card so HR teams can find and book you."
+                : "Thanks for completing your profile. Our team is reviewing it. You'll be listed in the marketplace once it's approved, usually within one business day."}
+            </p>
           </div>
+        </section>
+      )}
+
+      {/* ─── 7B stat tiles ──────────────────────────────────────── */}
+      <section aria-labelledby="earnings-h" className="mb-10">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="earnings-h" className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">
+            Your reviews
+          </h2>
+          <span className="text-[12.5px] text-[var(--ds-muted)]">
+            Indicative. Real payouts arrive with Stripe Connect.
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile
+            label="Completed reviews"
+            icon={<CheckCircle2 />}
+            value={String(earnings.completed)}
+            spark={weeklyCompleted(allBookings)}
+            foot={earnings.pending > 0 ? `${earnings.pending} in flight` : "No work in flight"}
+          />
+          <StatTile
+            label="In progress"
+            icon={<Inbox />}
+            value={String(activeCount)}
+            foot={pendingCount > 0 ? `${pendingCount} new request${pendingCount === 1 ? "" : "s"}` : "No new requests"}
+          />
+          <StatTile
+            label="Potential value"
+            icon={<Banknote />}
+            value={
+              profile && earnings.completed > 0
+                ? `~${profile.currency}${earnings.lifetime.toLocaleString()}`
+                : `${profile?.currency ?? "£"}0`
+            }
+            foot={
+              profile && earnings.completed > 0
+                ? `Indicative: ${profile.currency}${profile.price} per review × completed reviews`
+                : "Tracked once payouts go live"
+            }
+          />
+          <StatTile
+            label="Platform fee"
+            icon={<Percent />}
+            value="12%"
+            foot="Planned, applies once payouts launch"
+          />
         </div>
       </section>
 
-      {/* ─── Inbox + Activity grid ──────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <section className="rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="inline-flex items-center gap-2 text-[14px] font-semibold text-[var(--ds-ink)]">
-              <Inbox className="size-4 text-[var(--ds-muted)]" aria-hidden />
+      {/* ─── Inbox + At a glance ────────────────────────────────── */}
+      <div className="grid gap-x-8 gap-y-8 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <section aria-labelledby="inbox-h" className="min-w-0" data-testid="consultant-inbox">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="inbox-h" className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">
               Inbox
             </h2>
-            <div className="flex items-center gap-3 text-[11.5px] text-[var(--ds-muted)]">
+            <div className="flex items-center gap-3 text-[12.5px] text-[var(--ds-muted)]">
               {allBookings.length === 0 ? (
                 // Dev-only affordance to seed a sample booking while building
-                // the inbox. Never shown to real consultants in production.
-                import.meta.env.DEV ? (
+                // the inbox. Never shown to real consultants in production, and
+                // only once the profile exists (a booking needs a listing).
+                import.meta.env.DEV && complete ? (
                   <button
                     type="button"
                     onClick={seedSampleBooking}
-                    disabled={!complete}
-                    title={complete ? undefined : "Complete your profile first"}
-                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-[var(--ds-line)] px-2 py-1 text-[11px] font-semibold text-[var(--ds-muted)] transition hover:border-[var(--ds-subtle)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 rounded-[var(--ds-r-s)] border border-dashed border-[var(--ds-line-strong)] px-2 text-[12px] font-medium text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Sparkles className="size-3" aria-hidden />
-                    Add a demo request
+                    Add a sample booking
                   </button>
                 ) : null
               ) : (
@@ -196,83 +244,80 @@ export function ConsultantHome() {
           <ConsultantInbox />
         </section>
 
-        <section className="rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
-          <h2 className="mb-4 inline-flex items-center gap-2 text-[14px] font-semibold text-[var(--ds-ink)]">
-            <Briefcase className="size-4 text-[var(--ds-muted)]" aria-hidden />
+        <aside aria-labelledby="glance-h" className="self-start rounded-[14px] bg-[var(--ds-surface-2)] p-5">
+          <h2 id="glance-h" className="m-0 mb-4 text-[14px] font-medium text-[var(--ds-ink)]">
             At a glance
           </h2>
-          <dl className="space-y-3 text-[13px]">
+          <dl className="m-0 space-y-3 text-[13px]">
             <Row label="Rate">
               {profile
-                ? `${profile.currency}${profile.price}/hr`
+                ? `${profile.currency}${profile.price} per review`
                 : <span className="text-[var(--ds-muted)]">Set in profile</span>}
             </Row>
-            <Row label="SLA">{profile?.sla ?? "—"}</Row>
+            <Row label="SLA">{profile?.sla ?? <span className="text-[var(--ds-muted)]">Not set</span>}</Row>
             <Row label="Specialties">
               {profile?.specialties?.length
                 ? profile.specialties.slice(0, 2).join(" · ") + (profile.specialties.length > 2 ? ` +${profile.specialties.length - 2}` : "")
                 : <span className="text-[var(--ds-muted)]">None yet</span>}
             </Row>
             <Row label="Reviews">
-              {profile?.reviews ?? 0}
-              <span className="ml-1 text-[var(--ds-muted)]">(new)</span>
+              {profile?.reviews ? profile.reviews : <span className="text-[var(--ds-muted)]">None yet</span>}
             </Row>
           </dl>
-        </section>
+        </aside>
       </div>
-
-      {/* ─── Earnings card ──────────────────────────────────────── */}
-      <section className="mt-4 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="inline-flex items-center gap-2 text-[14px] font-semibold text-[var(--ds-ink)]">
-            <TrendingUp className="size-4 text-[var(--ds-muted)]" aria-hidden />
-            Earnings
-          </h2>
-          <span className="text-[11px] italic text-[var(--ds-muted)]">
-            Indicative · real payouts arrive with Stripe Connect
-          </span>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Stat
-            label="Completed reviews"
-            value={String(earnings.completed)}
-            sub={earnings.pending > 0 ? `${earnings.pending} in flight` : "No work in flight"}
-          />
-          <Stat
-            label="Potential value"
-            value={
-              profile && earnings.completed > 0
-                ? `~${profile.currency}${earnings.lifetime.toLocaleString()}`
-                : "—"
-            }
-            sub={
-              profile && earnings.completed > 0
-                ? `indicative: ${profile.currency}${profile.price}/hr × est. hours`
-                : "Tracked once payouts go live"
-            }
-          />
-          <Stat
-            label="Platform fee"
-            value="12%"
-            sub="Planned — applies once payouts launch"
-          />
-        </div>
-      </section>
+      </div>
     </div>
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+/** 7B stat tile: label and icon, a big serif number, an optional sparkline,
+ *  and a quiet footnote. */
+function StatTile({
+  label,
+  icon,
+  value,
+  foot,
+  spark,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  value: string;
+  foot?: string;
+  spark?: number[];
+}) {
   return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
-        {label}
-      </p>
-      <p className="mt-1 font-display text-[28px] font-semibold text-[var(--ds-ink)]" style={{ fontFamily: 'var(--font-display)' }}>
-        {value}
-      </p>
-      {sub && <p className="mt-0.5 text-[11.5px] text-[var(--ds-muted)]">{sub}</p>}
+    <div className="flex min-w-0 flex-col rounded-[14px] bg-[var(--ds-surface-2)] px-[18px] pb-[15px] pt-4">
+      <div className="flex items-center justify-between gap-2 text-[12.5px] text-[var(--ds-muted)] [&_svg]:size-[15px] [&_svg]:shrink-0">
+        <span className="truncate">{label}</span>
+        {icon}
+      </div>
+      <div className="mt-2.5 flex min-h-[42px] items-end justify-between gap-3">
+        <span className="ds-title text-[clamp(30px,3.4vw,40px)] leading-none">{value}</span>
+        {spark && <Sparkline series={spark} />}
+      </div>
+      {foot && <p className="m-0 mt-3 text-[12px] leading-snug text-[var(--ds-muted)]">{foot}</p>}
     </div>
+  );
+}
+
+function Sparkline({ series }: { series: number[] }) {
+  const W = 96;
+  const H = 34;
+  const max = Math.max(1, ...series);
+  const step = series.length > 1 ? W / (series.length - 1) : W;
+  const pts = series.map((v, i) => [i * step, H - 3 - (v / max) * (H - 6)] as const);
+  const d = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      aria-hidden
+      className={cn("block h-[34px] w-[96px] max-w-[55%] shrink overflow-visible text-[var(--ds-ink)]")}
+    >
+      <path d={`${d} L${W} ${H} L0 ${H} Z`} fill="currentColor" opacity={0.05} />
+      <path d={d} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
   );
 }
 
@@ -292,7 +337,7 @@ function useSeedSampleBooking() {
       consultantInitials: profile.initials,
       consultantProfileId: profile.id,
       draftId: "demo-" + Math.random().toString(36).slice(2, 8),
-      matterTitle: "Settlement letter — senior engineer, voluntary exit",
+      matterTitle: "Settlement letter, senior engineer, voluntary exit",
       message:
         "Could you review the settlement clauses? Specifically the without-prejudice wording and the s.111A position. Aiming to send Friday.",
       expectedDeliveryAt: Date.now() + 24 * 60 * 60 * 1000,
@@ -303,8 +348,8 @@ function useSeedSampleBooking() {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[11px] uppercase tracking-[0.12em] text-[var(--ds-muted)]">{label}</dt>
-      <dd className="text-right text-[var(--ds-ink)] font-medium">{children}</dd>
+      <dt className="text-[12.5px] text-[var(--ds-muted)]">{label}</dt>
+      <dd className="m-0 text-right font-medium text-[var(--ds-ink)]">{children}</dd>
     </div>
   );
 }

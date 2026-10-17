@@ -5,9 +5,8 @@
  * and dispatches via sendEmail(). All helpers soft-fail: no throw, no
  * blocking. If RESEND_API_KEY is missing the underlying helper no-ops.
  *
- * Templates are intentionally plain — production-quality HTML is a
- * separate package (api/_utils/email-templates/) — these are the
- * stop-gap until those templates are extended for the marketplace.
+ * The wording lives in email-templates/booking.ts (pure, tested); this file
+ * loads the booking and its two parties and sends.
  */
 import { eq } from "drizzle-orm";
 import { getDb } from "../../src/db/index.js";
@@ -17,6 +16,7 @@ import {
   users,
 } from "../../src/db/schema.js";
 import { sendEmail } from "./email.js";
+import { bookingEmail, type BookingEmailFacts, type BookingEmailStage } from "./email-templates/booking.js";
 
 type EmailPayload = {
   booking: typeof consultantBookings.$inferSelect;
@@ -75,103 +75,63 @@ function appUrl(path: string): string {
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
-export async function sendBookingRequestEmail(bookingId: string) {
+function facts(p: EmailPayload): BookingEmailFacts {
+  return {
+    consultantName: p.consultantName,
+    consultantProfileName: p.consultantProfile.fullName,
+    requesterName: p.requesterName,
+    matterTitle: p.booking.matterTitle,
+    message: p.booking.message,
+    responseNote: p.booking.responseNote,
+    deliveryNote: p.booking.deliveryNote,
+    expectedDeliveryAt: p.booking.expectedDeliveryAt,
+    priority: p.booking.turnaround === "priority",
+    lateRefund: lateRefundOf(p.booking),
+    appUrl: appUrl(""),
+  };
+}
+
+function lateRefundOf(b: EmailPayload["booking"]): BookingEmailFacts["lateRefund"] {
+  if (!b.lateRefundStatus || !b.lateRefundAmount) return null;
+  let amount: string;
+  try {
+    amount = new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: (b.priceCurrency ?? "gbp").toUpperCase(),
+    }).format(b.lateRefundAmount / 100);
+  } catch {
+    amount = (b.lateRefundAmount / 100).toFixed(2);
+  }
+  return { amount, made: b.lateRefundStatus === "refunded" };
+}
+
+async function send(bookingId: string, stage: BookingEmailStage) {
   const p = await loadPayload(bookingId);
   if (!p) return;
-  const subject = `New review request: ${p.booking.matterTitle ?? "DraftHR letter"}`;
-  const html = `
-    <p>Hi ${escapeHtml(p.consultantName)},</p>
-    <p><strong>${escapeHtml(p.requesterName)}</strong> has booked a review with you on DraftHR.</p>
-    ${p.booking.matterTitle ? `<p><strong>Matter:</strong> ${escapeHtml(p.booking.matterTitle)}</p>` : ""}
-    ${p.booking.message ? `<blockquote>${escapeHtml(p.booking.message)}</blockquote>` : ""}
-    <p><a href="${appUrl("/c")}">Open your inbox →</a></p>
-    <p style="color:#888;font-size:12px">You're receiving this because your DraftHR consultant profile is published.</p>
-  `;
+  const { subject, html } = bookingEmail(stage, facts(p));
   return sendEmail({
-    to: p.consultantEmail,
+    to: stage === "request" ? p.consultantEmail : p.requesterEmail,
     subject,
     html,
     tags: [
       { name: "category", value: "consultant" },
-      { name: "stage", value: "request" },
+      { name: "stage", value: stage },
     ],
   });
+}
+
+export async function sendBookingRequestEmail(bookingId: string) {
+  return send(bookingId, "request");
 }
 
 export async function sendBookingAcceptedEmail(bookingId: string) {
-  const p = await loadPayload(bookingId);
-  if (!p) return;
-  const subject = `${p.consultantProfile.fullName} accepted your review request`;
-  const html = `
-    <p>Hi ${escapeHtml(p.requesterName)},</p>
-    <p><strong>${escapeHtml(p.consultantProfile.fullName)}</strong> has accepted your booking and started work.</p>
-    ${p.booking.responseNote ? `<blockquote>${escapeHtml(p.booking.responseNote)}</blockquote>` : ""}
-    <p>Expected delivery: ${
-      p.booking.expectedDeliveryAt
-        ? p.booking.expectedDeliveryAt.toLocaleString()
-        : "soon"
-    }.</p>
-    <p><a href="${appUrl("/consultants")}">Open the marketplace →</a></p>
-  `;
-  return sendEmail({
-    to: p.requesterEmail,
-    subject,
-    html,
-    tags: [
-      { name: "category", value: "consultant" },
-      { name: "stage", value: "accepted" },
-    ],
-  });
+  return send(bookingId, "accepted");
 }
 
 export async function sendBookingDeclinedEmail(bookingId: string) {
-  const p = await loadPayload(bookingId);
-  if (!p) return;
-  const subject = `${p.consultantProfile.fullName} couldn't take this one`;
-  const html = `
-    <p>Hi ${escapeHtml(p.requesterName)},</p>
-    <p><strong>${escapeHtml(p.consultantProfile.fullName)}</strong> wasn't able to take your booking this time.</p>
-    ${p.booking.responseNote ? `<blockquote>${escapeHtml(p.booking.responseNote)}</blockquote>` : ""}
-    <p>No charge — you can rebook with another specialist in the marketplace.</p>
-    <p><a href="${appUrl("/consultants")}">Browse other consultants →</a></p>
-  `;
-  return sendEmail({
-    to: p.requesterEmail,
-    subject,
-    html,
-    tags: [
-      { name: "category", value: "consultant" },
-      { name: "stage", value: "declined" },
-    ],
-  });
+  return send(bookingId, "declined");
 }
 
 export async function sendBookingDeliveredEmail(bookingId: string) {
-  const p = await loadPayload(bookingId);
-  if (!p) return;
-  const subject = `Your review from ${p.consultantProfile.fullName} is ready`;
-  const html = `
-    <p>Hi ${escapeHtml(p.requesterName)},</p>
-    <p><strong>${escapeHtml(p.consultantProfile.fullName)}</strong> has delivered your review.</p>
-    ${p.booking.deliveryNote ? `<p><strong>Summary:</strong></p><blockquote>${escapeHtml(p.booking.deliveryNote)}</blockquote>` : ""}
-    <p><a href="${appUrl("/consultants")}">Open the marketplace →</a> to leave a rating.</p>
-  `;
-  return sendEmail({
-    to: p.requesterEmail,
-    subject,
-    html,
-    tags: [
-      { name: "category", value: "consultant" },
-      { name: "stage", value: "delivered" },
-    ],
-  });
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  return send(bookingId, "delivered");
 }

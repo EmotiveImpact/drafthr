@@ -60,7 +60,7 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           Live checks against {draft.context.jurisdiction}
           {draft.context.usState ? ` (${draft.context.usState})` : ""}. Tribunal
-          panels read what you write — phrasing matters.
+          panels read what you write, so phrasing matters.
         </p>
 
         <TemplateQualityInspector draft={draft} />
@@ -112,7 +112,7 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
         {rightsMissing.length > 0 && (
           <section className="min-w-0">
             <h4 className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
-              Rights — missing ({rightsMissing.length})
+              Rights missing ({rightsMissing.length})
             </h4>
             <ul className="space-y-2">
               {rightsMissing.map(({ rule }) => (
@@ -159,7 +159,7 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
           <div className="rounded-md border border-letter-rule bg-muted/30 p-3 text-[11.5px] leading-relaxed text-muted-foreground flex items-start gap-2">
             <ShieldCheck className="size-4 mt-0.5 text-green-700 shrink-0" />
             <p className="break-words">
-              All clear so far. Keep going — checks re-run as you edit.
+              All clear so far. Keep going. Checks re-run as you edit.
             </p>
           </div>
         )}

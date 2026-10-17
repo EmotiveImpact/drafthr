@@ -5,6 +5,28 @@ import { streamDraft } from "./client";
 import { uid } from "@/lib/utils";
 import { useProfileStore } from "@/lib/profile";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { loadTemplate } from "@/lib/letters/templates";
+
+/**
+ * Templates are lazy-loaded. A letter type with no template uses the generic
+ * instructions; one whose template exists but failed to load (usually a stale
+ * chunk after a deploy) must not, or the letter would silently be drafted
+ * without its legal guidance.
+ */
+export const TEMPLATE_LOAD_FAILED_MESSAGE =
+  "Couldn't load the template for this letter. Reload the page and try again.";
+
+export async function ensureTemplate(
+  draft: Pick<Draft, "letterType" | "context">,
+): Promise<void> {
+  const jurisdiction = draft.context?.jurisdiction;
+  if (!draft.letterType || !jurisdiction) return;
+  try {
+    await loadTemplate(draft.letterType, jurisdiction);
+  } catch {
+    throw new Error(TEMPLATE_LOAD_FAILED_MESSAGE);
+  }
+}
 
 /** Resolve the user's preferred Qwen model from the persisted profile. */
 function activeModel(): string | undefined {
@@ -36,15 +58,28 @@ export async function generateAllSections(
   signal: AbortSignal,
   callbacks: GenerateCallbacks = {}
 ): Promise<void> {
+  await ensureTemplate(draft);
   const system = buildSystemPrompt(draft);
   const priorTitles: string[] = [];
 
   for (const section of draft.sections) {
     if (signal.aborted) return;
 
-    // reset any prior content
+    // Reset any prior content, keeping it to put back if this section's
+    // run fails or is stopped before any text arrives (nothing is lost when
+    // Regenerate all fails).
+    const priorHtml = section.html ?? "";
+    const priorStatus = section.status;
     store.updateSection(draft.id, section.id, "");
     store.setSectionStatus(draft.id, section.id, "streaming");
+    const restorePrior = () => {
+      if (!priorHtml.trim()) {
+        store.setSectionStatus(draft.id, section.id, "empty");
+        return;
+      }
+      store.updateSection(draft.id, section.id, priorHtml);
+      store.setSectionStatus(draft.id, section.id, priorStatus === "streaming" || priorStatus === "empty" ? "edited" : priorStatus);
+    };
 
     const userPrompt = buildSectionPrompt(draft, section, priorTitles);
     let acc = "";
@@ -81,8 +116,11 @@ export async function generateAllSections(
         html: sanitiseHtml(acc),
       });
     } catch (err) {
-      if (signal.aborted) return;
-      store.setSectionStatus(draft.id, section.id, "empty");
+      if (signal.aborted) {
+        if (!acc.trim()) restorePrior();
+        return;
+      }
+      restorePrior();
       throw err;
     }
 
@@ -116,6 +154,7 @@ export async function regenerateSectionAsPending(
   refineInstruction?: string,
   source: "regenerate" | "addClause" | "tighten" = "regenerate"
 ): Promise<void> {
+  await ensureTemplate(draft);
   const system = buildSystemPrompt(draft);
   // Guard the not-found case: findIndex → -1 would make slice(0, -1) return
   // ALL sections except the last (a concurrent delete could remove `section`
@@ -197,6 +236,7 @@ export async function regenerateSection(
    */
   refineInstruction?: string
 ): Promise<void> {
+  await ensureTemplate(draft);
   const system = buildSystemPrompt(draft);
   // Guard the not-found case: findIndex → -1 would make slice(0, -1) return
   // ALL sections except the last (a concurrent delete could remove `section`

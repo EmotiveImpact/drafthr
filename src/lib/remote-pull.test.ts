@@ -5,7 +5,10 @@ import {
   extractExtras,
   type RemoteDraft,
   type RemoteExtras,
+  type SyncMetaAccess,
 } from "./remote-pull";
+import { draftSyncKey, type SyncMeta } from "./sync-meta";
+import { mergeCommentLists } from "./comments/merge";
 import { toServerUuid } from "./remote-ids";
 import type { Draft } from "./letters/types";
 
@@ -97,6 +100,18 @@ describe("mergeRemoteDrafts — non-destructive cross-device merge", () => {
     expect(d.timeline).toEqual([{ id: "t1" }]);
     // The local id is kept (not replaced by the server uuid).
     expect(d.id).toBe("draft_1");
+  });
+
+  it("keeps the local matter id when the server's uuid maps to it", () => {
+    const local = { draft_1: localDraft({ matterId: "matter_abc" }) };
+    const merged = mergeRemoteDrafts(local, [remoteDraft({ matterId: toServerUuid("matter_abc") })]);
+    expect(merged.draft_1.matterId).toBe("matter_abc");
+  });
+
+  it("takes the server matter when the draft was refiled elsewhere", () => {
+    const local = { draft_1: localDraft({ matterId: "matter_abc" }) };
+    const merged = mergeRemoteDrafts(local, [remoteDraft({ matterId: toServerUuid("matter_xyz") })]);
+    expect(merged.draft_1.matterId).toBe(toServerUuid("matter_xyz"));
   });
 
   it("preserves local section id, versions, pendingChange, required by sectionId", () => {
@@ -204,7 +219,7 @@ describe("mergeRemoteExtras — collaboration-data union (non-destructive)", () 
         id: toServerUuid("draft_1"),
         extras: {
           comments: [
-            { id: "c2", body: "REMOTE edit of c2", createdAt: 300 } as never, // collision → local wins
+            { id: "c2", body: "REMOTE edit of c2", createdAt: 300 } as never, // same version → local wins
             { id: "c3", body: "remote three", createdAt: 200 } as never, // remote-only → added
           ],
         },
@@ -235,5 +250,154 @@ describe("mergeRemoteExtras — collaboration-data union (non-destructive)", () 
       comments: [{ id: "c1", body: "x", createdAt: 1 }] as never,
     });
     expect(extractExtras(withComment)?.comments?.length).toBe(1);
+  });
+});
+
+describe("mergeRemoteDrafts — tombstones and revisions", () => {
+  function metaAccess(initial: Record<string, SyncMeta> = {}) {
+    const store: Record<string, SyncMeta> = { ...initial };
+    const access: SyncMetaAccess = {
+      get: (id) => store[id],
+      adopted: (id, rev, d) => {
+        store[id] = { rev, key: draftSyncKey(d), ckey: "", at: 1 };
+      },
+      rebased: (id, rev) => {
+        store[id] = { ...(store[id] ?? { key: "", ckey: "", at: 0 }), rev };
+      },
+      clear: (id) => {
+        delete store[id];
+      },
+    };
+    return { store, access };
+  }
+
+  it("drops a draft deleted on another device", () => {
+    const { store, access } = metaAccess({ draft_1: { rev: 1, key: draftSyncKey(localDraft()), ckey: "", at: 1 } });
+    const merged = mergeRemoteDrafts({ draft_1: localDraft() }, [], new Set(), {
+      deleted: [{ id: toServerUuid("draft_1"), deletedAt: 1 }],
+      syncMeta: access,
+      syncKey: draftSyncKey,
+    });
+    expect(merged.draft_1).toBeUndefined();
+    expect(store.draft_1).toBeUndefined();
+  });
+
+  it("keeps unsynced edits on this device only when the draft was deleted elsewhere", () => {
+    const local = localDraft();
+    const { store, access } = metaAccess({ draft_1: { rev: 1, key: "an-older-push", ckey: "", at: 1 } });
+    const kept: string[] = [];
+    const merged = mergeRemoteDrafts({ draft_1: local }, [], new Set(), {
+      deleted: [{ id: toServerUuid("draft_1"), deletedAt: 1 }],
+      syncMeta: access,
+      syncKey: draftSyncKey,
+      onKeptLocalOnly: (id) => kept.push(id),
+    });
+    expect(merged.draft_1.localOnly).toBe(true);
+    expect(merged.draft_1.sections[0].html).toBe("<p>local body</p>");
+    expect(store.draft_1).toBeUndefined();
+    expect(kept).toEqual(["draft_1"]);
+  });
+
+  it("without sync metadata, keeps a copy only if it was edited after the delete", () => {
+    const deleted = [{ id: toServerUuid("draft_1"), deletedAt: 6_000 }];
+    const { access } = metaAccess();
+    const opts = { deleted, syncMeta: access, syncKey: draftSyncKey };
+    expect(mergeRemoteDrafts({ draft_1: localDraft({ updatedAt: 5_000 }) }, [], new Set(), opts).draft_1).toBeUndefined();
+    expect(mergeRemoteDrafts({ draft_1: localDraft({ updatedAt: 7_000 }) }, [], new Set(), opts).draft_1?.localOnly).toBe(
+      true,
+    );
+  });
+
+  it("never drops a local-only conflict copy on a tombstone", () => {
+    const merged = mergeRemoteDrafts({ draft_1: localDraft({ localOnly: true }) }, [], new Set(), {
+      deleted: [{ id: toServerUuid("draft_1"), deletedAt: 1 }],
+    });
+    expect(merged.draft_1).toBeDefined();
+  });
+
+  it("keeps a local copy with unsynced edits even when the server is newer (the push resolves it)", () => {
+    const local = localDraft();
+    const { access } = metaAccess({ draft_1: { rev: 2, key: "stale-key", ckey: "", at: 1 } });
+    const merged = mergeRemoteDrafts({ draft_1: local }, [remoteDraft({ revision: 5 })], new Set(), {
+      syncMeta: access,
+      syncKey: draftSyncKey,
+    });
+    expect(merged.draft_1).toBe(local);
+  });
+
+  it("takes a newer server revision when the local copy has no unsynced edits", () => {
+    const local = localDraft({ updatedAt: 99_999 });
+    const { store, access } = metaAccess({ draft_1: { rev: 2, key: draftSyncKey(local), ckey: "", at: 1 } });
+    const merged = mergeRemoteDrafts({ draft_1: local }, [remoteDraft({ revision: 5, updatedAt: 10 })], new Set(), {
+      syncMeta: access,
+      syncKey: draftSyncKey,
+    });
+    // Revisions decide, not the client's own clock.
+    expect(merged.draft_1.sections[0].html).toBe("<p>server body</p>");
+    expect(store.draft_1.rev).toBe(5);
+  });
+
+  it("ignores a server copy at the revision this device already has", () => {
+    const local = localDraft();
+    const { access } = metaAccess({ draft_1: { rev: 5, key: draftSyncKey(local), ckey: "", at: 1 } });
+    const merged = mergeRemoteDrafts({ draft_1: local }, [remoteDraft({ revision: 5 })], new Set(), {
+      syncMeta: access,
+      syncKey: draftSyncKey,
+    });
+    expect(merged.draft_1).toBe(local);
+  });
+});
+
+describe("mergeRemoteExtras — per-item comments", () => {
+  const base = { id: "c1", sectionId: "s", authorId: "me", authorName: "A", body: "x", createdAt: 100 };
+
+  it("carries a newer resolve from another device", () => {
+    const local = { draft_1: localDraft({ comments: [{ ...base, updatedAt: 100 }] as never }) };
+    const merged = mergeRemoteExtras(local, [
+      { id: toServerUuid("draft_1"), extras: { comments: [{ ...base, resolved: true, updatedAt: 200 }] } },
+    ]);
+    expect(merged.draft_1.comments?.[0].resolved).toBe(true);
+  });
+
+  it("applies a remote tombstone and never resurrects a locally deleted comment", () => {
+    const local = {
+      draft_1: localDraft({
+        comments: [{ ...base, updatedAt: 100 }] as never,
+        commentTombstones: [{ id: "c9", deletedAt: 50 }],
+      }),
+    };
+    const merged = mergeRemoteExtras(local, [
+      {
+        id: toServerUuid("draft_1"),
+        extras: {
+          comments: [
+            { id: "c1", deleted: true, updatedAt: 150 },
+            { ...base, id: "c9", updatedAt: 999 },
+          ],
+        },
+      },
+    ]);
+    expect(merged.draft_1.comments).toEqual([]);
+    expect(merged.draft_1.commentTombstones?.map((t) => t.id).sort()).toEqual(["c1", "c9"]);
+  });
+
+  it("returns the same map when nothing changed, so a pull doesn't trigger a re-sync", () => {
+    const local = { draft_1: localDraft({ comments: [{ ...base, updatedAt: 100 }] as never, timeline: [] }) };
+    const merged = mergeRemoteExtras(local, [
+      { id: toServerUuid("draft_1"), extras: { comments: [{ ...base, updatedAt: 100 }] } },
+    ]);
+    expect(merged).toBe(local);
+  });
+
+  it("extractExtras sends comment tombstones", () => {
+    const extras = extractExtras(localDraft({ comments: [], timeline: [], commentTombstones: [{ id: "c1", deletedAt: 7 }] }));
+    expect(extras?.comments).toEqual([{ id: "c1", deleted: true, deletedAt: 7, updatedAt: 7 }]);
+  });
+});
+
+describe("comment list merge", () => {
+  it("prefers tombstones, then the newer updatedAt", () => {
+    expect(mergeCommentLists([{ id: "a", updatedAt: 5 }], [{ id: "a", deleted: true, updatedAt: 1 }])[0].deleted).toBe(true);
+    expect(mergeCommentLists([{ id: "a", updatedAt: 5, resolved: true }], [{ id: "a", updatedAt: 4 }])[0].resolved).toBe(true);
   });
 });

@@ -6,7 +6,7 @@ export const APPEAL_UK: LetterTemplate = {
   evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Internal Appeal — EMPLOYEE MODE):
 - Step 4 of the ACAS Code of Practice on Disciplinary and Grievance Procedures: appeal against any disciplinary, capability, or grievance outcome.
-- Failure to use the internal appeal route may result in a Polkey deduction (Polkey v AE Dayton Services Ltd [1987] UKHL 8) — the tribunal can reduce the compensatory award where the procedural defect would not have changed the outcome — and may suggest the dismissal would have happened anyway.
+- An internal appeal is not a legal condition of bringing a tribunal claim, and the limitation clock keeps running while it is heard. But where the ACAS Code applies, an employee's unreasonable failure to appeal can lead the tribunal to reduce any award by up to 25% (s.207A TULRCA 1992), so the appeal should always be made and made on time.
 - Use the four canonical grounds: (1) procedural unfairness; (2) factual error; (3) severity disproportionate; (4) new evidence.
 - Right to be accompanied at the appeal hearing under s.10 Employment Relations Act 1999.
 - This is OPEN correspondence and tribunal-bound. No intensifiers, no admissions, no settlement language. Reserve all rights.

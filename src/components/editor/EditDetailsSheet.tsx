@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Settings2, X } from "lucide-react";
 import type { Draft, EmployeeTone, Tone, UkRegion, UsState, WorkerClass } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const TONES: { value: Tone; label: string }[] = [
   { value: "warm", label: "Warm" },
@@ -62,6 +63,7 @@ export function EditDetailsSheet({
   const [issueDate, setIssueDate] = useState(draft.context.issueDate);
   const [employerName, setEmployerName] = useState(draft.employer.legalName);
   const [employerAddress, setEmployerAddress] = useState(draft.employer.address);
+  const [employerPhone, setEmployerPhone] = useState(draft.employer.phone ?? "");
   const [employeeName, setEmployeeName] = useState(draft.employee.legalName);
   const [employeeJobTitle, setEmployeeJobTitle] = useState(draft.employee.jobTitle);
   const [employeeAddress, setEmployeeAddress] = useState(draft.employee.address);
@@ -91,6 +93,7 @@ export function EditDetailsSheet({
     setIssueDate(draft.context.issueDate);
     setEmployerName(draft.employer.legalName);
     setEmployerAddress(draft.employer.address);
+    setEmployerPhone(draft.employer.phone ?? "");
     setEmployeeName(draft.employee.legalName);
     setEmployeeJobTitle(draft.employee.jobTitle);
     setEmployeeAddress(draft.employee.address);
@@ -106,6 +109,7 @@ export function EditDetailsSheet({
       issueDate: draft.context.issueDate,
       employerName: draft.employer.legalName,
       employerAddress: draft.employer.address,
+      employerPhone: draft.employer.phone ?? "",
       employeeName: draft.employee.legalName,
       employeeJobTitle: draft.employee.jobTitle,
       employeeAddress: draft.employee.address,
@@ -143,6 +147,7 @@ export function EditDetailsSheet({
     const employer: Partial<Draft["employer"]> = {};
     if (dirty("employerName", employerName)) employer.legalName = employerName;
     if (dirty("employerAddress", employerAddress)) employer.address = employerAddress;
+    if (dirty("employerPhone", employerPhone)) employer.phone = employerPhone.trim() || undefined;
 
     const employee: Partial<Draft["employee"]> = {};
     if (dirty("employeeName", employeeName)) employee.legalName = employeeName;
@@ -214,6 +219,7 @@ export function EditDetailsSheet({
 
             <Group label="Worker classification">
               <SelectField
+                ariaLabel="Worker classification"
                 value={workerClass}
                 onChange={(v) => setWorkerClass(v as WorkerClass)}
                 options={WORKER_CLASSES.map((w) => ({ value: w.value, label: w.label }))}
@@ -223,12 +229,14 @@ export function EditDetailsSheet({
             <Group label={isEmployer ? "Tone" : "Tone band"}>
               {isEmployer ? (
                 <SelectField
+                  ariaLabel="Tone"
                   value={tone}
                   onChange={(v) => setTone(v as Tone)}
                   options={TONES.map((t) => ({ value: t.value, label: t.label }))}
                 />
               ) : (
                 <SelectField
+                  ariaLabel="Tone band"
                   value={employeeTone}
                   onChange={(v) => setEmployeeTone(v as EmployeeTone)}
                   options={EMPLOYEE_TONES.map((t) => ({ value: t.value, label: t.label }))}
@@ -268,6 +276,7 @@ export function EditDetailsSheet({
             <Group label={isEmployer ? "Your company (employer)" : "Recipient (employer)"}>
               <TextField label="Legal name" value={employerName} onChange={setEmployerName} />
               <TextField label="Address" value={employerAddress} onChange={setEmployerAddress} multiline />
+              {isEmployer && <TextField label="Phone (optional)" value={employerPhone} onChange={setEmployerPhone} />}
             </Group>
           </div>
 
@@ -339,31 +348,42 @@ function TextField({
 
 function SelectField({
   label,
+  ariaLabel,
   value,
   onChange,
   options,
 }: {
   label?: string;
+  ariaLabel?: string;
   value: string;
   onChange: (next: string) => void;
   options: { value: string; label: string }[];
 }) {
+  const id = useId();
   return (
-    <label className="block">
+    <div className="block">
       {label && (
-        <span className="block text-[11px] text-[var(--ds-muted)] font-medium mb-1">{label}</span>
+        <label id={id} className="block text-[11px] text-[var(--ds-muted)] font-medium mb-1">
+          {label}
+        </label>
       )}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full h-8 px-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger
+          size="sm"
+          aria-labelledby={label ? id : undefined}
+          aria-label={label ? undefined : ariaLabel}
+          className="h-8 w-full min-w-0 px-2.5 text-[13px]"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper" className="z-[60]">
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

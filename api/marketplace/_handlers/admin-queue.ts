@@ -35,6 +35,7 @@ export async function GET(req: Request): Promise<Response> {
       specialty: consultantProfiles.specialty,
       specialties: consultantProfiles.specialties,
       price: consultantProfiles.price,
+      priorityPrice: consultantProfiles.priorityPrice,
       currency: consultantProfiles.currency,
       sla: consultantProfiles.sla,
       photoUrl: consultantProfiles.photoUrl,

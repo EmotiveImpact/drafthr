@@ -6,7 +6,7 @@ export const LEAVE_APPROVAL_UK: LetterTemplate = {
   evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Leave Approval):
 - Identify the applicable statutory regime: Statutory Maternity Leave (s.71–73 ERA 1996, MPLR 1999); Statutory Paternity Leave (PPLR 2002); Shared Parental Leave (CSPLR 2014); Adoption Leave (s.75A ERA); Carer's Leave (Carer's Leave Regulations 2024); Statutory Sick Pay (Social Security Contributions and Benefits Act 1992); Unpaid Parental Leave (MPLR 1999); Bereavement Leave / Parental Bereavement Leave (Parental Bereavement (Leave and Pay) Act 2018).
-- State the pay arrangement (SMP/SPP/ShPP/SSP at statutory rate; any contractual enhancement). For SMP: 90% of average weekly earnings for first 6 weeks, then statutory rate or 90% (whichever is lower) for next 33 weeks. For SSP: standard weekly rate from day 4 of incapacity, up to 28 weeks.
+- State the pay arrangement (SMP/SPP/ShPP/SSP at statutory rate; any contractual enhancement). For SMP: 90% of average weekly earnings for first 6 weeks, then statutory rate or 90% (whichever is lower) for next 33 weeks. For SSP (from 6 April 2026): payable from the first day of incapacity at the standard weekly rate or 80% of average weekly earnings if lower, up to 28 weeks.
 - Confirm benefits continuation during paid and unpaid statutory leave: pension contributions continue on contractual pay during paid maternity/adoption leave (Equality Act 2010, Sex Discrimination Act-derived case law); annual leave continues to accrue throughout statutory leave (Working Time Regulations 1998, regulation 13).
 - Reference KIT/SPLIT day allowance: up to 10 KIT days during maternity/adoption leave; up to 20 SPLIT days during shared parental leave.
 - Confirm the right to return to the same job (after Ordinary Maternity Leave, first 26 weeks) or same/suitable alternative (after Additional Maternity Leave) under s.71 ERA.
@@ -71,7 +71,7 @@ export const LEAVE_APPROVAL_UK: LetterTemplate = {
       scaffold: `<p>During your leave, you will receive {{statutoryPayDescription}}, together with {{contractualEnhancementDescription}}. Your participation in the {{pensionSchemeName}} will continue on your contractual pay throughout your paid leave period, and your annual leave will continue to accrue under the Working Time Regulations 1998 (regulation 13). Your enrolment in the {{medicalPlanName}} and other employee benefits will continue on the same basis as before.</p>
 <p>You may, by agreement with the company, work up to {{kitSplitDayCount}} {{kitOrSplit}} days during your leave without bringing it to an end. Your line manager, {{lineManagerName}}, will keep in touch with you on the {{contactCadence}} basis you have requested. If you wish to vary your expected return date, please give the company at least 8 weeks' notice in writing.</p>`,
       constraints: [
-        "MUST state the statutory pay regime and rate plainly (SMP weeks 1–6 at 90%; weeks 7–39 at the lower of statutory rate or 90%; weeks 40–52 unpaid; SSP from day 4 etc.).",
+        "MUST state the statutory pay regime and rate plainly (SMP weeks 1–6 at 90%; weeks 7–39 at the lower of statutory rate or 90%; weeks 40–52 unpaid; SSP from day 1 at the lower of the standard rate or 80% of average weekly earnings, etc.).",
         "MUST cite the Working Time Regulations 1998 for holiday accrual.",
         "MUST state KIT/SPLIT day allowance precisely.",
         "MUST state the 8-week notice rule for varying return date (maternity/adoption).",

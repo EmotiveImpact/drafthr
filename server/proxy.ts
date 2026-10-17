@@ -6,7 +6,7 @@ import {
   type UIMessage,
 } from "ai";
 import { agentTools } from "./agent-tools";
-import { buildModel } from "./llm-model";
+import { buildModel, resolveModelName, temperatureFor } from "./llm-model";
 
 export type DraftRequest = {
   messages: ModelMessage[];
@@ -79,7 +79,7 @@ export async function handleDraftRequest(
     const result = streamText({
       model: buildModel(body.model),
       messages: body.messages,
-      temperature: body.temperature ?? 0.4,
+      temperature: temperatureFor(resolveModelName(body.model), body.temperature ?? 0.4),
       maxOutputTokens: body.maxTokens ?? 1200,
       onError: (err) => {
         const msg =
@@ -148,7 +148,7 @@ export async function handleAgentRequest(
     system: body.system,
     messages: modelMessages,
     tools: agentTools,
-    temperature: 0.4,
+    temperature: temperatureFor(resolveModelName(body.model), 0.4),
     maxOutputTokens: 1100,
     onError: (err) => {
       // eslint-disable-next-line no-console

@@ -34,41 +34,41 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1300,
       rollupOptions: {
         output: {
-          // Split heavy deps into their own chunks so the first-paint bundle
-          // (index.js) stays small and the export libraries are only fetched
-          // when the user actually exports. Without this, vite jams everything
-          // into a single 1.4 MB chunk.
-          manualChunks: {
-            // Tiptap stack — only needed in the editor route. Lists the
-            // packages we actually import; transitive deps (@tiptap/core,
-            // @tiptap/pm) get pulled into the same chunk automatically.
-            tiptap: [
-              "@tiptap/react",
-              "@tiptap/starter-kit",
-              "@tiptap/extension-placeholder",
-              "@tiptap/extension-link",
-              "@tiptap/extension-underline",
-              "@tiptap/extension-table",
-              "@tiptap/extension-table-row",
-              "@tiptap/extension-table-cell",
-              "@tiptap/extension-table-header",
-            ],
-            // AI SDK — only needed when the user opens the AI panel.
-            "ai-sdk": ["ai", "@ai-sdk/react"],
-            // Split marked (editor/AI-panel only) from dompurify (on the
-            // first-paint path — sanitize.ts runs on every render). Bundling
-            // them dragged marked into the critical path. (Senior sweep I-PERF-3.)
-            marked: ["marked"],
-            dompurify: ["dompurify"],
-            // Export libraries — only needed at export time.
-            "export-pdf": ["html2canvas", "jspdf"],
-            // Radix Themes — the heaviest UI dependency.
-            "radix-themes": ["@radix-ui/themes"],
-            // Icons used everywhere — give them their own chunk so a refresh
-            // of any non-icon code doesn't bust the icon cache.
-            icons: ["lucide-react"],
-            // Forms.
-            forms: ["react-hook-form", "@hookform/resolvers"],
+          // Group heavy vendor packages into stable, cacheable chunks. This is
+          // the function form on purpose: the object form also pulls every
+          // transitive dependency of the listed packages into the group,
+          // which once put Vite's own preload helper into the PDF chunk and
+          // made index.html modulepreload jspdf + html2canvas (595 KB) and the
+          // editor (415 KB) on every page. With a function, only modules that
+          // physically live in these packages are grouped, and a group is
+          // only preloaded where something statically imports it.
+          //
+          // The editor (Tiptap/ProseMirror), the PDF libraries and marked are
+          // reached through dynamic import() only (lazy routes and
+          // src/lib/export/pdf.ts), so they stay off the first-paint path.
+          manualChunks(id: string) {
+            // Runtime helpers and React are needed by every page. Pin them to
+            // one shared chunk; left unassigned, Rollup pulls them into the
+            // first manual chunk that depends on them (jspdf's own dynamic
+            // imports need the preload helper, so it landed in export-pdf).
+            if (id.includes("vite/preload-helper") || id.includes("commonjsHelpers")) return "react-vendor";
+            const m = /[\\/]node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)/.exec(id);
+            if (!m) return undefined;
+            const pkg = m[1].replace(/\\/g, "/");
+            if (pkg === "react" || pkg === "react-dom" || pkg === "scheduler") return "react-vendor";
+            if (pkg.startsWith("@tiptap/") || pkg.startsWith("prosemirror-") || pkg === "linkifyjs" || pkg === "tippy.js" || pkg === "orderedmap" || pkg === "rope-sequence" || pkg === "w3c-keyname") {
+              return "tiptap";
+            }
+            if (pkg === "html2canvas" || pkg === "jspdf") return "export-pdf";
+            // AI SDK: only needed when the user opens the AI panel.
+            if (pkg === "ai" || pkg === "@ai-sdk/react") return "ai-sdk";
+            if (pkg === "marked") return "marked";
+            if (pkg === "dompurify") return "dompurify";
+            // Icons used everywhere: their own chunk so a refresh of any
+            // non-icon code doesn't bust the icon cache.
+            if (pkg === "lucide-react") return "icons";
+            if (pkg === "react-hook-form" || pkg === "@hookform/resolvers") return "forms";
+            return undefined;
           },
         },
       },

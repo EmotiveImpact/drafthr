@@ -1,124 +1,230 @@
-import { ArrowRight, Star } from "lucide-react";
+import { Clock } from "lucide-react";
 import type { Consultant } from "@/components/consultants/types";
+import {
+  AmberStar,
+  BTN_OUTLINE,
+  BTN_PRIMARY,
+  Chip,
+  ExpertAvatar,
+  VerifiedBadge,
+  expertTint,
+} from "@/components/consultants/ui";
+import { availabilityPill, turnaroundWords, type AvailabilityPill } from "@/components/consultants/market";
 import { cn } from "@/lib/utils";
 
 /**
- * Marketplace consultant card. Matches the DraftHR card recipe
- * (rounded-[14px], --ds-line border, --ds-surface) and button/tag
- * recipes used across the app.
+ * The expert card (design `experts` / `mk-market` `.xc`): a 58px tint band
+ * edge to edge with the availability pill, a 52px avatar overlapping it, the
+ * serif name with the verified badge, credentials, specialty chips, rating,
+ * and a footer with the price per review, the turnaround and the action.
  *
- * A consultant with a `profileId` is a real, server-backed listing and
- * gets a "Live" badge; the 14 hardcoded seed consultants get no badge
- * (they're examples, surfaced honestly by the disclaimer on the index).
+ *   mode "book"     Book review (the sidebar's Experts page)
+ *   mode "choose"   Profile and Choose (choosing a reviewer for a letter)
+ *   mode "preview"  inert (the consultant's own form shows it live)
+ *
+ * The same expert always gets the same tint (seeded by their profile id).
  */
 export function ConsultantCard({
   consultant: c,
   onBook,
+  onProfile,
+  onChoose,
+  mode = "book",
+  preview = false,
+  dueMs = null,
+  picked = false,
+  disabledReason,
+  profileButtonRef,
+  bookButtonRef,
 }: {
   consultant: Consultant;
-  onBook: () => void;
+  /** Called with the button pressed, so a sheet can hand focus back to it. */
+  onBook?: (opener: HTMLButtonElement) => void;
+  onProfile?: (opener: HTMLButtonElement) => void;
+  onChoose?: () => void;
+  mode?: "book" | "choose" | "preview";
+  /** @deprecated use mode="preview" */
+  preview?: boolean;
+  /** Letter mode: the deadline, so anyone who can't make it is flagged. */
+  dueMs?: number | null;
+  /** The card whose profile sheet is open. */
+  picked?: boolean;
+  /** Booking or choosing is not allowed here (viewer, consultant mode). */
+  disabledReason?: string;
+  profileButtonRef?: (el: HTMLButtonElement | null) => void;
+  bookButtonRef?: (el: HTMLButtonElement | null) => void;
 }) {
-  const isLive = Boolean(c.profileId) && !c.pending;
+  const inert = preview || mode === "preview";
+  const verified = Boolean(c.profileId) && !c.pending;
   const currency = c.currency ?? "£";
+  const seed = c.profileId || c.name || c.initials;
+  const tint = expertTint(seed);
+  const pill = availabilityPill(c, dueMs);
 
   return (
-    <div
+    <article
+      data-expert-id={c.profileId}
       className={cn(
-        "relative bg-[var(--ds-surface)] rounded-[14px] flex flex-col gap-2.5 p-5 transition",
-        "shadow-[0_1px_2px_rgba(10,11,13,0.04)] hover:shadow-[0_12px_30px_-16px_rgba(10,11,13,0.18)] hover:-translate-y-px",
-        c.top
-          ? "border-2 border-[var(--ds-ink)]"
-          : "border border-[var(--ds-line)]",
+        // A size container: two columns beside the sidebar make the card
+        // about 190 to 250px wide, and its footer then stacks (below).
+        "@container flex min-w-0 flex-col overflow-hidden rounded-[16px] border bg-[var(--ds-surface)] transition-colors duration-[120ms]",
+        picked
+          ? "border-[var(--ds-ink)] shadow-[inset_0_0_0_1px_var(--ds-ink)]"
+          : "border-[var(--ds-line)] hover:border-[var(--ds-line-hover)]",
       )}
     >
-      {/* TOP MATCH ribbon */}
-      {c.top && (
-        <span className="absolute -top-2.5 left-5 bg-[var(--ds-ink)] text-white text-[9.5px] font-semibold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full">
-          ★ Top match
-        </span>
-      )}
-
-      {/* Photo */}
-      <img
-        src={c.photoUrl}
-        alt=""
-        className={cn(
-          "size-16 rounded-full object-cover self-center border-[3px] border-white shadow",
-          c.top ? "mt-1" : "mt-3.5",
-        )}
-      />
-
-      {/* Name + role + rating */}
-      <div className="text-center">
-        <div className="text-[14px] font-semibold text-[var(--ds-ink)]">{c.name}</div>
-        <div className="text-[11px] text-[var(--ds-muted)] mt-0.5">{c.role}</div>
-        <div className="text-[11px] text-[var(--ds-amber-fg)] mt-1 font-semibold">
-          <Star className="size-2.5 inline -mt-0.5 mr-0.5" fill="currentColor" strokeWidth={0} />
-          {c.rating.toFixed(1)}{" "}
-          <span className="text-[var(--ds-muted)] font-normal">({c.reviews})</span>
-        </div>
+      {/* Tint band with the availability pill; the avatar overlaps its foot. */}
+      <div className="relative flex h-[58px] shrink-0 items-start justify-end px-3.5 py-3" style={{ background: tint.bg }}>
+        <ExpertAvatar
+          photoUrl={c.photoUrl}
+          name={c.name}
+          initials={c.initials}
+          seed={seed}
+          size={52}
+          ring
+          className="absolute left-[18px] top-6 text-[17px]"
+        />
+        {/* On a narrow card the pill would be cut short beside the avatar,
+            so it moves under the rating as a plain line (below). */}
+        <AvailabilityBadge pill={pill} className="@max-[260px]:hidden" />
       </div>
 
-      {/* Specialty quote */}
-      <div
-        className={cn(
-          "text-[11.5px] text-[var(--ds-body)] px-3 py-2 bg-[var(--ds-canvas)] rounded-[8px] leading-snug flex-1",
-          c.top && "border-l-2 border-[var(--ds-ink)]",
-        )}
-      >
-        "{c.specialty}"
-      </div>
-
-      {/* Specialty tags */}
-      {c.specialties.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {c.specialties.map((tag) => (
-            <span
-              key={tag}
-              className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-[var(--ds-line)] bg-white text-[var(--ds-body)]"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Price + SLA + live status */}
-      <div className="flex items-center justify-between pt-2.5 border-t border-[var(--ds-line)]">
-        <div>
-          <div className="text-[15px] font-semibold text-[var(--ds-ink)]">
-            {currency}{c.price}
+      <div className="min-w-0 flex-1 px-[18px] pt-7">
+        <h3 className="m-0 flex min-w-0 items-center gap-1.5 font-[family-name:var(--font-title)] text-[21px] font-normal leading-[1.25] tracking-[-0.015em] text-[var(--ds-ink)]">
+          <span className="min-w-0 truncate">{c.name}</span>
+          {verified && <VerifiedBadge size={15} />}
+        </h3>
+        <p className="m-0 mt-[3px] line-clamp-2 text-[13px] leading-[1.4] text-[var(--ds-muted)]">{c.role}</p>
+        {c.specialties.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {c.specialties.slice(0, 3).map((tag) => (
+              <Chip key={tag}>{tag}</Chip>
+            ))}
+            {c.specialties.length > 3 && (
+              <Chip className="text-[var(--ds-muted)]">+{c.specialties.length - 3}</Chip>
+            )}
           </div>
-          <div className="text-[10.5px] text-[var(--ds-muted)]">{c.sla} SLA</div>
-        </div>
-        {isLive ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--ds-green-bg)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--ds-green-fg)]">
-            <span className="size-1.5 rounded-full bg-[var(--ds-green-fg)]" aria-hidden />
-            Live
-          </span>
-        ) : c.pending ? (
-          <span className="text-[10.5px] font-semibold text-[var(--ds-amber-fg)]">
-            Pending review
-          </span>
-        ) : (
-          <span className="text-[10.5px] font-medium text-[var(--ds-subtle)]">Example</span>
         )}
+        <div className="mt-3 flex items-center gap-2 text-[12.5px] text-[var(--ds-subtle)]">
+          {c.reviews > 0 ? (
+            <>
+              <span
+                role="img"
+                aria-label={`Rated ${c.rating.toFixed(1)} from ${c.reviews} reviews`}
+                className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--ds-ink)]"
+              >
+                <AmberStar size={13} />
+                <span className="ds-mono">{c.rating.toFixed(1)}</span>
+              </span>
+              <span>
+                {c.reviews} review{c.reviews === 1 ? "" : "s"}
+              </span>
+            </>
+          ) : (
+            <span>No reviews yet</span>
+          )}
+        </div>
+        <AvailabilityLine pill={pill} className="mt-1.5 hidden @max-[260px]:flex" />
       </div>
 
-      {/* Book CTA */}
-      <button
-        type="button"
-        onClick={onBook}
-        className={cn(
-          "w-full h-[40px] rounded-[9px] text-[13px] font-semibold transition flex items-center justify-center gap-1.5",
-          c.top
-            ? "bg-[var(--ds-ink)] text-white shadow-sm hover:-translate-y-px hover:shadow-md"
-            : "bg-white text-[var(--ds-ink)] border border-[var(--ds-line)] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)]",
+      {/* Price and turnaround on the left, the action on the right; on a
+          narrow card the action goes under them at full width. */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-[var(--ds-line-2)] py-3 pl-[18px] pr-3.5 @max-[260px]:flex-col @max-[260px]:items-stretch @max-[260px]:gap-y-2.5 @max-[260px]:pr-[18px]">
+        <div className="min-w-0">
+          <div className="text-[15.5px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)]">
+            <span className="ds-mono">
+              {currency}
+              {c.price}
+            </span>
+            <span className="text-[12.5px] font-normal text-[var(--ds-muted)]"> per review</span>
+          </div>
+          <div className="mt-0.5 flex items-center gap-[5px] text-[12px] text-[var(--ds-muted)]">
+            <Clock className="size-3" aria-hidden />
+            Back within {turnaroundWords(c.sla)}
+          </div>
+        </div>
+        {mode === "choose" ? (
+          <div className="flex gap-1.5 @max-[260px]:[&>button]:flex-1">
+            <button
+              ref={profileButtonRef}
+              type="button"
+              onClick={(e) => onProfile?.(e.currentTarget)}
+              aria-label={`${c.name}'s profile`}
+              className={cn(BTN_OUTLINE, "h-[34px] text-[13.5px] max-sm:h-10")}
+            >
+              Profile
+            </button>
+            <button
+              type="button"
+              onClick={disabledReason ? undefined : onChoose}
+              aria-disabled={disabledReason ? true : undefined}
+              title={disabledReason}
+              aria-label={`Choose ${c.name}`}
+              className={cn(BTN_PRIMARY, "h-[34px] text-[13.5px] max-sm:h-10", disabledReason && "cursor-not-allowed")}
+            >
+              Choose
+            </button>
+          </div>
+        ) : (
+          <button
+            ref={bookButtonRef}
+            type="button"
+            onClick={inert || disabledReason ? undefined : (e) => onBook?.(e.currentTarget)}
+            aria-disabled={inert || disabledReason ? true : undefined}
+            tabIndex={inert ? -1 : undefined}
+            title={disabledReason}
+            aria-label={`Book a review with ${c.name}`}
+            className={cn(
+              BTN_OUTLINE,
+              "h-[34px] text-[13.5px] max-sm:h-10 @max-[260px]:w-full",
+              inert && "pointer-events-none",
+              disabledReason && "cursor-not-allowed",
+            )}
+          >
+            Book review
+          </button>
         )}
-      >
-        Book {c.name.split(" ")[0]}
-        <ArrowRight className="size-3.5" />
-      </button>
-    </div>
+      </div>
+    </article>
+  );
+}
+
+/** The availability as a plain line, for cards too narrow for the pill:
+ *  the same words and colours, free to wrap. */
+function AvailabilityLine({ pill, className }: { pill: AvailabilityPill; className?: string }) {
+  return (
+    <p
+      className={cn(
+        "m-0 items-start gap-1.5 text-[12px] font-medium leading-[16px]",
+        pill.tone === "live" && "text-[var(--ds-green-fg)]",
+        pill.tone === "quiet" && "text-[var(--ds-muted)]",
+        (pill.tone === "late" || pill.tone === "pending") && "text-[var(--ds-amber-fg)]",
+        className,
+      )}
+    >
+      {pill.tone === "live" && <span aria-hidden className="mt-[5px] size-1.5 shrink-0 rounded-full bg-[var(--ds-green-solid)]" />}
+      <span className="min-w-0">{pill.label}</span>
+    </p>
+  );
+}
+
+/** The small white availability pill on a tint band. Always one line: it
+ *  keeps clear of the avatar (52px, 18px in) and, if a narrow card still
+ *  cannot fit the words, ends in an ellipsis with the full text as its title. */
+export function AvailabilityBadge({ pill, className }: { pill: AvailabilityPill; className?: string }) {
+  return (
+    <span
+      title={pill.label}
+      className={cn(
+        "relative inline-flex min-w-0 max-w-[calc(100%-62px)] items-center gap-1.5 whitespace-nowrap rounded-[11px] bg-[var(--ds-surface)] px-[9px] py-[3px] text-[12px] font-medium leading-[16px]",
+        pill.tone === "live" && "text-[var(--ds-green-fg)]",
+        pill.tone === "quiet" && "text-[var(--ds-muted)]",
+        (pill.tone === "late" || pill.tone === "pending") && "text-[var(--ds-amber-fg)]",
+        className,
+      )}
+    >
+      {pill.tone === "live" && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[var(--ds-green-solid)]" />}
+      <span className="min-w-0 truncate">{pill.label}</span>
+    </span>
   );
 }

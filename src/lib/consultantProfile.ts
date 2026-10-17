@@ -39,6 +39,9 @@ export type ConsultantProfile = {
   specialties: string[];
   /** Hourly rate, integer. */
   price: number;
+  /** Priority rate (back within 24 hours of payment), above price. Null or
+   *  absent: the expert doesn't offer priority. */
+  priorityPrice?: number | null;
   /** Currency symbol — "£", "$", "€". */
   currency: "£" | "$" | "€";
   /** Service-level — e.g. "24-48h". */
@@ -130,6 +133,7 @@ export const useConsultantStore = create<ConsultantStore>()(
           specialty: existing?.specialty ?? "",
           specialties: existing?.specialties ?? [],
           price: existing?.price ?? 150,
+          priorityPrice: existing?.priorityPrice ?? null,
           currency: existing?.currency ?? "£",
           sla: existing?.sla ?? "24-48h",
           rating: existing?.rating ?? 5.0,

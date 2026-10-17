@@ -14,7 +14,7 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit } from "../../_utils/rate-limit.js";
+import { rateLimitDurable } from "../../_utils/rate-limit.js";
 import {
   buildSessionCookie,
   getWorkos,
@@ -37,7 +37,7 @@ export async function POST(req: Request): Promise<Response> {
   // the kind of thing brute-forcers love. WorkOS adds its own per-token
   // ratchet (single use, short TTL) on top, so 10 attempts is plenty for
   // a real user fat-fingering the new password rules.
-  const limited = rateLimit(req, {
+  const limited = await rateLimitDurable(req, {
     name: "auth-password-reset-confirm",
     max: 10,
     windowMs: 60_000,

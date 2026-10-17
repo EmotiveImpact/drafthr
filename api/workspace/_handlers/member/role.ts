@@ -11,6 +11,7 @@ import { getDb } from "../../../../src/db/index.js";
 import { tenantMembers } from "../../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../../src/db/audit.js";
 import { canManageOwners } from "../../../../src/lib/permissions.js";
+import { serverUuidOrNull } from "../../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -27,9 +28,12 @@ export async function POST(req: Request): Promise<Response> {
 
   const parsed = await readJsonRequest<Body>(req);
   if (!parsed.ok) return parsed.response;
-  const userId = typeof parsed.body.userId === "string" ? parsed.body.userId.trim() : "";
+  const rawUserId = typeof parsed.body.userId === "string" ? parsed.body.userId.trim() : "";
   const role = typeof parsed.body.role === "string" ? parsed.body.role : "";
-  if (!userId) return jsonError("userId required", 400);
+  if (!rawUserId) return jsonError("userId required", 400);
+  // A non-uuid id would raise Postgres 22P02 and surface as a 500.
+  const userId = serverUuidOrNull(rawUserId);
+  if (!userId) return jsonError("Invalid userId", 400);
   if (!ALLOWED_ROLES.has(role)) return jsonError("Invalid role", 400);
 
   const auth = await requireSessionAndTenant(req);

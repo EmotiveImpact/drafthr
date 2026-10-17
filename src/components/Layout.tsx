@@ -1,16 +1,17 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, Plus } from "lucide-react";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { ChevronDown, Menu, Search } from "lucide-react";
+import { BrandMark } from "@/components/ds";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
+import { AppSidebar, shortOrgName } from "@/components/AppSidebar";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchPalette, useSearchPalette } from "@/components/SearchPalette";
-import { SearchPaletteContext } from "@/components/SearchPaletteContext";
+import { SearchPaletteContext, useSearchPaletteToggle } from "@/components/SearchPaletteContext";
 import { Onboarding } from "@/components/Onboarding";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
+import { useProfileStore } from "@/lib/profile";
 
 /** Routes that render WITHOUT the authenticated app chrome (sidebar,
  * notifications, search palette). These show before the user has a session
@@ -36,13 +37,18 @@ const CHROMELESS_PREFIXES = [
   "/privacy",
   "/terms",
   "/legal",
+  // Reviewer views: the trusted reviewer's secure link (no account) and the
+  // booked expert's review page show the letter without the app sidebar.
+  "/r/",
+  "/c/review/",
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
   useDocumentTitle(loc.pathname);
   const { user, activeTenant, isLoaded } = useAuth();
-  const isEditor = loc.pathname.startsWith("/editor/");
+  // The full Finalise page keeps the normal sidebar (SEND-110).
+  const isEditor = loc.pathname.startsWith("/editor/") && !/^\/editor\/[^/]+\/finalize\/?$/.test(loc.pathname);
   const isChromeless =
     CHROMELESS_EXACT.includes(loc.pathname) ||
     CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p));
@@ -87,14 +93,23 @@ export function Layout({ children }: { children: ReactNode }) {
     return (
       <TooltipProvider delayDuration={150}>
         <SearchPaletteContext.Provider value={{ open, setOpen }}>
-          {/* The editor is locked to viewport height. h-dvh handles mobile
-           * URL-bar resize correctly; h-screen as fallback. Inner flex/grid
-           * children scroll independently so the chat composer + sections
-           * list stay sticky on screen at any letter length. */}
-          <div className="h-screen h-dvh flex flex-col overflow-hidden">
+          {/* The letter workspace sits beside the app sidebar, as in the
+           * design, starting as the icon rail so the letter and its side panel
+           * keep their room (the person can expand it). It is locked to viewport height (h-dvh handles the mobile
+           * URL bar; h-screen is the fallback) so inner panes scroll on their
+           * own and the composer stays on screen at any letter length. Below
+           * md the sidebar is a sheet, so phones still get the full-bleed
+           * editor with its own back button. */}
+          {/* Keyed apart from the app frame's provider below: both sit at the
+           * same place in the tree, so without a key a letter opened from a
+           * list page would keep the full sidebar instead of the rail. */}
+          <SidebarProvider key="letter" defaultOpen={false} className="h-screen h-dvh min-h-0 overflow-hidden">
             <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
-            <main id="main" aria-label="Main content" className="flex-1 flex flex-col min-h-0">{children}</main>
-          </div>
+            <AppSidebar />
+            <SidebarInset className="min-h-0 min-w-0 flex flex-col overflow-hidden">
+              <main id="main" aria-label="Main content" className="flex-1 flex flex-col min-h-0">{children}</main>
+            </SidebarInset>
+          </SidebarProvider>
           <SearchPalette open={open} onOpenChange={setOpen} />
           <Onboarding />
         </SearchPaletteContext.Provider>
@@ -105,12 +120,15 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <TooltipProvider delayDuration={150}>
       <SearchPaletteContext.Provider value={{ open, setOpen }}>
-        <SidebarProvider defaultOpen>
+        <SidebarProvider key="app" defaultOpen>
           <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
           <AppSidebar />
-          <SidebarInset className="min-h-screen flex flex-col">
+          {/* The page sits flat beside the white sidebar (a hairline between
+           * them), as in the mocks. On phones the compact top bar sits above
+           * it, transparent, so a page's mist band runs up behind it. */}
+          <SidebarInset className="min-h-screen min-w-0 flex flex-col bg-[var(--ds-surface)]">
             <MobileTopbar />
-            <main id="main" aria-label="Main content" className="flex-1">{children}</main>
+            <main id="main" aria-label="Main content" className="relative flex-1 min-w-0">{children}</main>
           </SidebarInset>
         </SidebarProvider>
         <SearchPalette open={open} onOpenChange={setOpen} />
@@ -121,53 +139,50 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 /**
- * Mobile-only topbar shown when the sidebar is collapsed behind a Sheet
- * (i.e. < md). Houses a hamburger that opens the sidebar, the brand mark
- * for context, and the NotificationsBell. Hidden at md+ where the
- * sidebar is permanently visible.
+ * The compact phone top bar (mock phone-home): the logo, the workspace name
+ * (opens the menu, where the workspace switcher lives), then search, the
+ * bell with its count, and the menu button that opens the sidebar sheet.
+ * Hidden at md and up, where the sidebar is always on screen.
  */
 function MobileTopbar() {
   const { setOpenMobile } = useSidebar();
-  const loc = useLocation();
-
-  // Route the "+ New" action by which mode the user is in. We detect mode
-  // from the URL prefix so the action stays correct as the user navigates.
-  // Fallback to /pick-role if mode is ambiguous (e.g. /settings, /privacy).
-  const newLetterHref = loc.pathname.startsWith("/hr")
-    ? "/hr/new"
-    : loc.pathname.startsWith("/me")
-      ? "/me/new"
-      : "/pick-role";
+  const search = useSearchPaletteToggle();
+  const { activeTenant } = useAuth();
+  const orgName = useProfileStore((s) => s.profile.employer.legalName);
+  const name = shortOrgName(activeTenant?.name || orgName?.trim() || "DraftHR");
 
   return (
-    <header className="md:hidden flex h-12 shrink-0 items-center gap-2 border-b border-sidebar-border bg-background/85 backdrop-blur-sm px-3 sticky top-0 z-30">
-      <Link
-        to="/"
-        aria-label="DRAFTHR home"
-        className="flex items-center gap-2 min-w-0"
-      >
-        <BrandMark size={34} />
-        <Wordmark size={16} className="truncate" />
+    <header className="relative z-10 flex h-[52px] shrink-0 items-center gap-1 pt-1.5 pr-3 pl-4 md:hidden">
+      <Link to="/" aria-label="DraftHR home" className="mr-1.5 shrink-0 rounded-[7px]">
+        <BrandMark size={26} className="rounded-[7px]" />
       </Link>
-
-      <div className="ml-auto flex items-center gap-1">
-        <Link
-          to={newLetterHref}
-          aria-label="New letter"
-          className="grid place-items-center size-11 rounded-md hover:bg-sidebar-accent text-foreground"
-        >
-          <Plus className="size-5" />
-        </Link>
-        <NotificationsBell />
-        <button
-          type="button"
-          aria-label="Open menu"
-          onClick={() => setOpenMobile(true)}
-          className="grid place-items-center size-11 -mr-2 rounded-md hover:bg-sidebar-accent text-foreground"
-        >
-          <Menu className="size-5" />
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => setOpenMobile(true)}
+        aria-label={`${name}, open menu`}
+        className="flex h-9 min-w-0 items-center gap-1 rounded-[8px] px-1 text-left transition-colors duration-[120ms] active:bg-[var(--ds-surface-3)]"
+      >
+        <span className="truncate text-[15px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)]">{name}</span>
+        <ChevronDown aria-hidden className="size-3.5 shrink-0 text-[var(--ds-subtle)]" />
+      </button>
+      <span className="flex-1" />
+      <button
+        type="button"
+        aria-label="Search"
+        onClick={() => search.setOpen(true)}
+        className="grid size-[38px] shrink-0 place-items-center rounded-[10px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] active:bg-[var(--ds-surface-3)]"
+      >
+        <Search className="size-[19px]" />
+      </button>
+      <NotificationsBell variant="count" />
+      <button
+        type="button"
+        aria-label="Open menu"
+        onClick={() => setOpenMobile(true)}
+        className="grid size-[38px] shrink-0 place-items-center rounded-[10px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] active:bg-[var(--ds-surface-3)]"
+      >
+        <Menu className="size-5" />
+      </button>
     </header>
   );
 }

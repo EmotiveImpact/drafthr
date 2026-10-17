@@ -33,6 +33,9 @@ class RetryableError extends Error {
   }
 }
 
+/** A 402 from the server: the fix is a plan or a letter, not another try. */
+export class PlanRequiredError extends Error {}
+
 /**
  * Streams from /api/draft with automatic retry-with-backoff on transient failures
  * (network errors, HTTP 429, HTTP 5xx, or "no tokens" sentinel from the proxy).
@@ -75,8 +78,15 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     // Body may be HTML (Vercel error page) or JSON (our error envelope).
     const text = await res.text().catch(() => "");
     const snippet = extractErrorSnippet(text);
-    const detail = snippet ? ` — ${snippet}` : "";
+    const detail = snippet ? `: ${snippet}` : "";
     throw new RetryableError(`Server error (${res.status})${detail}`);
+  }
+  if (res.status === 402 || res.status === 403) {
+    // Our own refusals (no plan for Opus, paywall, viewer role) carry a JSON
+    // message the user can act on; show it rather than a generic failure.
+    const message = serverErrorMessage(await res.text().catch(() => ""));
+    if (res.status === 402) throw new PlanRequiredError(message ?? "This needs a paid plan.");
+    if (message) throw new Error(message);
   }
   if (res.status === 401 || res.status === 403) {
     // Vercel Deployment Protection or other auth gate is blocking the API.
@@ -146,7 +156,24 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     }
     throw new Error(proxyError);
   }
-  opts.onDone?.();
+  // No [DONE] and no error event: the connection dropped or the function was
+  // stopped mid-stream (e.g. the 60s limit). Treating that as success saved a
+  // section cut off mid-sentence as "ready", so fail it as retryable instead.
+  throw new RetryableError("The connection dropped before the section finished. Try again.");
+}
+
+/**
+ * The message in one of our JSON error envelopes (`{"error": "..."}`), or null
+ * when the text is something else. The agent chat's transport puts a failed
+ * response's body in the error it raises, so the chat panel uses this too.
+ */
+export function serverErrorMessage(text: string): string | null {
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown } | null;
+    return typeof parsed?.error === "string" && parsed.error ? parsed.error : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchOrThrow(opts: StreamOptions): Promise<Response> {

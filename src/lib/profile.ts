@@ -84,6 +84,8 @@ export type Profile = {
     legalName?: string;
     address?: string;
     registrationNumber?: string;
+    /** Company phone, printed in the letterhead (optional). */
+    phone?: string;
     /** Employer-mode only: the person signing letters out. */
     signatoryName?: string;
     signatoryTitle?: string;
@@ -267,6 +269,7 @@ export function prefillsFromProfile(
   if (profile.employer.address) out.employerAddress = profile.employer.address;
   if (profile.employer.registrationNumber)
     out.employerRegNumber = profile.employer.registrationNumber;
+  if (profile.employer.phone) out.employerPhone = profile.employer.phone;
 
   if (mode === "employer") {
     // The user is HR — populate the signatory from their personal info.
@@ -321,6 +324,7 @@ export function profileUpdatesFromAnswers(
   if (typeof a.employerLegalName === "string") employer.legalName = a.employerLegalName;
   if (typeof a.employerAddress === "string") employer.address = a.employerAddress;
   if (typeof a.employerRegNumber === "string") employer.registrationNumber = a.employerRegNumber;
+  if (typeof a.employerPhone === "string") employer.phone = a.employerPhone;
 
   if (mode === "employer") {
     if (typeof a.signatoryName === "string") employer.signatoryName = a.signatoryName;

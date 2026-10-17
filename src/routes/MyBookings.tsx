@@ -1,59 +1,105 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, FileText, Sparkles } from "lucide-react";
-import { useBookingsStore, type Booking } from "@/lib/bookings";
-import type { Consultant } from "@/components/consultants/types";
-import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
-import { BookingThread } from "@/components/consultants/BookingThread";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { CircleCheck, Clock, CreditCard, Inbox, Info, MessageSquare, Search, Star, X } from "lucide-react";
+import { toast } from "sonner";
+import { PillTabs, type PageTab } from "@/components/ds";
+import { ExpertsHeader, HowItWorks, useWorkspaceName } from "@/components/consultants/ExpertsHeader";
+import { BookingThreadPanel } from "@/components/consultants/BookingThread";
 import { StatusBadge } from "@/components/consultants/StatusBadge";
+import { SideSheet } from "@/components/consultants/SideSheet";
+import {
+  BTN_OUTLINE,
+  BTN_PRIMARY,
+  EmptyPanel,
+  ExpertAvatar,
+  NoteLine,
+  Row,
+  RowList,
+  RowNote,
+} from "@/components/consultants/ui";
+import {
+  agreedPrice,
+  awaitingPayment,
+  canRate as canRateBooking,
+  checkoutErrorMessage,
+  checkoutNote,
+  disputeNote,
+  isPriority,
+  lateRefundNote,
+  payLine,
+  paymentsOffNote,
+  priorityDifference,
+  processingNote,
+} from "@/components/consultants/payments";
+import { dayAndTime, declinedLine, firstNameOf, sentWhen, shortDate } from "@/components/consultants/market";
+import { useBookingsStore, type Booking } from "@/lib/bookings";
+import { useDraftStore } from "@/lib/store";
+import { letterTitle } from "@/components/consultants/letters";
 import { pullMyBookings, pushBookingRespond } from "@/lib/marketplaceSync";
 import { getStripeConnectStatus, startBookingCheckout } from "@/lib/consultantApi";
-import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 /**
- * /bookings — HR-side bookings list.
+ * /bookings — My bookings, the second tab of the Experts page (design
+ * `bookings`). Every review request you've placed, grouped "Needs you"
+ * (waiting for you to pay), "In progress" and "Past", with a segmented status
+ * filter and a search. Each row has one action: pay, message, open the
+ * review, book someone else, or raise a dispute. Clicking a row opens its
+ * thread in a panel on the right (a full-screen sheet on phones).
  *
- * Mirrors the consultant inbox but from the requester's perspective.
- * Shows every booking the signed-in HR user has placed, grouped by
- * status. Delivered bookings surface a rating widget so the buyer can
- * close the loop on the consultant.
- *
- * The localStorage store still drives this — the server-side switch
- * will plug into useBookingsStore later (likely via a useBookingsQuery
- * hook) without changing this component's API.
+ * Server data (pullMyBookings) merged into the local bookings store. Payment
+ * rules are unchanged: Pay for review only shows when Stripe is configured,
+ * checkout starts from an accepted (or delivered and unpaid) booking, and
+ * rating waits for the payment.
  */
 
+const STATUS_ORDER: Booking["status"][] = ["requested", "accepted", "delivered", "completed", "declined"];
 const STATUS_LABEL: Record<Booking["status"], string> = {
-  requested: "Awaiting response",
-  accepted: "In progress",
-  delivered: "Ready for review",
+  requested: "Requested",
+  accepted: "Accepted",
+  delivered: "Delivered",
   completed: "Completed",
   declined: "Declined",
 };
 
-const STATUS_ORDER: Booking["status"][] = [
-  "delivered", // act on these first
-  "requested",
-  "accepted",
-  "completed",
-  "declined",
-];
+const DISPUTE_TEXT = "I'd like to raise a dispute about this review. ";
+
+/** Defensive: an unknown or legacy status reads as requested, as the store's
+ *  migrate does, so a stray status can never take the page down. */
+const statusOf = (b: Booking): Booking["status"] => (STATUS_ORDER.includes(b.status) ? b.status : "requested");
+
+function useIsDesktop(): boolean {
+  const q = "(min-width: 768px)";
+  const [on, setOn] = useState(() => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(q).matches : true));
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const m = window.matchMedia(q);
+    const f = () => setOn(m.matches);
+    m.addEventListener?.("change", f);
+    return () => m.removeEventListener?.("change", f);
+  }, []);
+  return on;
+}
 
 export function MyBookings() {
-  const nav = useNavigate();
   const bookings = useBookingsStore((s) => s.bookings);
+  const drafts = useDraftStore((s) => s.drafts);
+  const workspace = useWorkspaceName();
+  const [params] = useSearchParams();
+  const paidId = params.get("paid");
+  const desktop = useIsDesktop();
 
-  // True until the first server hydrate resolves. On a fresh device the
-  // store starts empty, so without this the page flashes "No bookings yet"
-  // before the fetched bookings pop in. We render a skeleton during this
-  // window instead of the empty state.
+  // True until the first server hydrate resolves: a fresh device shows
+  // placeholder rows, not a false "No bookings yet".
   const [hydrating, setHydrating] = useState(true);
-  // A failed hydrate must not masquerade as "No bookings yet" on a fresh device
-  // — track it so we can show an error + retry instead of a false empty state.
+  // A failed hydrate must not masquerade as "No bookings yet".
   const [loadFailed, setLoadFailed] = useState(false);
-  // Whether the marketplace operator has Stripe configured — gates the "Pay"
-  // affordance so it only appears when payments are actually available.
+  // Whether Stripe is configured: gates every "Pay" affordance.
   const [paymentsOn, setPaymentsOn] = useState(false);
+  const [tab, setTab] = useState<string>("all");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const hydrate = useCallback(async () => {
     setHydrating(true);
@@ -63,8 +109,6 @@ export function MyBookings() {
     if (!ok) setLoadFailed(true);
   }, []);
 
-  // Hydrate the HR-side bookings list from the server on mount so a
-  // booking placed on device A shows up on device B.
   useEffect(() => {
     let cancelled = false;
     void getStripeConnectStatus().then((r) => {
@@ -75,187 +119,297 @@ export function MyBookings() {
       cancelled = true;
     };
   }, [hydrate]);
-  const myProfile = useConsultantStore((s) => s.profile);
-  const myCard =
-    myProfile && isProfileComplete(myProfile)
-      ? ({
-          initials: myProfile.initials,
-          name: myProfile.fullName,
-          role: myProfile.role,
-          rating: myProfile.rating,
-          reviews: myProfile.reviews,
-          price: myProfile.price,
-          sla: myProfile.sla,
-          avatarFrom: "from-amber-200",
-          avatarTo: "to-amber-300",
-          photoUrl:
-            myProfile.photoUrl ||
-            "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
-          specialty: myProfile.specialty,
-          specialties: myProfile.specialties,
-        } as Consultant)
-      : null;
-  // Only real cards: the signed-in consultant's own (if complete). Booking
-  // rows already carry the server-resolved consultantName for display, so no
-  // seed lookup is needed.
-  const allConsultants = myCard ? [myCard] : [];
 
-  // First-load skeleton: the store is empty but the server fetch is still
-  // in flight, so show muted placeholder rows rather than flashing the
-  // "No bookings yet" empty state. Once the fetch resolves we fall through
-  // to either the real empty state or the list below.
-  if (hydrating && bookings.length === 0) {
-    return (
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
-        <header className="mb-8">
-          <div className="h-3 w-24 animate-pulse rounded bg-[var(--ds-surface-2)]" />
-          <div className="mt-3 h-9 w-48 animate-pulse rounded bg-[var(--ds-surface-2)]" />
-          <div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded bg-[var(--ds-surface-2)]" />
-        </header>
-        <div className="space-y-2" aria-hidden>
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-20 animate-pulse rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)]"
-            />
-          ))}
-        </div>
-        <span className="sr-only">Loading your bookings…</span>
-      </div>
+  // Back from Stripe (?paid=<id>): show that booking, with the state the
+  // hydrate above just refreshed. On desktop its thread opens beside it.
+  const shownPaid = useRef(false);
+  useEffect(() => {
+    if (!paidId || hydrating || shownPaid.current) return;
+    if (!bookings.some((b) => b.id === paidId)) return;
+    shownPaid.current = true;
+    if (desktop) setOpenId(paidId);
+    requestAnimationFrame(() =>
+      document.querySelector(`[data-testid="booking-row-${CSS.escape(paidId)}"]`)?.scrollIntoView({ block: "nearest" }),
     );
-  }
+  }, [paidId, hydrating, bookings, desktop]);
 
-  if (bookings.length === 0) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
-        <button
-          type="button"
-          onClick={() => nav(-1)}
-          className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Back
-        </button>
-        <h1 className="text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          {loadFailed ? "Couldn't load your bookings." : "No bookings yet."}
-        </h1>
-        <p className="mt-3 max-w-[60ch] text-[14.5px] leading-relaxed text-[var(--ds-body)]">
-          {loadFailed
-            ? "Something went wrong fetching your bookings — this doesn't mean they're gone. Check your connection and try again."
-            : "Once you've booked a consultant for a review, every request and its status lands here."}
-        </p>
-        <div className="mt-6 flex gap-2">
-          {loadFailed ? (
-            <button
-              type="button"
-              onClick={() => void hydrate()}
-              className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
-            >
-              Try again
-            </button>
-          ) : (
-            <a
-              href="/consultants"
-              className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
-            >
-              Browse marketplace
-              <Sparkles className="size-3.5" aria-hidden />
-            </a>
+  const letterOf = useCallback(
+    (b: Booking) => {
+      // The readable local id opens the letter; the server id can't.
+      const id = b.localDraftId ?? b.draftId;
+      const draft = id ? drafts[id] : undefined;
+      const linkable = !!draft && !id.startsWith("demo-");
+      return {
+        id: linkable ? id : null,
+        title: (draft ? letterTitle(draft) : undefined) ?? b.matterTitle ?? "Review with no letter",
+      };
+    },
+    [drafts],
+  );
+
+  const toPay = paymentsOn ? bookings.filter(awaitingPayment).length : 0;
+  const counts = useMemo(() => {
+    const c = Object.fromEntries(STATUS_ORDER.map((s) => [s, 0])) as Record<Booking["status"], number>;
+    for (const b of bookings) c[statusOf(b)] += 1;
+    return c;
+  }, [bookings]);
+  const tabs: PageTab[] = [
+    { id: "all", label: "All", count: bookings.length },
+    ...STATUS_ORDER.filter((s) => counts[s] > 0).map((s) => ({ id: s, label: STATUS_LABEL[s], count: counts[s] })),
+  ];
+  const activeTab = tabs.some((t) => t.id === tab) ? tab : "all";
+
+  const q = query.trim().toLowerCase();
+  const visible = bookings
+    .filter((b) => activeTab === "all" || statusOf(b) === activeTab)
+    .filter((b) => {
+      if (!q) return true;
+      const t = letterOf(b).title.toLowerCase();
+      const n = (b.consultantName ?? "").toLowerCase();
+      return t.includes(q) || n.includes(q) || (b.matterTitle ?? "").toLowerCase().includes(q);
+    })
+    .sort((a, b) => b.bookedAt - a.bookedAt);
+  const groups: { id: string; label: string; rows: Booking[] }[] = [
+    { id: "needs", label: "Needs you", rows: visible.filter((b) => paymentsOn && awaitingPayment(b)) },
+    {
+      id: "progress",
+      label: "In progress",
+      rows: visible.filter((b) => !(paymentsOn && awaitingPayment(b)) && ["requested", "accepted", "delivered"].includes(statusOf(b))),
+    },
+    { id: "past", label: "Past", rows: visible.filter((b) => ["completed", "declined"].includes(statusOf(b))) },
+  ].filter((g) => g.rows.length > 0);
+
+  const open = openId ? bookings.find((b) => b.id === openId) ?? null : null;
+  const openLetter = open ? letterOf(open) : null;
+  const panel = open ? (
+    <BookingThreadPanel
+      key={open.id}
+      booking={open}
+      perspective="requester"
+      otherName={open.consultantName ?? `Expert ${open.consultantInitials}`}
+      otherRole={open.consultantRole}
+      otherPhotoUrl={open.consultantPhotoUrl}
+      otherSeed={open.consultantProfileId || open.consultantName}
+      letterTitle={openLetter?.title}
+      letterHref={openLetter?.id ? `/editor/${openLetter.id}` : undefined}
+      onClose={() => setOpenId(null)}
+      className="h-full"
+    />
+  ) : null;
+
+  const openThread = (id: string, prefill?: string) => {
+    setOpenId(id);
+    if (prefill) {
+      // Let the panel mount, then hand it the text.
+      setTimeout(() => window.dispatchEvent(new CustomEvent("drafthr:thread-prefill", { detail: { bookingId: id, text: prefill } })), 60);
+    }
+  };
+
+  const firstLoad = hydrating && bookings.length === 0;
+
+  return (
+    // At desktop width the page is exactly one screen tall, so the list and
+    // the thread panel scroll on their own under the band.
+    <div className="flex min-h-0 flex-1 flex-col md:h-dvh md:max-h-dvh">
+      <div data-page-main className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-hidden">
+        <ExpertsHeader
+          crumbs={[{ label: workspace, href: "/hr" }, { label: "Experts" }]}
+          title="Experts"
+          lede="Book a qualified employment law specialist to check a letter before it goes out."
+          actions={<HowItWorks />}
+          tab="bookings"
+          toPay={toPay}
+        />
+
+        <div className="md:flex md:min-h-0 md:flex-1">
+          <section
+            aria-label="My bookings"
+            className={cn(
+              "min-w-0 flex-1 px-4 pb-16 pt-[22px] sm:px-8 md:overflow-y-auto md:pb-[30px] md:pl-12",
+              // The content column ends where the band's does (48px in);
+              // beside the open thread panel the gap to its border is 32px.
+              desktop && panel ? "md:pr-8" : "md:pr-12",
+            )}
+          >
+            {firstLoad ? (
+              <BookingsSkeleton />
+            ) : bookings.length === 0 ? (
+              loadFailed ? (
+                <EmptyPanel
+                  icon={<Inbox aria-hidden />}
+                  title="Couldn't load your bookings."
+                  body="Something went wrong fetching your bookings. This doesn't mean they're gone. Check your connection and try again."
+                  action={
+                    <button type="button" onClick={() => void hydrate()} className={BTN_OUTLINE}>
+                      Try again
+                    </button>
+                  }
+                />
+              ) : (
+                <EmptyPanel
+                  icon={<Inbox aria-hidden />}
+                  title="No bookings yet."
+                  body="Once you've booked an expert for a review, every request and its status lands here."
+                  action={
+                    <Link to="/consultants" state={{ expertsTab: "bookings" }} className={BTN_PRIMARY}>
+                      Find an expert
+                    </Link>
+                  }
+                />
+              )
+            ) : (
+              <div className="animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <PillTabs
+                    tabs={tabs}
+                    activeTab={activeTab}
+                    onTabChange={setTab}
+                    className="no-scrollbar mt-0 min-w-0"
+                  />
+                  {searchOpen ? (
+                    <div className="relative w-[190px] shrink-0 max-sm:w-[150px]">
+                      <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--ds-subtle)]" />
+                      <input
+                        autoFocus
+                        type="search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            setQuery("");
+                            setSearchOpen(false);
+                          }
+                        }}
+                        placeholder="Letter or expert"
+                        aria-label="Search bookings"
+                        className="h-9 w-full rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] pl-[34px] pr-8 text-[13.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-line-hover)] focus:outline-none focus-visible:shadow-[var(--ds-focus-ring)] [&::-webkit-search-cancel-button]:hidden"
+                      />
+                      <button
+                        type="button"
+                        aria-label="Close search"
+                        onClick={() => {
+                          setQuery("");
+                          setSearchOpen(false);
+                        }}
+                        className="absolute right-1 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-[7px] text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                      >
+                        <X className="size-3.5" aria-hidden />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="Search bookings"
+                      onClick={() => setSearchOpen(true)}
+                      className="grid size-9 shrink-0 place-items-center rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:border-[var(--ds-line-strong)] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-2)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                    >
+                      <Search className="size-4" aria-hidden />
+                    </button>
+                  )}
+                </div>
+
+                {loadFailed && (
+                  <p className="m-0 mb-3 text-[12.5px] text-[var(--ds-muted)]" role="status">
+                    Couldn't refresh your bookings. Showing what's saved on this device.{" "}
+                    <button type="button" onClick={() => void hydrate()} className="font-medium text-[var(--ds-ink)] underline decoration-[var(--ds-faint)] underline-offset-[3px]">
+                      Try again
+                    </button>
+                  </p>
+                )}
+
+                {groups.length === 0 ? (
+                  <p className="m-0 py-10 text-center text-[13.5px] text-[var(--ds-muted)]">
+                    {q ? `No bookings match "${query.trim()}".` : "No bookings here."}
+                  </p>
+                ) : (
+                  groups.map((g, i) => (
+                    <section key={g.id} aria-label={g.label} data-testid={`bookings-group-${g.id}`}>
+                      <h2 className={cn("m-0 mb-2 text-[12.5px] font-medium text-[var(--ds-subtle)]", i > 0 && "mt-[18px]")}>{g.label}</h2>
+                      <RowList>
+                        {g.rows.map((b) => (
+                          <BookingRow
+                            key={b.id}
+                            booking={b}
+                            paymentsOn={paymentsOn}
+                            letter={letterOf(b)}
+                            selected={b.id === openId}
+                            onOpen={(prefill) => openThread(b.id, prefill)}
+                          />
+                        ))}
+                      </RowList>
+                    </section>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+
+          {desktop && panel && (
+            <aside aria-label="Conversation" className="hidden w-[360px] shrink-0 border-l border-[var(--ds-line)] md:flex md:min-h-0">
+              {panel}
+            </aside>
           )}
         </div>
       </div>
-    );
-  }
 
-  // Group by status, keeping STATUS_ORDER for the headings.
-  const grouped: Record<Booking["status"], Booking[]> = {
-    requested: [],
-    accepted: [],
-    delivered: [],
-    completed: [],
-    declined: [],
-  };
-  bookings
-    .slice()
-    .sort((a, b) => b.bookedAt - a.bookedAt)
-    .forEach((b) => {
-      // Defensive: a persisted booking with an unknown/legacy status would
-      // make grouped[b.status] undefined → .push throws → white screen.
-      // The store's migrate normalises these, but guard here too so a
-      // stray status can never take the page down.
-      (grouped[b.status] ?? grouped.requested).push(b);
-    });
+      {!desktop && (
+        <SideSheet open={!!open} onOpenChange={(o) => !o && setOpenId(null)} label={open ? `Messages with ${open.consultantName ?? "the expert"}` : "Messages"}>
+          {panel}
+        </SideSheet>
+      )}
+    </div>
+  );
+}
 
+function BookingsSkeleton() {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
-      <header className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-          Marketplace
-        </p>
-        <h1 className="mt-2 text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          My bookings
-        </h1>
-        <p className="mt-2 max-w-[60ch] text-[14px] leading-relaxed text-[var(--ds-body)]">
-          Every review request you've placed, grouped by status. Delivered
-          reviews wait for a rating below.
-        </p>
-      </header>
-
-      <div className="space-y-8">
-        {STATUS_ORDER.map((status) => {
-          const list = grouped[status];
-          if (list.length === 0) return null;
-          return (
-            <section key={status}>
-              <h2 className="mb-3 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
-                {STATUS_LABEL[status]} ({list.length})
-              </h2>
-              <div className="space-y-2">
-                {list.map((b) => (
-                  <BookingRow
-                    key={b.id}
-                    booking={b}
-                    paymentsOn={paymentsOn}
-                    consultant={allConsultants.find((c) =>
-                      // Match by stable profile id first (server bookings),
-                      // fall back to initials for local-only seed bookings.
-                      b.consultantProfileId && c.profileId
-                        ? c.profileId === b.consultantProfileId
-                        : c.initials === b.consultantInitials,
-                    )}
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+    <div aria-busy="true">
+      <div className="mb-4 h-9 w-[420px] max-w-full animate-pulse rounded-[10px] bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
+      <div className="mb-2 h-3 w-20 rounded bg-[var(--ds-surface-2)]" />
+      <div className="flex flex-col gap-2.5" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-start gap-3.5 rounded-[14px] border border-[var(--ds-line)] px-4 py-3.5">
+            <div className="size-[34px] shrink-0 animate-pulse rounded-full bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
+            <div className="flex-1 space-y-2 pt-0.5">
+              <div className="h-3.5 w-56 max-w-full rounded bg-[var(--ds-surface-2)]" />
+              <div className="h-3 w-40 rounded bg-[var(--ds-surface-2)]" />
+              <div className="h-3 w-72 max-w-full rounded bg-[var(--ds-surface-2)]" />
+            </div>
+          </div>
+        ))}
       </div>
+      <span className="sr-only">Loading your bookings…</span>
     </div>
   );
 }
 
 function BookingRow({
-  booking,
-  consultant,
+  booking: b,
   paymentsOn,
+  letter,
+  selected,
+  onOpen,
 }: {
   booking: Booking;
-  consultant?: Consultant;
   paymentsOn: boolean;
+  letter: { id: string | null; title: string };
+  selected: boolean;
+  onOpen: (prefill?: string) => void;
 }) {
   const [paying, setPaying] = useState(false);
   const payForReview = async () => {
     setPaying(true);
-    const r = await startBookingCheckout(booking.id);
+    const r = await startBookingCheckout(b.id);
     if (r.ok) {
       window.location.assign(r.data.url);
       return;
     }
-    toast.error(r.error || "Couldn't start checkout");
+    // Never the server's own text: it is developer copy.
+    toast.error(checkoutErrorMessage(r.status));
     setPaying(false);
   };
-  // If the user hits Back from Stripe, the page is restored from the bfcache
-  // with paying=true and the button stuck on "Starting…". Reset it on restore.
+  // Back from Stripe with the browser's back button: the page comes from the
+  // bfcache with paying=true. Reset it.
   useEffect(() => {
     const onShow = (e: PageTransitionEvent) => {
       if (e.persisted) setPaying(false);
@@ -263,176 +417,222 @@ function BookingRow({
     window.addEventListener("pageshow", onShow);
     return () => window.removeEventListener("pageshow", onShow);
   }, []);
-  const complete = useBookingsStore((s) => s.completeBooking);
-  const [rating, setRating] = useState(booking.rating ?? 0);
-  // Hover preview is separate from the committed rating, so mousing over
-  // stars doesn't silently change the value the user actually picked.
-  const [hoverRating, setHoverRating] = useState(0);
-  const [submitted, setSubmitted] = useState(booking.status === "completed");
 
+  const complete = useBookingsStore((s) => s.completeBooking);
+  const [rating, setRating] = useState(b.rating ?? 0);
+  // Hover previews without changing the committed choice.
+  const [hoverRating, setHoverRating] = useState(0);
+  const [submitted, setSubmitted] = useState(b.status === "completed");
   const submit = async () => {
     if (rating === 0) return;
-    complete(booking.id, rating);
+    complete(b.id, rating);
     setSubmitted(true);
-    // Dual-write: mirror the complete + rating to the server. On failure
-    // pushBookingRespond already toasts + re-pulls (reverting the store booking
-    // to "delivered"), so roll the optimistic `submitted` flag back too —
-    // otherwise the rating widget stays permanently hidden and the user can't
-    // retry without navigating away.
-    const ok = await pushBookingRespond(booking.id, "complete", { rating });
+    // Mirror to the server. On failure pushBookingRespond toasts and re-pulls
+    // (the booking goes back to "delivered"), so bring the control back.
+    const ok = await pushBookingRespond(b.id, "complete", { rating });
     if (!ok) setSubmitted(false);
   };
 
-  // Prefer the server-joined display fields (reliable cross-device), then
-  // the matched local card, then a graceful fallback.
-  const displayName =
-    booking.consultantName ?? consultant?.name ?? `Specialist · ${booking.consultantInitials}`;
-  const displayRole = booking.consultantRole ?? consultant?.role ?? "Consultant";
-  const displayPhoto = booking.consultantPhotoUrl ?? consultant?.photoUrl;
+  const status = statusOf(b);
+  const name = b.consultantName ?? `Expert ${b.consultantInitials}`;
+  const first = firstNameOf(b.consultantName) || "The expert";
+  const needsPay = awaitingPayment(b);
+  const payable = paymentsOn && needsPay;
+  const rateNow = canRateBooking(b) && !submitted;
+  const price = status === "declined" ? "Nothing charged" : agreedPrice(b);
+  const processing = processingNote(b);
+  const dispute = disputeNote(b);
+  const priority = isPriority(b);
+  const lateRefund = lateRefundNote(b, "requester");
+  const difference = priorityDifference(b);
+
+  // The one action on the right.
+  let action: React.ReactNode = null;
+  if (payable) {
+    action = (
+      <button type="button" onClick={payForReview} disabled={paying} className={BTN_PRIMARY}>
+        <CreditCard className="size-3.5" aria-hidden />
+        {paying ? "Starting…" : "Pay for review"}
+      </button>
+    );
+  } else if (status === "delivered" && letter.id) {
+    action = (
+      <Link to={`/editor/${letter.id}`} className={BTN_OUTLINE}>
+        Open review
+      </Link>
+    );
+  } else if (status === "completed") {
+    action = (
+      <button
+        type="button"
+        onClick={() => onOpen(DISPUTE_TEXT)}
+        className="rounded-[4px] text-[12.5px] text-[var(--ds-ink)] underline decoration-[var(--ds-faint)] underline-offset-[3px] transition-colors duration-[120ms] hover:decoration-[var(--ds-ink)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+      >
+        Raise a dispute
+      </button>
+    );
+  } else if (status === "declined") {
+    action = (
+      <Link to={letter.id ? `/consultants?draft=${encodeURIComponent(letter.id)}` : "/consultants"} className={BTN_OUTLINE}>
+        Book someone else
+      </Link>
+    );
+  } else {
+    action = (
+      <button type="button" onClick={() => onOpen()} aria-label={`Message ${name}`} className={BTN_OUTLINE}>
+        <MessageSquare className="size-3.5" aria-hidden />
+        Message
+      </button>
+    );
+  }
+
+  // Clicking the row (not one of its controls) opens the thread.
+  const onRowClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("a,button,input,textarea,[role=radio]")) return;
+    onOpen();
+  };
 
   return (
-    <article className="rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          {displayPhoto && (
-            <img
-              src={displayPhoto}
-              alt=""
-              className="size-10 rounded-full object-cover border border-[var(--ds-line)] flex-shrink-0"
-            />
-          )}
-          <div className="min-w-0">
-            <h3 className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">
-              {displayName}
-            </h3>
-            <p className="mt-0.5 truncate text-[11.5px] text-[var(--ds-muted)]">
-              {displayRole}
+    <Row
+      attention={payable}
+      selected={selected}
+      onClick={onRowClick}
+      data-testid={`booking-row-${b.id}`}
+      className="cursor-pointer"
+    >
+      <div className="flex items-start gap-3.5">
+        <ExpertAvatar
+          photoUrl={b.consultantPhotoUrl}
+          name={b.consultantName}
+          initials={b.consultantInitials}
+          seed={b.consultantProfileId || name}
+          size={34}
+          className="text-[12px]"
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-x-4 gap-y-2.5 sm:flex-row sm:items-start">
+          <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => onOpen()}
+              className="block max-w-full truncate rounded-[4px] text-left text-[14px] font-medium leading-[1.35] text-[var(--ds-ink)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+            >
+              {letter.title}
+            </button>
+            <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
+              {name}
+              {price && (
+                <>
+                  <span aria-hidden className="mx-1.5 text-[var(--ds-faint)]">
+                    ·
+                  </span>
+                  {price}
+                </>
+              )}
+              {priority && status !== "declined" && (
+                <>
+                  <span aria-hidden className="mx-1.5 text-[var(--ds-faint)]">
+                    ·
+                  </span>
+                  Priority
+                </>
+              )}
             </p>
-            {booking.matterTitle && (
-              <p className="mt-1 text-[12.5px] text-[var(--ds-body)]">
-                {booking.matterTitle}
-              </p>
-            )}
+
+            <div className="mt-2 flex flex-col gap-1.5 empty:hidden">
+              {payable && (
+                <NoteLine icon={<CreditCard aria-hidden />}>
+                  {payLine(b, first)}
+                </NoteLine>
+              )}
+              {payable && <p className="m-0 pl-[19px] text-[12px] text-[var(--ds-muted)]">{checkoutNote(b)}</p>}
+              {!paymentsOn && needsPay && <NoteLine icon={<Info aria-hidden />}>{paymentsOffNote(b)}</NoteLine>}
+              {status === "requested" && (
+                <NoteLine icon={<Clock aria-hidden />}>
+                  Sent {sentWhen(b.bookedAt)}. You'll pay when the expert accepts.
+                  {priority ? " It's priority, so it's due back 24 hours after you pay." : ""}
+                </NoteLine>
+              )}
+              {status === "accepted" && b.paymentStatus === "paid" && (
+                <NoteLine icon={<Clock aria-hidden />}>
+                  Due back by {dayAndTime(b.expectedDeliveryAt)}.
+                  {priority && difference ? ` If it's later, ${difference} is refunded to you automatically.` : ""}
+                </NoteLine>
+              )}
+              {lateRefund && <NoteLine icon={<Info aria-hidden />}>{lateRefund}</NoteLine>}
+              {processing && <NoteLine icon={<Clock aria-hidden />}>{processing}</NoteLine>}
+              {dispute && <NoteLine icon={<Info aria-hidden />}>{dispute}</NoteLine>}
+              {status === "delivered" && !needsPay && b.deliveredAt && (
+                <NoteLine icon={<CircleCheck aria-hidden />}>Review delivered {shortDate(b.deliveredAt)}</NoteLine>
+              )}
+              {status === "declined" && (
+                <NoteLine icon={<Info aria-hidden />}>
+                  {declinedLine(b)} No payment was taken.
+                </NoteLine>
+              )}
+              {status !== "declined" && b.responseNote && <RowNote label="Expert's note">{b.responseNote}</RowNote>}
+              {b.deliveryNote && (
+                <RowNote tone="green" label="Delivered">
+                  {b.deliveryNote}
+                </RowNote>
+              )}
+              {/* Completing needs a paid booking, so rating waits for the payment. */}
+              {rateNow && (
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 text-[12.5px] text-[var(--ds-muted)]">
+                  <span>Rate this review</span>
+                  <div role="radiogroup" aria-label="Rate this review out of 5" className="flex" onMouseLeave={() => setHoverRating(0)}>
+                    {[1, 2, 3, 4, 5].map((n) => {
+                      const filled = n <= (hoverRating || rating);
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          role="radio"
+                          aria-checked={rating === n}
+                          aria-label={`${n} star${n === 1 ? "" : "s"}`}
+                          onClick={() => setRating(n)}
+                          onMouseEnter={() => setHoverRating(n)}
+                          className={cn(
+                            "grid size-6 place-items-center rounded-[5px] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
+                            filled ? "text-[var(--ds-amber-dot)]" : "text-[var(--ds-faint)]",
+                          )}
+                        >
+                          <Star className="size-[15px]" fill={filled ? "currentColor" : "none"} strokeWidth={1.5} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {rating > 0 && (
+                    <button type="button" onClick={submit} className={cn(BTN_PRIMARY, "h-7 px-2.5 text-[12.5px]")}>
+                      Submit
+                    </button>
+                  )}
+                </div>
+              )}
+              {submitted && b.rating ? (
+                <div className="flex items-center gap-2.5 text-[12.5px] text-[var(--ds-muted)]">
+                  <span>You rated</span>
+                  <span className="inline-flex gap-px" role="img" aria-label={`${b.rating} out of 5 stars`}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star
+                        key={n}
+                        className="size-[14px]"
+                        fill={n <= (b.rating ?? 0) ? "var(--ds-amber-dot)" : "none"}
+                        color={n <= (b.rating ?? 0) ? "var(--ds-amber-dot)" : "var(--ds-faint)"}
+                        strokeWidth={1.5}
+                        aria-hidden
+                      />
+                    ))}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+            <StatusBadge status={status} />
+            {action}
           </div>
         </div>
-        <StatusBadge status={booking.status} />
-      </header>
-
-      {paymentsOn && booking.status === "accepted" && (
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={payForReview}
-            disabled={paying}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-          >
-            {paying ? "Starting…" : "Pay for review"}
-          </button>
-          <span className="text-[11px] text-[var(--ds-muted)]">
-            Secure checkout via Stripe.
-          </span>
-        </div>
-      )}
-
-      {booking.responseNote && (
-        <p className="mt-3 text-[12.5px] text-[var(--ds-body)] italic">
-          Specialist note: {booking.responseNote}
-        </p>
-      )}
-
-      {booking.deliveryNote && (
-        <div className="mt-3 rounded-md border border-[var(--ds-green-fg)]/30 bg-[var(--ds-green-bg)] px-3 py-2">
-          <p className="text-[11.5px] font-semibold text-[var(--ds-green-fg)] mb-1">
-            Delivered
-          </p>
-          <p className="text-[12.5px] leading-snug text-[var(--ds-ink)]">
-            {booking.deliveryNote}
-          </p>
-        </div>
-      )}
-
-      {booking.status === "delivered" && !submitted && (
-        <div className="mt-3 flex items-center gap-3">
-          <span className="text-[12px] font-semibold text-[var(--ds-ink)]">
-            Rate this review:
-          </span>
-          <div
-            role="radiogroup"
-            aria-label="Rate this review out of 5"
-            className="flex gap-1"
-            onMouseLeave={() => setHoverRating(0)}
-          >
-            {[1, 2, 3, 4, 5].map((n) => {
-              const filled = n <= (hoverRating || rating);
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  role="radio"
-                  aria-checked={rating === n}
-                  onClick={() => setRating(n)}
-                  onMouseEnter={() => setHoverRating(n)}
-                  className={`grid size-7 place-items-center rounded-full transition ${
-                    filled ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-subtle)]"
-                  }`}
-                  aria-label={`${n} star${n === 1 ? "" : "s"}`}
-                >
-                  <Star
-                    className="size-4"
-                    fill={filled ? "currentColor" : "none"}
-                    strokeWidth={1.5}
-                  />
-                </button>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={rating === 0}
-            className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white disabled:opacity-60"
-          >
-            Submit
-          </button>
-        </div>
-      )}
-
-      {submitted && booking.rating && (
-        <div className="mt-3 flex items-center gap-2 text-[12px]">
-          <span className="text-[var(--ds-muted)]">Your rating:</span>
-          <span className="inline-flex gap-0.5">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Star
-                key={n}
-                className="size-3.5"
-                fill={n <= (booking.rating ?? 0) ? "var(--ds-amber-fg)" : "none"}
-                color={n <= (booking.rating ?? 0) ? "var(--ds-amber-fg)" : "var(--ds-subtle)"}
-                strokeWidth={1.5}
-              />
-            ))}
-          </span>
-        </div>
-      )}
-
-      {(() => {
-        // Prefer the readable local id — the editor store is keyed by it.
-        // booking.draftId becomes a server UUID after sync, which the store
-        // can't resolve, so fall back to it only when no local id exists.
-        const openId = booking.localDraftId ?? booking.draftId;
-        if (!openId || openId.startsWith("demo-")) return null;
-        return (
-          <a
-            href={`/editor/${openId}`}
-            className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-          >
-            <FileText className="size-3.5" aria-hidden />
-            Open draft
-          </a>
-        );
-      })()}
-
-      <BookingThread booking={booking} perspective="requester" />
-    </article>
+      </div>
+    </Row>
   );
 }
-

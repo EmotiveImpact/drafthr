@@ -94,6 +94,27 @@ describe("ForgotPassword", () => {
     ).toBeInTheDocument();
   });
 
+  it("asks for a full email address inline instead of sending for an invalid one", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    render(
+      <MemoryRouter initialEntries={["/sign-in/forgot-password"]}>
+        <ForgotPassword />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "jo" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /send reset link/i }));
+    });
+
+    expect(
+      screen.getByText("Enter a full email address, like name@company.co.uk."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/if that account exists/i)).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("surfaces a rate-limit / bad-input error from the server", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ error: "Too many requests" }), {

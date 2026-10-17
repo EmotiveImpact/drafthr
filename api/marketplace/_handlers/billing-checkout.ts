@@ -16,6 +16,7 @@ import { getStripe, appBaseUrl } from "../../_utils/stripe.js";
 import { getOrCreateCustomer } from "../../_utils/stripe-billing.js";
 import { subjectHasActiveSubscription } from "../../_utils/entitlements.js";
 import { catalogFor, isPriceKey, stripePriceId, type PriceKey } from "../../../src/lib/billing/catalog.js";
+import { rejectNonBillingManager } from "../../_utils/workspace-role.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -57,6 +58,10 @@ export async function POST(req: Request): Promise<Response> {
   const subjectType = subjectTypeFor(priceKey);
   const subjectId = subjectType === "tenant" ? auth.activeTenant?.id : auth.userRow.id;
   if (!subjectId) return jsonError("No active workspace for this plan", 412);
+  if (subjectType === "tenant") {
+    const denied = rejectNonBillingManager(auth);
+    if (denied) return denied;
+  }
 
   // Double-subscribe guard: a second subscription Checkout while THIS subject
   // already has an active one would create a SECOND Stripe subscription and
@@ -65,7 +70,7 @@ export async function POST(req: Request): Promise<Response> {
   // personal Employee Plus never blocks a workspace HR-plan subscribe. One-off
   // purchases are always allowed.
   if (entry.mode === "subscription" && (await subjectHasActiveSubscription(subjectType, subjectId))) {
-    return jsonError("You already have an active plan — manage it from billing instead.", 409);
+    return jsonError("You already have an active plan. Manage it from Billing in Settings instead.", 409);
   }
 
   const meta = {

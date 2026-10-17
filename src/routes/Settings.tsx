@@ -1,559 +1,204 @@
-import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
-  Badge,
-  Box,
-  Button,
-  Card,
-  Flex,
-  Grid,
-  Heading,
-  Select,
-  Separator,
-  Switch,
-  Text,
-  TextArea,
-  TextField,
-} from "@radix-ui/themes";
-import {
-  AlertTriangle,
-  Briefcase,
-  Download,
-  Save,
-  Trash2,
-  Upload,
+  BookOpen,
+  Building2,
+  CreditCard,
+  FilePenLine,
+  KeyRound,
+  Plug,
+  ShieldCheck,
   UserRound,
+  Users,
+  type LucideIcon,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Band } from "@/components/wizard/Band";
+import { useWorkspaceName } from "@/components/wizard/kit";
+import { BillingCard } from "@/components/billing/BillingCard";
+import { useProfileStore } from "@/lib/profile";
+import { cn } from "@/lib/utils";
 import {
-  useProfileStore,
-  QWEN_MODEL_OPTIONS,
-  type QwenModelId,
-  type WorkspaceRole,
-} from "@/lib/profile";
-import { DEFAULT_MODEL } from "@/lib/llm/default-model";
-import { PageHeader, ImageUploader } from "@/components/ds";
-import { useDraftStore } from "@/lib/store";
-import { todayDateOnly } from "@/lib/date-only";
-import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
-import { AuditLogsCard } from "@/components/AuditLogsCard";
-import { SecurityCard } from "@/components/SecurityCard";
+  SETTINGS_SECTIONS,
+  resolveSettingsSection,
+  sectionById,
+  tabParamFor,
+  type SettingsGroup,
+  type SettingsSectionId,
+} from "./settings/sections";
+import { PaneHeader, SettingsCard, useSavedFlash } from "./settings/parts";
+import { DefaultsPane, ProfilePane, WorkspacePane } from "./settings/ProfilePanes";
+import { DataPane, IntegrationsPane, PoliciesPane, SecurityPane, TeamPane } from "./settings/OtherPanes";
 
-const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
+const ICONS: Record<SettingsSectionId, LucideIcon> = {
+  profile: UserRound,
+  workspace: Building2,
+  team: Users,
+  policies: BookOpen,
+  defaults: FilePenLine,
+  integrations: Plug,
+  billing: CreditCard,
+  security: KeyRound,
+  data: ShieldCheck,
+};
 
+const GROUPS: SettingsGroup[] = ["You", "Workspace", "Account"];
+
+/**
+ * Settings (design/hifi/screens/settings.mjs): the mist band, a section
+ * list on the left (a scrolling row on phones) and one pane on the right.
+ * The section lives in `?tab=`, so old links (`?tab=company`, `?tab=data`)
+ * and the Stripe portal's return (`?tab=billing`) land on the right pane.
+ */
 export function Settings() {
-  const nav = useNavigate();
-  const profile = useProfileStore((s) => s.profile);
-  const setRole = useProfileStore((s) => s.setRole);
-  const patchPersonal = useProfileStore((s) => s.patchPersonal);
-  const patchEmployer = useProfileStore((s) => s.patchEmployer);
-  const patchDefaults = useProfileStore((s) => s.patchDefaults);
-  const setAutoFill = useProfileStore((s) => s.setAutoFill);
-  const setWorkspaceRole = useProfileStore((s) => s.setWorkspaceRole);
   const markSetupComplete = useProfileStore((s) => s.markSetupComplete);
-  const resetProfile = useProfileStore((s) => s.reset);
-  const drafts = useDraftStore((s) => s.drafts);
-  const deleteDraft = useDraftStore((s) => s.deleteDraft);
+  const workspace = useWorkspaceName();
+  const [params, setParams] = useSearchParams();
+  const section = resolveSettingsSection(params.get("tab"));
+  const meta = sectionById(section);
+  const [saved, flashSaved] = useSavedFlash();
 
-  const [savedFlash, setSavedFlash] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pick = (id: SettingsSectionId) => {
+    const next = new URLSearchParams(params);
+    const tab = tabParamFor(id);
+    if (tab) next.set("tab", tab);
+    else next.delete("tab");
+    setParams(next, { replace: true });
+  };
 
   const onSave = () => {
     markSetupComplete();
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1500);
+    flashSaved();
   };
 
-  const onExport = () => {
-    const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `drafthr-profile-${todayDateOnly()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const onImport = (file: File) => {
-    if (file.size > MAX_PROFILE_IMPORT_BYTES) {
-      alert("Import failed: profile JSON must be 256 KB or smaller.");
-      return;
-    }
-    file.text().then((text) => {
-      try {
-        const parsed = JSON.parse(text) as Partial<typeof profile>;
-        if (!parsed || typeof parsed !== "object") throw new Error("Not a profile JSON.");
-        if (
-          !confirm(
-            "Importing will replace your current profile. Drafts are unaffected. Continue?"
-          )
-        ) {
-          return;
-        }
-        if (parsed.role === "employer" || parsed.role === "employee") setRole(parsed.role);
-        if (parsed.personal) patchPersonal(parsed.personal);
-        if (parsed.employer) patchEmployer(parsed.employer);
-        if (parsed.defaults) patchDefaults(parsed.defaults);
-        if (typeof parsed.autoFill === "boolean") setAutoFill(parsed.autoFill);
-        markSetupComplete();
-        setSavedFlash(true);
-        setTimeout(() => setSavedFlash(false), 1500);
-      } catch (err) {
-        alert(
-          "Import failed: " + (err instanceof Error ? err.message : "Invalid file")
-        );
-      }
-    });
-  };
-
-  const onClearAllData = () => {
-    if (
-      confirm(
-        "This will erase your profile and all drafts from this device. Cloud-stored data is unaffected. Continue?"
-      )
-    ) {
-      Object.keys(drafts).forEach((id) => deleteDraft(id));
-      resetProfile();
-      nav("/");
-    }
-  };
+  // Keep the picked item in view in the phone row.
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = rowRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!el || !rowRef.current) return;
+    const row = rowRef.current;
+    if (row.scrollWidth <= row.clientWidth) return;
+    row.scrollTo({ left: Math.max(0, el.offsetLeft - 16), behavior: "auto" });
+  }, [section]);
 
   return (
-    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-      <PageHeader
-        crumbs={[{ label: "Settings" }]}
-        title="Your profile"
-        lede="Your role and saved details. Used to auto-fill new letters so you don't re-type the same fields every time."
+    <div className="w-full min-w-0 px-4 pb-16 pt-6 sm:px-8 lg:px-12 lg:pt-[34px]">
+      <Band
+        crumbs={[...(workspace ? [{ label: workspace }] : []), { label: "Settings" }]}
+        title="Settings"
+        lede={`Manage your profile, your team and how ${workspace ?? "your team"} pays for DraftHR.`}
       />
 
-      <Flex direction="column" gap="4">
-        {/* Role */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">Your role</Heading>
-            <Text size="2" color="gray" as="p">
-              Drives the sidebar, the letter catalogue, and the legal angle of the prompts.
-              Change it any time — your existing drafts keep the role they were created with.
-            </Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="3">
-            <RoleCard
-              active={profile.role === "employer"}
-              icon={<Briefcase className="size-5" />}
-              label="HR / Management"
-              hint="I write letters TO employees"
-              onClick={() => setRole("employer")}
-            />
-            <RoleCard
-              active={profile.role === "employee"}
-              icon={<UserRound className="size-5" />}
-              label="Employee"
-              hint="I write letters TO HR / employer"
-              onClick={() => setRole("employee")}
-            />
-          </Grid>
-        </Card>
-
-        {/* Personal */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">
-              {profile.role === "employer" ? "Your details (HR signatory)" : "Your details"}
-            </Heading>
-            <Text size="2" color="gray" as="p">
-              {profile.role === "employer"
-                ? "These appear as the signatory on letters you draft."
-                : "These appear as the sender on letters you draft. Saved to this device only."}
-            </Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
-            <Field label="Legal name">
-              <TextField.Root
-                value={profile.personal.legalName ?? ""}
-                onChange={(e) => patchPersonal({ legalName: e.target.value })}
-                placeholder="Jane Patel"
-              />
-            </Field>
-            <Field label="Preferred name (used in salutations)">
-              <TextField.Root
-                value={profile.personal.preferredName ?? ""}
-                onChange={(e) => patchPersonal({ preferredName: e.target.value })}
-                placeholder="Jane"
-              />
-            </Field>
-            <Field label={profile.role === "employer" ? "Job title (signatory)" : "Job title"}>
-              <TextField.Root
-                value={profile.personal.jobTitle ?? ""}
-                onChange={(e) => patchPersonal({ jobTitle: e.target.value })}
-                placeholder={profile.role === "employer" ? "HR Director" : "Senior Engineer"}
-              />
-            </Field>
-            <Field label="Department">
-              <TextField.Root
-                value={profile.personal.department ?? ""}
-                onChange={(e) => patchPersonal({ department: e.target.value })}
-                placeholder="People Operations"
-              />
-            </Field>
-            <Field label="Address" full>
-              <TextArea
-                value={profile.personal.address ?? ""}
-                onChange={(e) => patchPersonal({ address: e.target.value })}
-                rows={3}
-              />
-            </Field>
-            <Field label="Email">
-              <TextField.Root
-                type="email"
-                value={profile.personal.email ?? ""}
-                onChange={(e) => patchPersonal({ email: e.target.value })}
-              />
-            </Field>
-            {profile.role === "employee" && (
-              <Field label="Continuous service start">
-                <TextField.Root
-                  type="date"
-                  value={profile.personal.startDate ?? ""}
-                  onChange={(e) => patchPersonal({ startDate: e.target.value })}
-                />
-              </Field>
-            )}
-          </Grid>
-        </Card>
-
-        {/* Employer */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">
-              {profile.role === "employer" ? "Your company" : "Current employer"}
-            </Heading>
-            <Text size="2" color="gray" as="p">
-              {profile.role === "employer"
-                ? "The legal entity issuing letters."
-                : "The employer letters are addressed to. We'll use this for the recipient block."}
-            </Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
-            <Field label="Legal name" full>
-              <TextField.Root
-                value={profile.employer.legalName ?? ""}
-                onChange={(e) => patchEmployer({ legalName: e.target.value })}
-                placeholder="Acme Holdings Limited"
-              />
-            </Field>
-            <Field label="Address" full>
-              <TextArea
-                value={profile.employer.address ?? ""}
-                onChange={(e) => patchEmployer({ address: e.target.value })}
-                rows={3}
-              />
-            </Field>
-            <Field label="Companies House / EIN (optional)">
-              <TextField.Root
-                value={profile.employer.registrationNumber ?? ""}
-                onChange={(e) => patchEmployer({ registrationNumber: e.target.value })}
-              />
-            </Field>
-            {profile.role === "employee" && (
-              <>
-                <Field label="HR contact name">
-                  <TextField.Root
-                    value={profile.employer.recipientName ?? ""}
-                    onChange={(e) => patchEmployer({ recipientName: e.target.value })}
-                    placeholder="HR Director"
-                  />
-                </Field>
-                <Field label="HR contact title">
-                  <TextField.Root
-                    value={profile.employer.recipientTitle ?? ""}
-                    onChange={(e) => patchEmployer({ recipientTitle: e.target.value })}
-                  />
-                </Field>
-              </>
-            )}
-            {profile.role === "employer" && (
-              <>
-                <Field label="Letterhead image (optional)" full>
-                  <ImageUploader
-                    value={profile.employer.letterheadDataUrl}
-                    onChange={(dataUrl) => patchEmployer({ letterheadDataUrl: dataUrl })}
-                    aspect="banner"
-                    helpText="Renders at the top of every exported letter. PNG / JPG / SVG, max 1 MB."
-                  />
-                </Field>
-                <Field label="Signature image (optional)" full>
-                  <ImageUploader
-                    value={profile.employer.signatureDataUrl}
-                    onChange={(dataUrl) => patchEmployer({ signatureDataUrl: dataUrl })}
-                    aspect="signature"
-                    helpText="Sits above the typed signatory name. Transparent PNG works best."
-                  />
-                </Field>
-              </>
-            )}
-          </Grid>
-        </Card>
-
-        {/* Defaults */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">Defaults</Heading>
-            <Text size="2" color="gray" as="p">Pre-selected on every new letter.</Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
-            <Field label="Jurisdiction">
-              <Select.Root
-                value={profile.defaults.jurisdiction}
-                onValueChange={(v) => patchDefaults({ jurisdiction: v as "UK" | "US" })}
+      {/* The section list is 252px (the mock's 240 plus room for the
+          longest label in its active weight, "Integrations and directory
+          sync", so it never runs to the edge of its pill: CREATE-X31). */}
+      <div className="grid min-w-0 grid-cols-1 gap-5 pt-1.5 lg:grid-cols-[252px_minmax(0,1fr)] lg:gap-10">
+        {/* Desktop section list */}
+        <nav aria-label="Settings sections" className="hidden lg:block">
+          {GROUPS.map((g, gi) => (
+            <div key={g} role="group" aria-labelledby={`set-group-${g}`}>
+              <div
+                id={`set-group-${g}`}
+                className={cn("px-2.5 pb-1.5 text-[12px] font-medium text-[var(--ds-subtle)]", gi === 0 ? "pt-0" : "pt-3.5")}
               >
-                <Select.Trigger />
-                <Select.Content>
-                  <Select.Item value="UK">United Kingdom</Select.Item>
-                  <Select.Item value="US">United States</Select.Item>
-                </Select.Content>
-              </Select.Root>
-            </Field>
-            {profile.defaults.jurisdiction === "UK" ? (
-              <Field label="UK region">
-                <Select.Root
-                  value={profile.defaults.ukRegion ?? "England & Wales"}
-                  onValueChange={(v) => patchDefaults({ ukRegion: v as "England & Wales" })}
-                >
-                  <Select.Trigger />
-                  <Select.Content>
-                    <Select.Item value="England & Wales">England & Wales</Select.Item>
-                    <Select.Item value="Scotland">Scotland</Select.Item>
-                    <Select.Item value="Northern Ireland">Northern Ireland</Select.Item>
-                  </Select.Content>
-                </Select.Root>
-              </Field>
-            ) : (
-              <Field label="US state (free text — pick from list in wizard)">
-                <TextField.Root
-                  value={profile.defaults.usState ?? ""}
-                  onChange={(e) => patchDefaults({ usState: e.target.value as "CA" })}
-                  placeholder="CA"
-                />
-              </Field>
+                {g}
+              </div>
+              <ul className="m-0 flex list-none flex-col gap-px p-0">
+                {SETTINGS_SECTIONS.filter((s) => s.group === g).map((s) => (
+                  <li key={s.id}>
+                    <SectionItem id={s.id} label={s.label} active={s.id === section} onPick={pick} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        {/* Phone and tablet: a horizontally scrolling row */}
+        <nav aria-label="Settings sections" className="-mx-4 min-w-0 sm:-mx-8 lg:hidden">
+          <div
+            ref={rowRef}
+            className="flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden"
+          >
+            {SETTINGS_SECTIONS.map((s) => (
+              <SectionItem key={s.id} id={s.id} label={s.label} active={s.id === section} onPick={pick} compact />
+            ))}
+          </div>
+        </nav>
+
+        <div className="min-w-0 max-w-[1000px]" key={section}>
+          <div className="animate-[ds-fade-in_0.18s_ease_both] motion-reduce:animate-none">
+            {section === "profile" && <ProfilePane line={meta.line} onSave={onSave} saved={saved} />}
+            {section === "workspace" && <WorkspacePane line={meta.line} onSave={onSave} saved={saved} />}
+            {section === "defaults" && <DefaultsPane line={meta.line} onSave={onSave} saved={saved} />}
+            {section === "team" && <TeamPane line={meta.line} />}
+            {section === "policies" && <PoliciesPane line={meta.line} />}
+            {section === "integrations" && <IntegrationsPane line={meta.line} />}
+            {section === "security" && <SecurityPane line={meta.line} />}
+            {section === "data" && <DataPane line={meta.line} />}
+            {section === "billing" && (
+              <BillingCard
+                onManageTeam={() => pick("team")}
+                fallback={
+                  <>
+                    <PaneHeader title="Billing" line={meta.line} />
+                    <SettingsCard
+                      icon={<CreditCard />}
+                      title="Billing"
+                      description="Billing isn't set up for this workspace yet. You can still compare plans."
+                      actions={
+                        <Button asChild>
+                          <Link to="/pricing">See plans</Link>
+                        </Button>
+                      }
+                    />
+                  </>
+                }
+              />
             )}
-            <Field label="Worker classification">
-              <Select.Root
-                value={profile.defaults.workerClass}
-                onValueChange={(v) => patchDefaults({ workerClass: v as "employee" })}
-              >
-                <Select.Trigger />
-                <Select.Content>
-                  <Select.Item value="employee">Employee</Select.Item>
-                  <Select.Item value="worker">Worker (UK)</Select.Item>
-                  <Select.Item value="contractor">Contractor / 1099</Select.Item>
-                  <Select.Item value="casual">Casual / zero-hours</Select.Item>
-                </Select.Content>
-              </Select.Root>
-            </Field>
-            <Field label="Generation model">
-              <Select.Root
-                value={profile.defaults.qwenModel ?? DEFAULT_MODEL}
-                onValueChange={(v) => patchDefaults({ qwenModel: v as QwenModelId })}
-              >
-                <Select.Trigger />
-                <Select.Content>
-                  {QWEN_MODEL_OPTIONS.map((m) => (
-                    <Select.Item key={m.id} value={m.id}>
-                      {m.label} — <Text color="gray">{m.hint}</Text>
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </Field>
-            <Field label={profile.role === "employer" ? "Default tone" : "Default tone band"}>
-              {profile.role === "employer" ? (
-                <Select.Root
-                  value={profile.defaults.tone ?? "formal"}
-                  onValueChange={(v) => patchDefaults({ tone: v as "formal" })}
-                >
-                  <Select.Trigger />
-                  <Select.Content>
-                    <Select.Item value="warm">Warm</Select.Item>
-                    <Select.Item value="neutral">Neutral</Select.Item>
-                    <Select.Item value="formal">Formal</Select.Item>
-                    <Select.Item value="firm">Firm</Select.Item>
-                  </Select.Content>
-                </Select.Root>
-              ) : (
-                <Select.Root
-                  value={profile.defaults.employeeTone ?? "assertive"}
-                  onValueChange={(v) => patchDefaults({ employeeTone: v as "assertive" })}
-                >
-                  <Select.Trigger />
-                  <Select.Content>
-                    <Select.Item value="conciliatory">Conciliatory</Select.Item>
-                    <Select.Item value="assertive">Assertive</Select.Item>
-                    <Select.Item value="forensic">Forensic</Select.Item>
-                    <Select.Item value="tribunal_ready">Tribunal-ready</Select.Item>
-                  </Select.Content>
-                </Select.Root>
-              )}
-            </Field>
-          </Grid>
-        </Card>
-
-        {/* Security — in-app password reset (signed-in users only). The
-         * /sign-in/forgot-password page is signed-out only, so without this
-         * surface signed-in users have no path to rotate their password. */}
-        <SecurityCard />
-
-        {/* Workspace — real members + invites when signed in to a tenant. */}
-        <WorkspaceMembersCard />
-
-        {/* WorkOS Audit Logs mirror status (admin-only) — null for non-admins. */}
-        <AuditLogsCard />
-
-        {/* Solo / sim role picker — kept for local-only dev + screencasts. */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">Role (local simulation)</Heading>
-            <Text size="2" color="gray" as="p">
-              Your seat for approval-queue simulation. The real per-workspace role is set above.
-              Use this in local dev / demos to switch between drafter and reviewer behaviour
-              without a second account.
-            </Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
-            <Field label="Simulated role">
-              <Select.Root
-                value={profile.workspaceRole ?? "owner"}
-                onValueChange={(v) => setWorkspaceRole(v as WorkspaceRole)}
-              >
-                <Select.Trigger />
-                <Select.Content>
-                  <Select.Item value="owner">Owner — full access, billing, members</Select.Item>
-                  <Select.Item value="admin">Admin — full access except billing</Select.Item>
-                  <Select.Item value="drafter">Drafter — write + submit for review</Select.Item>
-                  <Select.Item value="reviewer">Reviewer — drafter + approve/request changes</Select.Item>
-                  <Select.Item value="viewer">Viewer — read-only</Select.Item>
-                </Select.Content>
-              </Select.Root>
-            </Field>
-          </Grid>
-        </Card>
-
-        {/* Auto-fill */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">Auto-fill new letters from this profile</Heading>
-            <Text size="2" color="gray" as="p">
-              When on, the wizard pre-populates with your saved details. You can still edit any field.
-            </Text>
-          </Box>
-          <Flex align="center" gap="3" asChild>
-            <label htmlFor="autoFill">
-              <Switch checked={profile.autoFill} onCheckedChange={setAutoFill} id="autoFill" />
-              <Text size="2">{profile.autoFill ? "On" : "Off"}</Text>
-            </label>
-          </Flex>
-        </Card>
-
-        <Separator size="4" />
-
-        {/* Save / import-export / clear */}
-        <Flex direction={{ initial: "column", sm: "row" }} justify="between" gap="3">
-          <Button variant="ghost" color="red" onClick={onClearAllData}>
-            <Trash2 className="size-4" />
-            Clear all my data on this device
-          </Button>
-          <Flex align="center" gap="2" wrap="wrap">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onImport(f);
-                e.target.value = "";
-              }}
-            />
-            <Button variant="soft" color="gray" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="size-4" />
-              Import
-            </Button>
-            <Button variant="soft" color="gray" onClick={onExport}>
-              <Download className="size-4" />
-              Export
-            </Button>
-            {savedFlash && <Badge color="green" variant="soft">Saved</Badge>}
-            <Button onClick={onSave}>
-              <Save className="size-4" />
-              Save
-            </Button>
-          </Flex>
-        </Flex>
-
-        <Card size="2" style={{ background: "var(--amber-2)" }}>
-          <Flex align="start" gap="2">
-            <Box mt="1"><AlertTriangle className="size-4 text-[var(--amber-11)]" /></Box>
-            <Text size="1" color="gray" className="leading-relaxed">
-              Profile data lives in your browser's local storage. When we wire authentication and
-              server-side persistence (planned), it will move to an encrypted database and become
-              available across devices.
-            </Text>
-          </Flex>
-        </Card>
-      </Flex>
-    </Box>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function RoleCard({
+function SectionItem({
+  id,
+  label,
   active,
-  icon,
-  label,
-  hint,
-  onClick,
+  onPick,
+  compact,
 }: {
+  id: SettingsSectionId;
+  label: string;
   active: boolean;
-  icon: React.ReactNode;
-  label: string;
-  hint: string;
-  onClick: () => void;
+  onPick: (id: SettingsSectionId) => void;
+  compact?: boolean;
 }) {
+  const Icon = ICONS[id];
   return (
-    <Card
-      asChild
-      size="2"
-      variant={active ? "classic" : "surface"}
-      style={active ? { background: "var(--accent-2)", borderColor: "var(--accent-7)" } : undefined}
+    <button
+      type="button"
+      onClick={() => onPick(id)}
+      aria-current={active ? "page" : undefined}
+      data-section={id}
+      className={cn(
+        "flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-[8px] text-[14px] transition-colors duration-[120ms]",
+        compact ? "h-9 border px-3" : "h-9 w-full px-2.5 text-left",
+        active
+          ? cn("bg-[var(--ds-surface-2)] font-medium text-[var(--ds-ink)]", compact && "border-[var(--ds-surface-2)]")
+          : cn(
+              "text-[var(--ds-body)] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)]",
+              compact && "border-[var(--ds-line)]"
+            )
+      )}
     >
-      <button type="button" onClick={onClick} className="text-left w-full cursor-pointer">
-        <Flex align="center" gap="2" mb="1">
-          {icon}
-          <Text size="2" weight="medium">{label}</Text>
-          {active && (
-            <Badge color="amber" variant="soft" ml="auto" className="uppercase tracking-wider">Current</Badge>
-          )}
-        </Flex>
-        <Text size="1" color="gray" as="p">{hint}</Text>
-      </button>
-    </Card>
-  );
-}
-
-function Field({
-  label,
-  full,
-  children,
-}: {
-  label: string;
-  full?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Box className={full ? "sm:col-span-2" : ""}>
-      <Text as="label" size="1" color="gray" weight="medium" mb="1" className="block">
-        {label}
-      </Text>
-      {children}
-    </Box>
+      <Icon
+        aria-hidden
+        className={cn("size-4 shrink-0", active ? "text-[var(--ds-ink)]" : "text-[var(--ds-subtle)]")}
+      />
+      <span>{label}</span>
+    </button>
   );
 }

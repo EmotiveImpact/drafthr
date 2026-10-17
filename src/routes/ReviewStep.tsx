@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, MessageSquarePlus, PenLine } from "lucide-react";
 import { toast } from "sonner";
-import { BrandMark } from "@/components/ds";
-import { Wordmark } from "@/components/ds/Wordmark";
+import { BAR_BTN, SegmentedTabs, SubPageBar } from "@/components/editor/SubPageChrome";
+import { cn } from "@/lib/utils";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { PagedlyDocEditor } from "@/components/editor/paged-edit/PagedlyDocEditor";
@@ -11,10 +11,16 @@ import { ReviewRail } from "@/components/editor/ReviewRail";
 import { CollabReviewRail } from "@/components/editor/CollabReviewRail";
 import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
 import { canEditDraft } from "@/lib/permissions";
+import { finaliseBlocked, submitBlocked, useJourney } from "@/lib/journey/stage";
 import { notifyReviewRequested } from "@/lib/collab-notify";
 import { Button } from "@/components/ui/button";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import { WizardChrome } from "@/components/editor/WizardChrome";
+import { useLatestReview } from "@/lib/journey/reviews";
+import { isAskerOf, isReviewerOf, useMe } from "@/components/journey/review/actions";
+import { requestFinishReview, requestRecall } from "@/components/journey/review/review-ui";
+import { ReviewDialogsHost } from "@/components/journey/ReviewDialogsHost";
+import "@/components/editor/letter-workspace.css";
+
+type PanelTab = "edits" | "progress";
 
 type PendingComment = {
   sectionId: string;
@@ -25,23 +31,30 @@ type PendingComment = {
 };
 
 /**
- * Review step — the assessment page between Edit and Finalise. This is the
- * home of the COLLABORATIVE REVIEW surface (reviewers, suggestions, comments,
- * approval), sitting alongside the read-only letter preview.
- *
- *   [ 300px  Health sidebar ] [ letter preview ] [ 340px collaborative Review rail ]
- *
- *   Edit → REVIEW → Finalise (ship gate lives there)
- *
- * Health/Improve audit lives in the left sidebar's second tab; the right rail
- * is the review workspace (comment / suggest / approve). Evidence is a drawer
- * accessible from Edit; it is no longer a wizard step.
+ * The old review address (`/editor/:id/review`), kept so old links work and
+ * restyled in the letter workspace's language: the document bar (back to
+ * the letter, name, status pill), the letter on the grey canvas where you
+ * select text to comment or suggest, and a 380px side panel with Edits (the
+ * collaborative review: reviewers, suggestions, comments, approval) and
+ * Progress (health score, Fix this first, all checks, Improve).
  */
 export function ReviewStep() {
   const { draftId } = useParams<{ draftId: string }>();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  // The journey as this person sees it (as in the workspace): the named
+  // teammate reviewer gets their own actions, someone else's review is read
+  // only.
+  const review = useLatestReview(draftId);
+  const me = useMe();
+  const open = review && (review.status === "out" || review.status === "back") ? review : null;
+  const viewerIsReviewer = Boolean(open && open.kind === "team" && isReviewerOf(open, me) && !isAskerOf(open, me));
+  const viewerIsAsker = open && !viewerIsReviewer ? isAskerOf(open, me) : undefined;
+  const journey = useJourney(draftId, { viewerIsReviewer, viewerIsAsker });
   const role = useProfileStore((s) => s.profile.workspaceRole);
+  const myName = useProfileStore(
+    (s) => s.profile.personal.preferredName || s.profile.personal.legalName,
+  );
 
   const [reviewDialogKind, setReviewDialogKind] = useState<ReviewDialogKind | null>(null);
   const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
@@ -50,10 +63,16 @@ export function ReviewStep() {
   const [suggestFor, setSuggestFor] = useState<{ sectionId: string; quote?: string } | null>(
     null,
   );
+  // Side panel tab (14B). A new comment, a suggestion or a clicked comment
+  // highlight all live in Edits, so bring that tab forward when one arrives.
+  const [panelTab, setPanelTab] = useState<PanelTab>("edits");
+  useEffect(() => {
+    if (pendingComment || suggestFor || focusCommentId) setPanelTab("edits");
+  }, [pendingComment, suggestFor, focusCommentId]);
 
-  // On-page selection popover: select any text in the letter → Comment / Suggest.
-  // This is the app's own affordance (not pagedly's toolbar) so it is discoverable
-  // and works for EVERYONE — a reviewer on a read-only page can still select text
+  // On-page selection popover: select any text in the letter, then Comment or
+  // Suggest. This is the app's own affordance (not pagedly's toolbar) so it is
+  // discoverable and works for everyone: a reviewer on a read-only page can still select text
   // and comment/suggest, and the author gets the same one-click bubble.
   const canvasRef = useRef<HTMLDivElement>(null);
   const [selBubble, setSelBubble] = useState<{
@@ -150,7 +169,7 @@ export function ReviewStep() {
     // that already has an open pending change (it would silently replace it).
     const section = draft?.sections.find((s) => s.id === selBubble.sectionId);
     if (section?.pendingChange) {
-      toast("This section already has a pending suggestion — resolve it first.");
+      toast("This section already has a pending suggestion. Resolve it first.");
       setSelBubble(null);
       return;
     }
@@ -161,16 +180,18 @@ export function ReviewStep() {
 
   if (!draft || !draftId) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <p className="text-sm text-muted-foreground">Draft not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => nav("/")}>
-          <ArrowLeft className="size-4 mr-1" /> Back home
+      <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
+        <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found.</h1>
+        <p className="m-0 mt-2 text-[14px] leading-relaxed text-[var(--ds-muted)]">
+          This letter isn't in this workspace, or it was deleted.
+        </p>
+        <Button variant="outline" className="mt-6" onClick={() => nav("/")}>
+          <ArrowLeft className="size-4" /> Back home
         </Button>
       </div>
     );
   }
 
-  const meta = getLetterMeta(draft.letterType);
   const reviewStatus = draft.reviewStatus ?? "draft";
   const canResolve = canEditDraft(role, reviewStatus);
 
@@ -219,50 +240,87 @@ export function ReviewStep() {
     toast("Withdrawn from review");
   };
 
+  const openSuggestions = draft.sections.filter((s) => s.pendingChange).length;
+  // The same gates as the letter workspace: no Submit for approval past a
+  // failing required check, Finalise only once it can be sent.
+  const submitHeld = journey ? submitBlocked(journey) : null;
+  const finaliseHeld = journey ? finaliseBlocked(journey) : null;
+  const finalisePrimary = journey?.stage === "send" || journey?.stage === "sent";
+
+  // While a review is out or back, the footer is the review's own next step
+  // (as in the workspace: Recall, Finish review), never "Submit for
+  // approval": the review is decided and finished first (LETTER-X47).
+  const reviewAction = journey?.stage === "review" ? journey.primaryAction : undefined;
+  const reviewFooter =
+    reviewAction && (reviewAction.id === "finish-review" || reviewAction.id === "recall" || reviewAction.id === "send-back") ? (
+      <>
+        <p className="mb-2 text-[12px] leading-snug text-[var(--ds-muted)]">
+          <b className="font-medium text-[var(--ds-ink)]">{journey!.whatNow.lead}</b>
+          {journey!.whatNow.detail ? ` ${journey!.whatNow.detail}` : null}
+        </p>
+        {reviewAction.id === "send-back" ? (
+          <Button size="sm" className="w-full" onClick={() => nav(`/editor/${draft.id}`)}>
+            Open in the workspace to send it back
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="w-full"
+            variant={reviewAction.id === "recall" ? "outline" : "default"}
+            disabled={reviewAction.disabled}
+            title={reviewAction.reason}
+            data-journey-action={reviewAction.id}
+            onClick={() => (reviewAction.id === "recall" ? requestRecall(draft.id) : requestFinishReview(draft.id))}
+          >
+            {reviewAction.label}
+          </Button>
+        )}
+        {reviewAction.disabled && reviewAction.reason && (
+          <p className="mt-1.5 text-[11.5px] leading-snug text-[var(--ds-muted)]">{reviewAction.reason}</p>
+        )}
+      </>
+    ) : undefined;
+
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
-        <Link
-          to="/"
-          aria-label="Home"
-          className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10 mr-2"
-        >
-          <BrandMark size={36} />
-          <Wordmark size={16} className="hidden sm:inline" />
-        </Link>
-        <span className="text-[13px] font-medium text-[var(--ds-ink)]">Review</span>
-        <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">· {meta.title}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => nav(`/editor/${draft.id}`)}>
-            <ArrowLeft className="size-3.5 mr-1.5" />
-            Edit
-          </Button>
-          <Button size="sm" onClick={() => nav(`/editor/${draft.id}/finalize`)}>
-            Finalise
-            <ArrowRight className="size-4 ml-1.5" />
-          </Button>
-        </div>
-      </header>
+    <div className="lw-root flex min-h-0 flex-1 flex-col bg-[var(--ds-canvas)]">
+      <SubPageBar
+        draft={draft}
+        onBack={() => nav(`/editor/${draft.id}`)}
+        actions={
+          <>
+            <button
+              type="button"
+              className={BAR_BTN}
+              onClick={() => nav(`/editor/${draft.id}`)}
+              aria-label="Back to edit"
+            >
+              <span className="hidden sm:inline">Open in the workspace</span>
+              <span className="sm:hidden">Letter</span>
+            </button>
+            <button
+              type="button"
+              className={cn(BAR_BTN, "disabled:pointer-events-none disabled:text-[var(--ds-faint)]")}
+              disabled={Boolean(finaliseHeld)}
+              title={finaliseHeld ?? undefined}
+              onClick={() => nav(`/editor/${draft.id}/finalize`)}
+            >
+              Finalise
+              <ArrowRight className="size-3.5" />
+            </button>
+          </>
+        }
+      />
 
-      {/* Three columns: Health sidebar · letter · collaborative Review rail.
-       * The right rail is the review workspace (comment/suggest/approve). Both
-       * side rails are lg-only; below lg the letter takes the full width. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_340px]">
-        <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
-          <WizardChrome draftId={draft.id} mode={draft.mode} current="review" />
-          <ReviewRail
-            draft={draft}
-            counselReviewedBy={counselReview}
-            unresolvedComments={unresolvedCommentCount}
-            onJumpToSection={(sectionId) => nav(`/editor/${draft.id}?section=${sectionId}`)}
-            onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
-            onContinueToFinalize={() => nav(`/editor/${draft.id}/finalize`)}
-          />
-        </aside>
-
-        <main
+      {/* 14B: the letter in the centre, one side panel with Edits (the
+       * collaborative review: suggestions, comments, approval) and Progress
+       * (health score, Fix this first, all checks). Both panels stay mounted
+       * so composer drafts survive a tab switch. Below lg the page scrolls:
+       * the letter first, then the panel, so Submit / Approve / comments stay
+       * reachable on phones. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 content-start overflow-y-auto lg:content-stretch lg:overflow-hidden lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div data-page-main
           ref={canvasRef}
-          className="review-canvas relative min-h-0 overflow-hidden bg-[var(--ds-canvas)]"
+          className="review-canvas relative h-[75dvh] min-h-0 overflow-hidden bg-[var(--ds-canvas)] lg:h-auto"
         >
           {/* The review surface is the PAGEDLY editor (not the read-only
            * preview): comments + track-change suggestions happen ON the page.
@@ -293,25 +351,54 @@ export function ReviewStep() {
             }}
             onCommentClick={(commentId) => setFocusCommentId(commentId)}
           />
-        </main>
+        </div>
 
-        <aside className="hidden min-h-0 border-l border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
-          <CollabReviewRail
-            draft={draft}
-            role={role}
-            canResolve={canResolve}
-            onOpenReviewDialog={(kind) => setReviewDialogKind(kind)}
-            onWithdraw={onWithdraw}
-            pendingComment={pendingComment}
-            onPendingCommentConsumed={() => setPendingComment(null)}
-            focusCommentId={focusCommentId}
-            onFocusCommentConsumed={() => setFocusCommentId(null)}
-            openSuggest={suggestFor}
-            onOpenSuggestConsumed={() => setSuggestFor(null)}
-          />
+        <aside
+          aria-label="Review panel"
+          className="flex flex-col border-t border-[var(--ds-line-2)] bg-[var(--ds-surface)] lg:min-h-0 lg:border-l lg:border-t-0"
+        >
+          <div className="flex h-[60px] shrink-0 items-center border-b border-[var(--ds-line-2)] pl-4 pr-3">
+            <SegmentedTabs<PanelTab>
+              label="Review panel"
+              value={panelTab}
+              onChange={setPanelTab}
+              tabs={[
+                { id: "edits", label: "Edits", count: openSuggestions + unresolvedCommentCount },
+                { id: "progress", label: "Progress" },
+              ]}
+            />
+          </div>
+          <div className={cn("flex min-h-0 flex-1 flex-col", panelTab !== "edits" && "hidden")}>
+            <CollabReviewRail
+              draft={draft}
+              role={role}
+              canResolve={canResolve}
+              onOpenReviewDialog={(kind) => setReviewDialogKind(kind)}
+              submitBlockedReason={submitHeld}
+              stageFooter={reviewFooter}
+              onWithdraw={onWithdraw}
+              pendingComment={pendingComment}
+              onPendingCommentConsumed={() => setPendingComment(null)}
+              focusCommentId={focusCommentId}
+              onFocusCommentConsumed={() => setFocusCommentId(null)}
+              openSuggest={suggestFor}
+              onOpenSuggestConsumed={() => setSuggestFor(null)}
+            />
+          </div>
+          <div className={cn("flex min-h-0 flex-1 flex-col", panelTab !== "progress" && "hidden")}>
+            <ReviewRail
+              draft={draft}
+              counselReviewedBy={counselReview}
+              unresolvedComments={unresolvedCommentCount}
+              onJumpToSection={(sectionId) => nav(`/editor/${draft.id}?section=${sectionId}`)}
+              onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
+              onContinueToFinalize={() => nav(`/editor/${draft.id}/finalize`)}
+              finaliseBlockedReason={finaliseHeld}
+              finalisePrimary={finalisePrimary}
+            />
+          </div>
         </aside>
       </div>
-
       {/* On-page selection popover — the discoverable Comment / Suggest bubble.
        * Fixed to the viewport at the selection; onMouseDown preventDefault keeps
        * the selection alive long enough for the click to read it. */}
@@ -326,31 +413,35 @@ export function ReviewStep() {
             transform: "translateX(-50%)",
             zIndex: 50,
           }}
-          className="flex items-center gap-0.5 rounded-lg bg-[var(--ds-ink)] p-0.5 text-white shadow-[0_6px_20px_rgba(0,0,0,0.22)]"
+          className="flex items-center gap-0.5 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-[3px] text-[var(--ds-ink)] shadow-[var(--ds-shadow-l)]"
         >
           <button
             type="button"
             onClick={commentOnSelection}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium hover:bg-white/15"
+            className="inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
           >
             <MessageSquarePlus className="size-3.5" /> Comment
           </button>
-          <div className="h-4 w-px bg-white/20" />
+          <div className="h-4 w-px bg-[var(--ds-line)]" />
           <button
             type="button"
             onClick={suggestOnSelection}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium hover:bg-white/15"
+            className="inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
           >
             <PenLine className="size-3.5" /> Suggest edit
           </button>
         </div>
       )}
 
+      {/* Recall and Finish review confirm in the review loop's dialogs. */}
+      <ReviewDialogsHost />
+
       {reviewDialogKind && (
         <ReviewDialog
           open
           onOpenChange={(next) => !next && setReviewDialogKind(null)}
           kind={reviewDialogKind}
+          defaultReviewerName={myName}
           onSubmit={onReviewSubmit}
         />
       )}

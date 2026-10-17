@@ -127,6 +127,55 @@
       "when": 1783184132963,
       "tag": "0017_slippery_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783200000000,
+      "tag": "0018_marketplace_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783270000000,
+      "tag": "0019_billing_gaps",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783280000000,
+      "tag": "0020_sync_tombstones_revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1783290000000,
+      "tag": "0021_ops_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783300000000,
+      "tag": "0022_trusted_review_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783310000000,
+      "tag": "0023_booking_declined_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783320000000,
+      "tag": "0024_priority_reviews",
+      "breakpoints": true
     }
   ]
 }

@@ -64,6 +64,10 @@ export type ConsultantProfileDTO = {
   specialty: string;
   specialties: string[];
   price: number;
+  /** Priority rate (back within 24 hours of payment), above price. Null when
+   *  the expert doesn't offer it, and always null in the marketplace listing
+   *  while priority reviews are switched off. */
+  priorityPrice?: number | null;
   currency: "GBP" | "USD" | "EUR";
   sla: string;
   availability: AvailabilityCode;
@@ -148,6 +152,15 @@ export type BookingMessageDTO = {
   ts: number;
 };
 
+export type BookingPaymentStatus =
+  | "unpaid"
+  | "processing"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "disputed"
+  | "dispute_lost";
+
 export type BookingDTO = {
   id: string;
   consultantProfileId: string;
@@ -158,6 +171,12 @@ export type BookingDTO = {
   responseNote: string | null;
   deliveryNote: string | null;
   rating: number | null;
+  /** Price agreed when the booking was placed, minor units + lowercase ISO
+   *  currency. What checkout charges, whatever the consultant's rate is now. */
+  priceAmount?: number | null;
+  priceCurrency?: string | null;
+  /** Only "paid" lets the consultant start work and opens the draft. */
+  paymentStatus?: BookingPaymentStatus;
   shareToken: string | null;
   shareTokenExpiresAt: number | null;
   messages: BookingMessageDTO[];
@@ -166,6 +185,19 @@ export type BookingDTO = {
   acceptedAt: number | null;
   deliveredAt: number | null;
   completedAt: number | null;
+  /** When the consultant declined; null for other statuses and for
+   *  bookings declined before the column existed. */
+  declinedAt?: number | null;
+  /** "priority": back within 24 hours of payment, at the expert's priority
+   *  price. Absent from servers before priority reviews existed. */
+  turnaround?: "standard" | "priority";
+  /** The standard rate when a priority booking was placed (minor units). */
+  standardPriceAmount?: number | null;
+  /** When a priority review is due (payment plus 24 hours); null until paid. */
+  priorityDueAt?: number | null;
+  /** A late priority delivery's refund of the difference. */
+  lateRefundStatus?: "pending" | "refunded" | "owed" | "failed" | null;
+  lateRefundAmount?: number | null;
   /** Only present on /api/bookings/inbox responses. */
   requesterEmail?: string | null;
   requesterName?: string | null;
@@ -194,6 +226,8 @@ export function createBooking(input: {
   matterTitle?: string;
   message?: string;
   expectedDeliveryAt?: string;
+  /** Sent only for a priority booking; the server defaults to standard. */
+  turnaround?: "priority";
 }) {
   return call<{ booking: BookingDTO }>("/api/marketplace/bookings-create", {
     method: "POST",
@@ -203,7 +237,7 @@ export function createBooking(input: {
 
 export function respondToBooking(
   bookingId: string,
-  action: "accept" | "decline" | "deliver" | "complete",
+  action: "accept" | "decline" | "deliver" | "complete" | "rate",
   opts?: { note?: string; rating?: number },
 ) {
   return call<{ booking: BookingDTO }>("/api/marketplace/bookings-respond", {
@@ -269,6 +303,8 @@ export type AdminProfileDTO = {
   specialty: string;
   specialties: string[];
   price: number;
+  /** Priority rate, when the expert offers it (vetted like the price). */
+  priorityPrice?: number | null;
   currency: "GBP" | "USD" | "EUR";
   sla: string;
   photoUrl: string | null;

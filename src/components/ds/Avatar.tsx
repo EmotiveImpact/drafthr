@@ -12,10 +12,11 @@ const PALETTE = [
 ];
 
 const SIZES = {
-  sm: { px: 20, font: 9 },
-  md: { px: 24, font: 10 },
-  lg: { px: 28, font: 11 },
-  xl: { px: 32, font: 12 },
+  sm: { px: 20, font: 8.5 },
+  md: { px: 24, font: 9.5 },
+  lg: { px: 28, font: 10.5 },
+  xl: { px: 30, font: 12 },
+  "2xl": { px: 36, font: 12 },
 } as const;
 
 export type AvatarSize = keyof typeof SIZES;
@@ -28,6 +29,11 @@ function hashHue(seed: string): number {
 
 export function avatarColor(seed: string): string {
   return PALETTE[hashHue(seed)];
+}
+
+/** The ink that goes with avatarColor(seed). */
+export function avatarInk(seed: string): string {
+  return `var(--ds-av-${hashHue(seed) + 1}-fg)`;
 }
 
 export function avatarInitials(name: string | undefined, fallback?: string): string {
@@ -77,7 +83,8 @@ export function Avatar({
         height: dims.px,
         fontSize: dims.font,
         background: avatarColor(computedSeed),
-        color: "var(--ds-av-fg)",
+        color: avatarInk(computedSeed),
+        letterSpacing: 0,
       }}
     >
       {computedInitials}
@@ -114,13 +121,13 @@ export function AvatarStack({
           size={size}
           className={cn(
             "ring-2 ring-[var(--ds-surface)]",
-            i > 0 && "-ml-2"
+            i > 0 && "-ml-1.5"
           )}
         />
       ))}
       {overflow > 0 && (
         <span
-          className="inline-grid place-items-center rounded-full bg-[var(--ds-line)] text-[var(--ds-body)] font-semibold leading-none -ml-2 ring-2 ring-[var(--ds-surface)]"
+          className="inline-grid place-items-center rounded-full bg-[var(--ds-av-6)] text-[var(--ds-body)] font-semibold leading-none -ml-2 ring-2 ring-[var(--ds-surface)]"
           style={{ width: dims.px, height: dims.px, fontSize: dims.font }}
         >
           +{overflow}

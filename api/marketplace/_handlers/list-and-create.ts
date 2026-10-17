@@ -4,19 +4,32 @@
  * GET  — list bookings placed by the signed-in user, newest first.
  *        ?consultant=<profileId> filters to one consultant.
  * POST — create a new booking. Body: { consultantProfileId, draftId?,
- *        matterTitle?, message?, expectedDeliveryAt? }.
+ *        matterTitle?, message?, expectedDeliveryAt?, turnaround? }. The
+ *        consultant's current rate is snapshotted onto the booking as the
+ *        agreed price; a consultant can't book themselves. turnaround
+ *        "priority" (only while priority reviews are switched on, and only
+ *        for an expert who offers it) snapshots their priority price instead,
+ *        plus the standard one so a late delivery can refund the difference.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import {
+  bookingPayments,
   consultantBookings,
   consultantProfiles,
   drafts,
 } from "../../../src/db/schema.js";
 import { sendBookingRequestEmail } from "../../_utils/consultant-emails.js";
+import { priceSnapshot } from "../../_utils/marketplace-payments.js";
+import {
+  PRIORITY_HOURS,
+  offersPriority,
+  priorityFields,
+  priorityReviewsOn,
+} from "../../_utils/priority-reviews.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
@@ -28,13 +41,15 @@ type CreateBookingInput = {
   message?: string;
   /** ISO timestamp; falls back to consultant SLA if unset. */
   expectedDeliveryAt?: string;
+  /** "standard" (the default) or "priority". */
+  turnaround?: string;
 };
 
 export async function GET(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant)
-    return jsonError("No active tenant — bookings are tenant-scoped", 412);
+    return jsonError("Choose a workspace first. Bookings belong to a workspace.", 412);
 
   const url = new URL(req.url);
   const filterConsultantProfileId = url.searchParams.get("consultant");
@@ -69,17 +84,19 @@ export async function GET(req: Request): Promise<Response> {
       consultantPhotoUrl: consultantProfiles.photoUrl,
       consultantCurrency: consultantProfiles.currency,
       consultantPrice: consultantProfiles.price,
+      paymentStatus: bookingPayments.status,
     })
     .from(consultantBookings)
     .leftJoin(
       consultantProfiles,
       eq(consultantProfiles.id, consultantBookings.consultantProfileId),
     )
+    .leftJoin(bookingPayments, eq(bookingPayments.bookingId, consultantBookings.id))
     .where(and(...filters))
     .orderBy(desc(consultantBookings.bookedAt));
 
   const bookings = rows.map((r) => ({
-    ...toClient(r.booking),
+    ...toClient(r.booking, r.paymentStatus),
     consultantName: r.consultantName,
     consultantInitials: r.consultantInitials,
     consultantRole: r.consultantRole,
@@ -103,7 +120,7 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant)
-    return jsonError("No active tenant — bookings are tenant-scoped", 412);
+    return jsonError("Choose a workspace first. Bookings belong to a workspace.", 412);
 
   const parsed = await readJsonRequest<CreateBookingInput>(req);
   if (!parsed.ok) return parsed.response;
@@ -128,6 +145,29 @@ export async function POST(req: Request): Promise<Response> {
   if (!profile) return jsonError("Consultant profile not found", 404);
   if (profile.status !== "published")
     return jsonError("Consultant is not currently accepting bookings", 412);
+  // A consultant booking themselves could deliver to themselves and rate
+  // themselves up. Refuse it outright.
+  if (profile.userId === auth.userRow.id)
+    return jsonError("You can't book your own consultant profile", 403);
+  // Snapshot the rate now: checkout charges this, so a later rate change
+  // can't alter what the requester agreed to pay.
+  const price = priceSnapshot(profile);
+  if (!price) return jsonError("This specialist hasn't set a rate yet", 412);
+
+  const turnaround = body.turnaround ?? "standard";
+  if (turnaround !== "standard" && turnaround !== "priority") {
+    return jsonError("turnaround must be standard or priority", 400);
+  }
+  const priority = turnaround === "priority";
+  let agreed = price;
+  if (priority) {
+    if (!priorityReviewsOn()) return jsonError("Priority reviews aren't available yet", 412);
+    const priorityPrice = offersPriority(profile)
+      ? priceSnapshot({ price: profile.priorityPrice, currency: profile.currency })
+      : null;
+    if (!priorityPrice) return jsonError("This specialist doesn't offer priority reviews", 412);
+    agreed = priorityPrice;
+  }
 
   // SECURITY: verify the attached draft belongs to the caller's tenant BEFORE
   // binding it to the booking. The share-review read path (shared.ts) fetches
@@ -141,14 +181,17 @@ export async function POST(req: Request): Promise<Response> {
     const [ownedDraft] = await db
       .select({ id: drafts.id })
       .from(drafts)
-      .where(and(eq(drafts.id, boundDraftId), eq(drafts.tenantId, auth.activeTenant.id)))
+      .where(and(eq(drafts.id, boundDraftId), eq(drafts.tenantId, auth.activeTenant.id), isNull(drafts.deletedAt)))
       .limit(1);
     if (!ownedDraft) return jsonError("Draft not found in this workspace", 404);
     boundDraftId = ownedDraft.id;
   }
 
   let expected: Date;
-  if (body.expectedDeliveryAt) {
+  if (priority) {
+    // An estimate until payment, which starts the real 24 hours.
+    expected = new Date(Date.now() + PRIORITY_HOURS * 3600_000);
+  } else if (body.expectedDeliveryAt) {
     expected = new Date(body.expectedDeliveryAt);
     // A malformed caller-supplied value yields an Invalid Date, which Drizzle's
     // pg driver throws on (toISOString) → an unhandled 500. Reject it cleanly.
@@ -171,6 +214,10 @@ export async function POST(req: Request): Promise<Response> {
       matterTitle: body.matterTitle?.slice(0, 280) ?? null,
       message: body.message?.slice(0, 4000) ?? null,
       status: "requested",
+      priceAmount: agreed.priceAmount,
+      priceCurrency: agreed.priceCurrency,
+      turnaround,
+      standardPriceAmount: priority ? price.priceAmount : null,
       expectedDeliveryAt: expected,
       bookedAt: new Date(),
     })
@@ -182,7 +229,7 @@ export async function POST(req: Request): Promise<Response> {
     console.error("[bookings] email send failed", err);
   });
 
-  return new Response(JSON.stringify({ booking: toClient(row) }), {
+  return new Response(JSON.stringify({ booking: toClient(row, null) }), {
     status: 201,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
@@ -196,7 +243,7 @@ function parseSlaMs(sla: string): number {
   return 24 * 3600_000;
 }
 
-function toClient(row: typeof consultantBookings.$inferSelect) {
+function toClient(row: typeof consultantBookings.$inferSelect, paymentStatus: string | null) {
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -209,6 +256,9 @@ function toClient(row: typeof consultantBookings.$inferSelect) {
     responseNote: row.responseNote,
     deliveryNote: row.deliveryNote,
     rating: row.rating,
+    priceAmount: row.priceAmount,
+    priceCurrency: row.priceCurrency,
+    paymentStatus: paymentStatus ?? "unpaid",
     shareToken: row.shareToken,
     messages: row.messages,
     shareTokenExpiresAt: row.shareTokenExpiresAt?.getTime() ?? null,
@@ -217,5 +267,7 @@ function toClient(row: typeof consultantBookings.$inferSelect) {
     acceptedAt: row.acceptedAt?.getTime() ?? null,
     deliveredAt: row.deliveredAt?.getTime() ?? null,
     completedAt: row.completedAt?.getTime() ?? null,
+    declinedAt: row.declinedAt?.getTime() ?? null,
+    ...priorityFields(row),
   };
 }

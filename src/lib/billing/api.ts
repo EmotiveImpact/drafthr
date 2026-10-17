@@ -13,8 +13,35 @@ export type BillingStatus = {
   credits: number;
   currentPeriodStart: number | null;
   currentPeriodEnd: number | null;
+  /** The current monthly allowance window (one month of the year on an annual plan). */
+  allowanceStart?: number | null;
+  allowanceEnd?: number | null;
   cancelAtPeriodEnd: boolean;
 };
+
+/**
+ * Open the Stripe Billing Portal for the caller's subscription (change plan,
+ * update the card, invoices, cancel). Returns the redirect URL. Workspace plans
+ * can only be managed by owners and admins; the server enforces that.
+ */
+export async function openBillingPortal(
+  returnTo: "/settings" | "/pricing" = "/settings",
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  try {
+    const res = await fetch("/api/marketplace/billing-portal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ returnTo }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!res.ok || !data.url) {
+      return { ok: false, error: data.error || "Billing isn't available right now. Try again in a minute." };
+    }
+    return { ok: true, url: data.url };
+  } catch {
+    return { ok: false, error: "Network error. Please try again." };
+  }
+}
 
 /** Start a Stripe-hosted Checkout for a SKU. Returns the redirect URL. */
 export async function startBillingCheckout(
@@ -28,11 +55,14 @@ export async function startBillingCheckout(
     });
     const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
     if (!res.ok || !data.url) {
-      return { ok: false, error: data.error || `Checkout failed (${res.status})` };
+      return {
+        ok: false,
+        error: data.error || "Checkout isn't available right now, and no payment was taken. Try again in a minute.",
+      };
     }
     return { ok: true, url: data.url };
   } catch {
-    return { ok: false, error: "Network error — please try again." };
+    return { ok: false, error: "Network error. Please try again." };
   }
 }
 

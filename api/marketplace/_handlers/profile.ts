@@ -13,6 +13,12 @@
  * Until a real admin surface exists, VETTING_AUTO_PUBLISH=1 in the env
  * publishes profiles immediately on first save so the marketplace isn't
  * empty during early development. Flip it off before launch.
+ *
+ * Re-vetting: editing a field the admin vetted (see VETTED_FIELDS) sends a
+ * published, paused or rejected profile back to 'pending_review', which takes
+ * it out of the public listing until an admin approves it again. Cosmetic and
+ * operational fields (photo, availability, turnaround) stay exempt. A
+ * suspended profile stays suspended whatever is edited.
  */
 import { eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
@@ -21,6 +27,7 @@ import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantBookings, consultantProfiles } from "../../../src/db/schema.js";
 import { isSafeImageDataUrl } from "../../../src/lib/safe-data-url.js";
+import { validatePriorityPrice } from "../../_utils/priority-reviews.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -48,11 +55,44 @@ type ProfileInput = {
   specialty?: string;
   specialties?: string[];
   price?: number;
+  /** Priority rate (back within 24 hours of payment); null turns it off. */
+  priorityPrice?: number | null;
   currency?: "GBP" | "USD" | "EUR";
   sla?: string;
   photoUrl?: string | null;
   availability?: Availability;
 };
+
+/**
+ * The fields admin vetting covers: identity, credentials (the role line), the
+ * claims in the bio and specialty quote, practice areas and jurisdictions (the
+ * specialties tags), and the rates (standard and priority). Changing any of
+ * them needs a fresh review.
+ * Exempt: photoUrl and availability (cosmetic), and sla (a turnaround
+ * estimate, not a vetted claim). initials is derived from fullName.
+ */
+export const VETTED_FIELDS = [
+  "fullName",
+  "role",
+  "bio",
+  "specialty",
+  "specialties",
+  "price",
+  "priorityPrice",
+  "currency",
+] as const;
+
+type VettedValues = Pick<typeof consultantProfiles.$inferSelect, (typeof VETTED_FIELDS)[number]>;
+
+/** True when any vetted field differs between the stored profile and the write. */
+export function changesVettedFields(existing: VettedValues, next: VettedValues): boolean {
+  return VETTED_FIELDS.some(
+    (f) => JSON.stringify(existing[f] ?? null) !== JSON.stringify(next[f] ?? null),
+  );
+}
+
+/** Statuses a vetted-field edit sends back to the review queue. */
+const REVET_STATUSES = new Set(["published", "paused", "rejected"]);
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -164,6 +204,12 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
   }
 
   const initials = fullName ? initialsOf(fullName) : existing?.initials ?? "??";
+  // Cap the specialty quote at 120 characters, but leave a stored one that
+  // predates the cap alone when it's resubmitted unchanged (the profile form
+  // sends it on every save): truncating it would count as a vetted edit and
+  // pull the profile from the listing over a photo or availability change.
+  const specialtyIn = asStr(body.specialty, existing?.specialty ?? "").trim();
+  const specialty = specialtyIn === existing?.specialty ? existing.specialty : specialtyIn.slice(0, 120);
   const specialties = Array.isArray(body.specialties)
     ? body.specialties.filter((s): s is string => typeof s === "string" && s.length > 0)
     : (existing?.specialties as string[] | undefined) ?? [];
@@ -181,17 +227,34 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     photoUrl = checked.value;
   }
 
+  const price = clampInt(body.price ?? existing?.price ?? 150, 0, 5000);
+  // Priority: validated against the standard price it sits above. A form
+  // that doesn't send it (priority switched off) keeps the stored one, unless
+  // the new standard price has caught up with it, which turns priority off
+  // rather than offering a "priority" rate that costs no more.
+  let priorityPrice: number | null = existing?.priorityPrice ?? null;
+  if ("priorityPrice" in body) {
+    const checked = validatePriorityPrice(body.priorityPrice, price);
+    if (!checked.ok) return jsonError(checked.error, 400);
+    priorityPrice = checked.value;
+  } else if (priorityPrice !== null && priorityPrice <= price) {
+    priorityPrice = null;
+  }
+
   const values = {
     userId: auth.userRow.id,
     initials,
     fullName,
     role,
     bio,
-    specialty: (body.specialty ?? existing?.specialty ?? "").trim(),
+    specialty,
     specialties,
-    price: clampInt(body.price ?? existing?.price ?? 150, 0, 5000),
-    currency: (body.currency ?? existing?.currency ?? "GBP") as "GBP" | "USD" | "EUR",
-    sla: (body.sla ?? existing?.sla ?? "24-48h").slice(0, 32),
+    price,
+    priorityPrice,
+    currency: (["GBP", "USD", "EUR"].includes(body.currency as string)
+      ? body.currency
+      : existing?.currency ?? "GBP") as "GBP" | "USD" | "EUR",
+    sla: (typeof body.sla === "string" ? body.sla : existing?.sla ?? "24-48h").slice(0, 32),
     availability:
       body.availability && AVAILABILITY_VALUES.includes(body.availability)
         ? body.availability
@@ -200,7 +263,8 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     // otherwise the sanitisation is discarded on the accept path.
     photoUrl,
     // First save publishes immediately when VETTING_AUTO_PUBLISH=1, otherwise
-    // pending_review. Subsequent updates preserve whatever the admin set.
+    // pending_review. Subsequent updates preserve whatever the admin set,
+    // unless a vetted field changed (below).
     status:
       existing?.status ??
       ((AUTO_PUBLISH ? "published" : "pending_review") as
@@ -208,6 +272,9 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
         | "pending_review"),
     updatedAt: new Date(),
   };
+  if (existing && REVET_STATUSES.has(existing.status) && changesVettedFields(existing, values)) {
+    values.status = AUTO_PUBLISH ? "published" : "pending_review";
+  }
 
   if (!existing) {
     // PATCH is a partial update of an EXISTING profile. Creating one here would
@@ -268,7 +335,7 @@ export async function DELETE(req: Request): Promise<Response> {
     .limit(1);
   if (existingBooking) {
     return jsonError(
-      "Cannot delete a profile with existing bookings — contact support to close your account",
+      "You can't delete a profile that has bookings. Contact support to close your account.",
       409,
     );
   }
@@ -295,6 +362,7 @@ function toClient(row: typeof consultantProfiles.$inferSelect) {
     specialty: row.specialty,
     specialties: row.specialties,
     price: row.price,
+    priorityPrice: row.priorityPrice ?? null,
     currency: row.currency,
     sla: row.sla,
     availability: row.availability,

@@ -126,6 +126,18 @@ export function pickUsablePack<T extends { lettersTotal: number | null; lettersU
   return packs.find((p) => (p.lettersTotal ?? 0) - (p.lettersUsed ?? 0) > 0);
 }
 
+/**
+ * The catalogue entry behind an entitlement_purchases.kind. Letters and packs
+ * store their purchaseKind; credit packs have none and store the price key.
+ */
+export function catalogEntryForPurchaseKind(kind: string): CatalogEntry | null {
+  for (const key of Object.keys(CATALOG) as PriceKey[]) {
+    const entry = CATALOG[key];
+    if (entry.mode === "payment" && (entry.purchaseKind ?? key) === kind) return entry;
+  }
+  return null;
+}
+
 export function isPriceKey(v: unknown): v is PriceKey {
   return typeof v === "string" && Object.prototype.hasOwnProperty.call(CATALOG, v);
 }
@@ -138,4 +150,38 @@ export function isPriceKey(v: unknown): v is PriceKey {
 export function stripePriceId(key: PriceKey): string | null {
   if (typeof process === "undefined" || !process.env) return null;
   return process.env[CATALOG[key].stripePriceIdEnv]?.trim() || null;
+}
+
+/**
+ * The plan a Stripe subscription price belongs to, by matching it against this
+ * environment's seeded price ids. Used by the billing webhook so a plan change
+ * made in Stripe (portal or support) reaches the app, rather than trusting the
+ * plan frozen into checkout metadata. Null if the price is not one of ours.
+ */
+export function planForStripePriceId(priceId: string | null | undefined): PlanId | null {
+  if (!priceId) return null;
+  for (const key of Object.keys(CATALOG) as PriceKey[]) {
+    const entry = CATALOG[key];
+    if (entry.kind === "plan" && entry.plan && stripePriceId(key) === priceId) return entry.plan;
+  }
+  return null;
+}
+
+/**
+ * Whether a Stripe subscription price bills yearly or monthly, by matching it
+ * against this environment's seeded price ids. Annual prices are the
+ * `*_annual` keys; every other plan price is monthly. Null if the price is not
+ * one of ours. Annual plans still get their allowances (credits, the Starter
+ * letter cap) month by month, so callers use this to split the billing period.
+ */
+export function billingIntervalForStripePriceId(
+  priceId: string | null | undefined,
+): "month" | "year" | null {
+  if (!priceId) return null;
+  for (const key of Object.keys(CATALOG) as PriceKey[]) {
+    if (CATALOG[key].kind === "plan" && stripePriceId(key) === priceId) {
+      return key.endsWith("_annual") ? "year" : "month";
+    }
+  }
+  return null;
 }

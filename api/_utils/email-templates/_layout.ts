@@ -6,11 +6,13 @@
  * break when the Google Font CDN is blocked.
  */
 
-const BRAND_INK = "#0f172a"; // slate-900
-const BRAND_ACCENT = "#1d4ed8"; // blue-700 — CTA + links
-const BRAND_MUTED = "#64748b"; // slate-500
-const BRAND_BORDER = "#e2e8f0"; // slate-200
-const BRAND_BG = "#f8fafc"; // slate-50 — page background
+// The app's calm palette (src/styles/globals.css): near-black ink, a
+// near-black main button with white text, cool greys, no bright blue.
+const BRAND_INK = "#111110"; // --ds-ink
+const BRAND_ACCENT = "#111110"; // main button and links, as in the app
+const BRAND_MUTED = "#6b6b70"; // --ds-muted
+const BRAND_BORDER = "#e8e8ea"; // --ds-line
+const BRAND_BG = "#f5f5f6"; // --ds-surface-2, page background
 
 const PLAYFAIR_HREF =
   "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&display=swap";
@@ -102,8 +104,8 @@ export function ctaButton(label: string, href: string): string {
   // Bulletproof button pattern — table-based so Outlook doesn't collapse the padding.
   return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;">
     <tr>
-      <td align="center" bgcolor="${BRAND_ACCENT}" style="border-radius:8px;">
-        <a href="${escape(href)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;font-family:${SYSTEM_FONT_STACK};font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">
+      <td align="center" bgcolor="${BRAND_ACCENT}" style="border-radius:10px;">
+        <a href="${escape(href)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;font-family:${SYSTEM_FONT_STACK};font-size:15px;font-weight:500;color:#ffffff;text-decoration:none;border-radius:10px;">
           ${escape(label)}
         </a>
       </td>
@@ -112,7 +114,41 @@ export function ctaButton(label: string, href: string): string {
 }
 
 export function formatDate(d: Date): string {
-  // "May 23, 2026" — works regardless of recipient locale (no commas/periods
-  // that mean different things in EU vs US date formats).
-  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  // "23 May 2026": British order with the month written out, so it cannot be
+  // misread as a US or EU numeric date. UK time, whatever the server's zone.
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/London",
+  });
+}
+
+// Free-text sanitising for anything a user typed (workspace names, display
+// names, letter titles, messages). Outbound email is sent from DraftHR's
+// domain, so user text must never be able to turn it into a convincing
+// phishing message: no links (mail clients auto-link bare domains too), no
+// email addresses, no control or bidi-override characters, and a hard length
+// cap. Callers still HTML-escape the result; this is about content, not markup.
+const URL_WITH_SCHEME_RE = /\b[a-z][a-z0-9+.-]*:\/\/\S*/gi;
+const WWW_RE = /\bwww\.\S*/gi;
+const EMAIL_RE = /[^\s@<>]+@[^\s@<>]+/g;
+// Bare domains such as "evil.example" or "pay-now.co.uk/login": two or more
+// labels with an alphabetic final label of 2 to 24 characters.
+const BARE_DOMAIN_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b(?:\/\S*)?/gi;
+// eslint-disable-next-line no-control-regex
+const CONTROL_RE = /[\u0000-\u001F\u007F-\u009F​-‏‪-‮⁠-⁩﻿]/g;
+
+export function sanitizeFreeText(value: string | null | undefined, maxChars: number): string {
+  if (!value) return "";
+  const cleaned = String(value)
+    .replace(CONTROL_RE, " ")
+    .replace(URL_WITH_SCHEME_RE, " ")
+    .replace(WWW_RE, " ")
+    .replace(EMAIL_RE, " ")
+    .replace(BARE_DOMAIN_RE, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length <= maxChars) return cleaned;
+  return cleaned.slice(0, maxChars).trimEnd() + "…";
 }

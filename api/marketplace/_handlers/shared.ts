@@ -2,20 +2,23 @@
  * /api/marketplace/shared/<token>
  *
  * Resolves a matter-scoped share token into the underlying draft.
- * The token is issued server-side when a consultant accepts a booking;
- * it carries no information itself but maps 1:1 to a booking row with
- * a draftId and an expiry timestamp.
+ * The token is issued server-side once a booking's payment is recorded as
+ * paid (see api/_utils/marketplace-payments.ts); it carries no information
+ * itself but maps 1:1 to a booking row with a draftId and an expiry
+ * timestamp. A refund or dispute withdraws it.
  *
  * Auth model: the caller must be signed in AND must be the consultant
  * named on the booking. We never serve the draft to an anonymous token
  * holder — even if a token leaks, only the assigned consultant's
- * session unlocks it. Token expiry is enforced server-side.
+ * session unlocks it. Token expiry is enforced server-side, and the
+ * booking must still be paid.
  */
 import { and, eq, gt, isNotNull } from "drizzle-orm";
 import { jsonError } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
+import { paymentStatusOf } from "../../_utils/marketplace-payments.js";
 import {
   consultantBookings,
   consultantProfiles,
@@ -67,6 +70,12 @@ export async function GET(req: Request): Promise<Response> {
   if (!booking.draftId)
     return jsonError("Booking has no draft attached", 412);
 
+  // Defence in depth: the token is only minted on payment and withdrawn on
+  // refund or dispute, but re-check so a token that outlived its payment
+  // (e.g. a missed webhook) can't open the draft.
+  if ((await paymentStatusOf(db, booking.id)) !== "paid")
+    return jsonError("Draft access opens once the booking is paid", 402);
+
   // Fetch the draft + its sections. We only return read-safe fields —
   // PII like employer.legalName is included because it's needed for the
   // review, but we deliberately strip notes-on-employee / private
@@ -82,7 +91,8 @@ export async function GET(req: Request): Promise<Response> {
     .from(drafts)
     .where(eq(drafts.id, booking.draftId))
     .limit(1);
-  if (!draftRow) return jsonError("Draft not found", 404);
+  // A soft-deleted draft is a scrubbed tombstone, not a letter to share.
+  if (!draftRow || draftRow.deletedAt) return jsonError("Draft not found", 404);
   if (draftRow.tenantId !== booking.tenantId) {
     return jsonError("Draft not found", 404);
   }

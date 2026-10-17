@@ -4,29 +4,24 @@ import type { Mode } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Compact step indicator that sits at the top of the editor's sections
- * rail. Shows the user where they are in the editor wizard without
- * moving the primary Next-step CTA out of the topbar.
+ * Compact step indicator for the letter workspace: Edit, Review, Finalise.
+ * Drawn as a pill track (design 2A): the current step is the
+ * raised white pill, finished steps carry a green tick, later steps a
+ * quiet number.
  *
- *   Edit  ─  Review  ─  Finalise        (both employee and employer)
- *
- * Evidence is intentionally NOT part of the wizard stepper any more —
- * it's accessible as a drawer from anywhere in Edit, so it doesn't need
- * a numbered slot in the linear progression. Finalise IS a step now —
- * it's the explicit ship-gate destination at the end of the flow.
+ * Evidence is intentionally NOT part of the stepper: it is reachable as a
+ * drawer from anywhere in Edit. Finalise IS a step: it is the explicit
+ * ship gate at the end of the flow.
  *
  * Layout rules:
- *   - Each step label sizes to its content (no flex-1, no truncate) —
- *     longer labels like "Finalise" get the room they need.
- *     Prevents the cut-off bug where mid-length labels collide with the
- *     connector line in the 232px rail.
- *   - Connectors are the only flex children — they absorb leftover
- *     width, so the row stays balanced regardless of label length.
- *   - Steps are links; clicking the current step is a no-op, clicking
- *     a future step navigates forward (matches the topbar CTA).
- *   - `mode` is accepted for backwards-compat with all WizardSidebar
- *     callers but no longer affects the stepper — both employee and
- *     employer flows are Edit · Review · Finalise.
+ *   - Each pill sizes to its content (no truncation) so "Finalise" always
+ *     fits, including in the 232px editor rail.
+ *   - Steps are links; clicking the current step is a no-op, clicking a
+ *     future step navigates forward (matches the topbar CTA).
+ *   - `mode` is accepted for backwards-compat with all callers but no
+ *     longer affects the stepper.
+ *   - `bare` drops the rail padding and divider so the track can sit
+ *     inside a document bar.
  */
 type Step = "edit" | "evidence" | "review" | "finalize";
 
@@ -36,14 +31,15 @@ type Props = {
   current: Step;
   /** Disable navigation (e.g. while AI is streaming). */
   disabled?: boolean;
+  /** Drop the rail padding and divider (for use inside a document bar). */
+  bare?: boolean;
+  className?: string;
 };
 
-export function WizardChrome({ draftId, mode: _mode, current, disabled }: Props) {
-  // Same three steps for everyone — Evidence is a drawer now, not a step.
-  // Finalise is the ship gate at the end of the flow.
-  // Note: when `current` is "evidence" (legacy callers still pass it) it
-  // won't match any step in this list, so no step renders as active —
-  // that's correct: the evidence drawer isn't a wizard destination.
+export function WizardChrome({ draftId, mode: _mode, current, disabled, bare, className }: Props) {
+  // When `current` is "evidence" (legacy callers still pass it) it won't
+  // match any step in this list, so no step renders as active: the
+  // evidence drawer isn't a wizard destination.
   const steps: { id: Step; label: string; href: string }[] = [
     { id: "edit", label: "Edit", href: `/editor/${draftId}` },
     { id: "review", label: "Review", href: `/editor/${draftId}/review` },
@@ -55,14 +51,16 @@ export function WizardChrome({ draftId, mode: _mode, current, disabled }: Props)
   return (
     <nav
       aria-label="Editor progress"
-      className="px-3 pt-3 pb-2 border-b border-[var(--ds-line-2)]"
+      className={cn(
+        bare ? "min-w-0" : "border-b border-[var(--ds-line-2)] px-3 pb-2.5 pt-3",
+        className
+      )}
     >
-      <div className="flex items-center">
-        {steps.flatMap((step, i) => {
+      <div className="inline-flex max-w-full items-center gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-chip)] p-[3px]">
+        {steps.map((step, i) => {
           const state =
             i < currentIndex ? "done" : i === currentIndex ? "current" : "upcoming";
-          const isLast = i === steps.length - 1;
-          const node = (
+          return (
             <Link
               key={step.id}
               to={step.href}
@@ -72,58 +70,33 @@ export function WizardChrome({ draftId, mode: _mode, current, disabled }: Props)
                 if (disabled) e.preventDefault();
               }}
               className={cn(
-                // shrink-0 keeps the label intact; the connector to the
-                // right is the only thing that flexes, soaking up the
-                // rail's leftover width.
-                "shrink-0 flex items-center gap-1.5 group rounded-md px-1 py-1 transition",
-                disabled
-                  ? "opacity-50 pointer-events-none"
-                  : "hover:bg-[var(--ds-line-2)]"
+                "inline-flex h-[26px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2.5 text-[12.5px] font-medium transition",
+                state === "current"
+                  ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]"
+                  : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]",
+                disabled && "pointer-events-none opacity-50"
               )}
             >
-              <span
-                className={cn(
-                  "shrink-0 size-4 rounded-full grid place-items-center text-[9px] font-bold transition",
-                  state === "done" && "bg-[var(--ds-green-fg)] text-white",
-                  state === "current" &&
-                    "bg-[var(--ds-ink)] text-white ring-2 ring-[var(--ds-ink)]/15",
-                  state === "upcoming" &&
-                    "bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
-                )}
-              >
-                {state === "done" ? <Check className="size-2.5" /> : i + 1}
-              </span>
-              <span
-                className={cn(
-                  "text-[11px] font-medium whitespace-nowrap",
-                  state === "current"
-                    ? "text-[var(--ds-ink)]"
-                    : state === "done"
-                      ? "text-[var(--ds-body)]"
-                      : "text-[var(--ds-muted)]"
-                )}
-              >
-                {step.label}
-              </span>
+              {state === "done" ? (
+                <Check
+                  className="size-3.5 shrink-0 text-[var(--ds-green-fg)]"
+                  strokeWidth={2.5}
+                  aria-hidden
+                />
+              ) : (
+                <span
+                  className={cn(
+                    "ds-mono text-[11px]",
+                    state === "current" ? "text-[var(--ds-muted)]" : "text-[var(--ds-faint)]"
+                  )}
+                  aria-hidden
+                >
+                  {i + 1}
+                </span>
+              )}
+              {step.label}
             </Link>
           );
-          if (isLast) return [node];
-          return [
-            node,
-            <span
-              key={`${step.id}-conn`}
-              className={cn(
-                // flex-1 makes the connector the ONLY element that grows
-                // to fill leftover rail width. min-w-2 stops it
-                // collapsing to zero when the rail is narrow.
-                "flex-1 min-w-2 h-px mx-1 transition-colors",
-                state === "done"
-                  ? "bg-[var(--ds-green-fg)]"
-                  : "bg-[var(--ds-line)]"
-              )}
-              aria-hidden
-            />,
-          ];
         })}
       </div>
     </nav>

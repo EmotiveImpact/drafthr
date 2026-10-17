@@ -8,6 +8,7 @@ import type {
   Section,
   SectionVersion,
 } from "@/lib/letters/types";
+import { formatDateOnly } from "@/lib/date-only";
 
 export type TimelineCategory =
   | "changes"
@@ -24,7 +25,7 @@ export type DraftTimelineItem = DraftTimelineEvent & {
 
 export function buildDraftTimeline(draft: Draft): DraftTimelineItem[] {
   const items: DraftTimelineItem[] = (draft.timeline ?? []).map((event) =>
-    normalize(event, "stored")
+    normalize(plainExportEvent(event), "stored")
   );
 
   if (!items.some((item) => item.kind === "created")) {
@@ -61,16 +62,23 @@ export function buildDraftTimeline(draft: Draft): DraftTimelineItem[] {
     }
     if (
       exportEvent.reviewedBy &&
-      !hasMeta(items, "counsel_review", "exportId", exportEvent.id)
+      !hasMeta(items, "counsel_review", "exportId", exportEvent.id) &&
+      // One sign-off carried on several files (the PDF, the pack and the
+      // send) is one counsel review, listed with the first (HOME-X50).
+      !hasCounselReview(items, exportEvent.reviewedBy, exportEvent.reviewedOn)
     ) {
+      // Listed beside its export's entry: a back-dated send's export is
+      // timed at the date given, but its entry (and so this) at the time it
+      // was recorded (SEND-X35).
+      const entry = items.find((item) => item.kind === "exported" && item.meta?.exportId === exportEvent.id);
       items.push(
         normalize(
           {
             id: `review:${exportEvent.id}`,
             kind: "counsel_review",
-            createdAt: exportEvent.exportedAt,
-            title: `Counsel review attested by ${exportEvent.reviewedBy}`,
-            detail: exportEvent.reviewedOn,
+            createdAt: entry?.createdAt ?? exportEvent.exportedAt,
+            title: `Counsel review by ${exportEvent.reviewedBy}`,
+            detail: reviewedOnDetail(draft, exportEvent.reviewedOn),
             meta: {
               exportId: exportEvent.id,
               reviewedBy: exportEvent.reviewedBy,
@@ -89,12 +97,7 @@ export function buildDraftTimeline(draft: Draft): DraftTimelineItem[] {
   if (
     manualReview?.reviewedBy &&
     manualReview.reviewedOn &&
-    !items.some(
-      (item) =>
-        item.kind === "counsel_review" &&
-        item.meta?.reviewedBy === manualReview.reviewedBy &&
-        item.meta?.reviewedOn === manualReview.reviewedOn
-    )
+    !hasCounselReview(items, manualReview.reviewedBy, manualReview.reviewedOn)
   ) {
     items.push(
       normalize(
@@ -102,8 +105,8 @@ export function buildDraftTimeline(draft: Draft): DraftTimelineItem[] {
           id: `manual-review:${manualReview.reviewedBy}:${manualReview.reviewedOn}`,
           kind: "counsel_review",
           createdAt: Date.parse(`${manualReview.reviewedOn}T12:00:00`) || draft.updatedAt,
-          title: `Counsel review attested by ${manualReview.reviewedBy}`,
-          detail: manualReview.reviewedOn,
+          title: `Counsel review by ${manualReview.reviewedBy}`,
+          detail: reviewedOnDetail(draft, manualReview.reviewedOn),
           meta: {
             reviewedBy: manualReview.reviewedBy,
             reviewedOn: manualReview.reviewedOn,
@@ -188,8 +191,8 @@ function exportTimelineEvent(event: ExportEvent): DraftTimelineItem {
       id: `export:${event.id}`,
       kind: "exported",
       createdAt: event.exportedAt,
-      title: `Exported as ${event.format.toUpperCase()}`,
-      detail: event.reviewedBy ? `Attested by ${event.reviewedBy}` : undefined,
+      title: exportTitleFor(event.format),
+      detail: event.reviewedBy ? `Counsel review by ${event.reviewedBy}` : undefined,
       meta: {
         exportId: event.id,
         format: event.format,
@@ -199,6 +202,41 @@ function exportTimelineEvent(event: ExportEvent): DraftTimelineItem {
     },
     "derived"
   );
+}
+
+/** What a download or send is called on the timeline, in plain words. */
+const EXPORT_TITLES: Record<string, string> = {
+  pdf: "Downloaded as PDF",
+  docx: "Downloaded as Word",
+  txt: "Downloaded as plain text",
+  pack: "Downloaded the evidence pack",
+  audit: "Downloaded the audit record",
+  "marked-sent": "Marked as sent",
+};
+
+export function exportTitleFor(format: string): string {
+  const key = format.trim().toLowerCase();
+  return EXPORT_TITLES[key] ?? `Downloaded as ${format.trim().toUpperCase()}`;
+}
+
+/**
+ * The store records a download as "Exported as PDF" or "Exported as
+ * MARKED-SENT" (format codes, SEND-X43); people read it in words. The
+ * format stays on the event's meta for anything that needs the code.
+ */
+export function plainExportEvent(event: DraftTimelineEvent): DraftTimelineEvent {
+  if (event.kind !== "exported") return event;
+  const fromTitle = /^exported as (.+)$/i.exec(event.title.trim())?.[1];
+  if (!fromTitle) return event;
+  const format = typeof event.meta?.format === "string" ? event.meta.format : fromTitle.toLowerCase();
+  // Its detail, "Counsel review attested by X", in the same plain words.
+  const detail = event.detail?.replace(/^counsel review attested by /i, "Counsel review by ");
+  return {
+    ...event,
+    title: exportTitleFor(format),
+    detail,
+    meta: { ...(event.meta ?? {}), format },
+  };
 }
 
 function aiMessageEvent(message: AIChatMessage): DraftTimelineItem {
@@ -227,6 +265,29 @@ function hasMeta(
   value: string | number | boolean | null | undefined
 ): boolean {
   return items.some((item) => item.kind === kind && item.meta?.[key] === value);
+}
+
+/** The day a counsel review was done, in words ("Reviewed on 13 Oct 2026"), never a raw date. */
+function reviewedOnDetail(draft: Draft, reviewedOn: string | undefined): string | undefined {
+  if (!reviewedOn) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reviewedOn)) return reviewedOn;
+  const locale = draft.context?.jurisdiction === "US" ? "en-US" : "en-GB";
+  const day = formatDateOnly(reviewedOn, { day: "numeric", month: "short", year: "numeric" }, locale);
+  return `Reviewed on ${day}`;
+}
+
+/** A counsel review by this person on this day is already listed. */
+function hasCounselReview(
+  items: DraftTimelineItem[],
+  reviewedBy: string,
+  reviewedOn: string | undefined
+): boolean {
+  return items.some(
+    (item) =>
+      item.kind === "counsel_review" &&
+      item.meta?.reviewedBy === reviewedBy &&
+      (item.meta?.reviewedOn ?? undefined) === (reviewedOn ?? undefined)
+  );
 }
 
 function compact(text: string, max = 140): string {

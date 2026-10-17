@@ -54,7 +54,7 @@ export function DataTable<Row>({
               <th
                 key={c.key}
                 className={cn(
-                  "text-left font-medium text-[12px] text-[var(--ds-muted)] py-3 px-4",
+                  "text-left font-medium text-[12.5px] text-[var(--ds-subtle)] pt-0 pb-2.5 px-3",
                   "border-b border-[var(--ds-line)]",
                   c.num && "text-right",
                   c.isActions && "text-right",
@@ -90,14 +90,14 @@ export function DataTable<Row>({
               className={cn(
                 "transition-colors",
                 onRowClick &&
-                  "cursor-pointer hover:bg-[var(--ds-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  "cursor-pointer transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
               )}
             >
               {columns.map((c) => (
                 <td
                   key={c.key}
                   className={cn(
-                    "py-3 px-4 align-middle text-[var(--ds-body)]",
+                    "py-3.5 px-3 align-middle text-[var(--ds-body)]",
                     "border-b border-[var(--ds-line-2)]",
                     "h-[44px]",
                     c.num && "text-right tabular-nums",

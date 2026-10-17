@@ -59,6 +59,7 @@ export type SignerEnv = {
   SIGNING_KMS_KEY_ID?: string;
   AWS_REGION?: string;
   DRAFTHR_SIGNING_KEY_HEX?: string;
+  VERCEL_ENV?: string;
 };
 
 let cachedSigner: KmsSigner | null = null;
@@ -77,6 +78,14 @@ export async function getActiveSigner(
       credentialsFromEnv: true,
     });
     return cachedSigner;
+  }
+
+  // Production must sign with the managed key. Falling back to the local
+  // signer there meant a random key per serverless instance when
+  // DRAFTHR_SIGNING_KEY_HEX was also unset, so every signature verified only
+  // against the public key handed back with it.
+  if (env.VERCEL_ENV === "production") {
+    throw new Error("SIGNING_KMS_KEY_ID must be configured to sign in production");
   }
 
   const { createLocalSigner } = await import("./local-signer.js");

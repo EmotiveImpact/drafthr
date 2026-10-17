@@ -1,17 +1,17 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { X } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { letterBodyHtml } from "@/lib/export/pdf";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import type { Draft } from "@/lib/letters/types";
+import { briefTitleFor, recipientNameFor } from "@/lib/letters/display";
+import { useJourney } from "@/lib/journey/stage";
+import { StatusPill } from "@/components/journey/ui";
 
 /**
- * Mobile read-only view — `/m/:draftId`.
+ * Mobile read-only view, `/m/:draftId`.
  *
  * Persona D ("HR Director reads on the bus"): open a draft on a phone,
  * read it cleanly, no chrome. This route is the mobile counterpart to
- * `/editor/:draftId` — it renders the same letter body as the PDF export
+ * `/editor/:draftId`: it renders the same letter body as the PDF export
  * pipeline (`letterBodyHtml`) inside a full-bleed scroll container.
  *
  * Constraints:
@@ -22,7 +22,9 @@ import type { Draft } from "@/lib/letters/types";
  *  - No editing affordances. The HTML is sanitised by letterBodyHtml
  *    (per-section sanitizeLetterHtmlForExport + sanitizeLetterHtml on the
  *    disclaimer). contentEditable is never set.
- *  - Light theme only — Section B of SUNDAY.md locks dark mode off.
+ *  - Light theme only (Section B of SUNDAY.md locks dark mode off).
+ *  - The status pill is the journey's own label and colour, as in the
+ *    workspace's document bar.
  */
 export function MobileReadView() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -30,18 +32,20 @@ export function MobileReadView() {
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
 
   const bodyHtml = useMemo(() => (draft ? letterBodyHtml(draft) : ""), [draft]);
-  const meta = draft ? getLetterMeta(draft.letterType) : null;
-  const title = draft?.title || meta?.title || "Untitled letter";
-  const statusLabel = draft ? statusLabelFor(draft) : "";
+  // The same short name as the document bar and the Letters list
+  // ("Warning letter"), with the person under it.
+  const title = draft ? briefTitleFor(draft) || "Untitled letter" : "Untitled letter";
+  const recipient = draft ? recipientNameFor(draft) : "";
+  const journey = useJourney(draft?.id);
 
   if (!draft) {
     return (
       <div
         data-testid="mobile-read-view"
-        className="fixed inset-0 z-50 bg-[var(--ds-canvas)] overflow-y-auto"
+        className="fixed inset-0 z-50 bg-[var(--ds-surface)] overflow-y-auto"
       >
         <div className="mx-auto max-w-md px-6 py-16 text-center">
-          <h1 className="text-base font-medium text-[var(--ds-ink)]">
+          <h1 className="ds-title m-0 text-[28px] leading-tight">
             Draft not found
           </h1>
           <p className="mt-2 text-sm text-[var(--ds-muted)]">
@@ -64,24 +68,14 @@ export function MobileReadView() {
   return (
     <div
       data-testid="mobile-read-view"
-      className="fixed inset-0 z-50 bg-[var(--ds-canvas)] overflow-y-auto"
+      className="fixed inset-0 z-50 bg-[var(--ds-surface)] overflow-y-auto"
     >
-      {/* Top status pill — read-only meta strip. Title + draft status. */}
+      {/* Top strip: the approval pill and Done, nothing else. */}
       <div
-        className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 border-b border-[var(--ds-line)] bg-[var(--ds-surface)]/95 backdrop-blur"
+        className="sticky top-0 z-10 flex items-center gap-2 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] px-4 py-3"
         data-testid="mobile-read-header"
       >
-        <span
-          className={
-            "inline-flex items-center text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded-full " +
-            statusPillClasses(statusLabel)
-          }
-        >
-          {statusLabel}
-        </span>
-        <span className="truncate text-[13px] font-medium text-[var(--ds-ink)]">
-          {title}
-        </span>
+        {journey && <StatusPill tone={journey.statusTone}>{journey.statusLabel}</StatusPill>}
         <button
           type="button"
           onClick={() => {
@@ -92,9 +86,8 @@ export function MobileReadView() {
           }}
           aria-label="Close mobile reader"
           data-testid="mobile-read-done"
-          className="ml-auto inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
+          className="ml-auto inline-flex h-9 items-center gap-1 rounded-[10px] bg-[var(--ds-accent)] px-3.5 text-[14px] font-medium text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
         >
-          <X className="size-3.5" />
           <span>Done</span>
         </button>
       </div>
@@ -104,13 +97,18 @@ export function MobileReadView() {
        * is rendered as-is; per-element styling is handled by the
        * .mobile-letter scoped block below so we don't drag the A4-export
        * sizing into the screen surface. */}
-      <main className="mx-auto max-w-[720px] px-5 sm:px-8 py-8 pb-24">
+      <div data-page-main className="mx-auto max-w-[680px] px-5 pb-24 pt-4 sm:px-8 sm:pt-8">
+        <h1 className="ds-title m-0 text-[30px] leading-[1.12] [overflow-wrap:anywhere] sm:text-[36px]">
+          {title}
+        </h1>
+        {recipient && <p className="m-0 mt-1.5 text-[14px] text-[var(--ds-muted)]">{recipient}</p>}
+        <div className="mb-7" aria-hidden />
         <article
           className="mobile-letter text-[var(--ds-ink)]"
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
           aria-label="Letter content"
         />
-      </main>
+      </div>
 
       {/* Scoped typography for the read-only HTML body. Mirrors the
        * export styles in pdf.ts but tuned for screen — larger base font,
@@ -120,46 +118,9 @@ export function MobileReadView() {
   );
 }
 
-/** Derive the human-readable status pill text. Mirrors the editor's
- * implicit lifecycle: marked-sent export → "Sent", reviewStatus →
- * Approved / In review / Changes requested, otherwise "Draft" or
- * "Ready" when at least one section is in a non-empty state. */
-function statusLabelFor(draft: Draft): string {
-  const wasSent = (draft.exports ?? []).some((e) => e.format === "marked-sent");
-  if (wasSent) return "Sent";
-  switch (draft.reviewStatus) {
-    case "approved":
-      return "Approved";
-    case "in_review":
-      return "In review";
-    case "changes_requested":
-      return "Changes requested";
-    default:
-      break;
-  }
-  const hasContent = draft.sections.some((s) => s.status === "ready" || s.status === "edited");
-  return hasContent ? "Ready" : "Draft";
-}
-
-function statusPillClasses(label: string): string {
-  switch (label) {
-    case "Sent":
-    case "Approved":
-      return "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]";
-    case "In review":
-      return "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]";
-    case "Changes requested":
-      return "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]";
-    case "Ready":
-      return "bg-[var(--ds-line-2)] text-[var(--ds-ink)]";
-    default:
-      return "bg-[var(--ds-line-2)] text-[var(--ds-body)]";
-  }
-}
-
 const mobileLetterStyles = `
 .mobile-letter {
-  font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-family: var(--font-serif);
   font-size: 16px;
   line-height: 1.6;
   color: var(--ds-ink);
@@ -191,8 +152,22 @@ const mobileLetterStyles = `
 }
 .mobile-letter a { color: inherit; text-decoration: underline; }
 .mobile-letter img { max-width: 100%; height: auto; display: block; }
+.mobile-letter table { display: block; max-width: 100%; overflow-x: auto; }
+.mobile-letter { overflow-wrap: anywhere; }
 .mobile-letter .attachments-block h3 { font-size: 1.05rem; }
 .mobile-letter [contenteditable] { -webkit-user-modify: read-only; user-select: text; }
+/* The branded export footer carries inline print colours and a system font
+ * stack for PDF and Word. On screen it takes the workspace tokens and Inter,
+ * so its grey reads at AA. */
+.mobile-letter .drafthr-export-footer {
+  color: var(--ds-muted) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 12px !important;
+  border-top-color: var(--ds-line) !important;
+}
+.mobile-letter .drafthr-export-footer strong {
+  color: var(--ds-body) !important;
+}
 `;
 
 export default MobileReadView;

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock the API client so we drive server responses without network.
-const { respondMock } = vi.hoisted(() => ({ respondMock: vi.fn() }));
+const { respondMock, messageMock } = vi.hoisted(() => ({ respondMock: vi.fn(), messageMock: vi.fn() }));
 vi.mock("@/lib/consultantApi", () => ({
   respondToBooking: respondMock,
   // The other named imports must exist for the module to load. getInbox /
@@ -12,11 +12,12 @@ vi.mock("@/lib/consultantApi", () => ({
   createBooking: vi.fn(),
   getInbox: vi.fn(async () => ({ ok: false, error: "x", status: 500 })),
   listMyBookings: vi.fn(async () => ({ ok: false, error: "x", status: 500 })),
-  sendBookingMessage: vi.fn(),
+  sendBookingMessage: messageMock,
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
-import { pushBookingRespond } from "@/lib/marketplaceSync";
+import { pushBookingMessage, pushBookingRespond } from "@/lib/marketplaceSync";
+import { toast } from "sonner";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 
 function seedBooking(overrides: Partial<Booking> = {}): Booking {
@@ -173,5 +174,67 @@ describe("pushBookingRespond — return value signals success (round 19)", () =>
   it("returns false on a not-ok response so the caller can roll back optimistic UI", async () => {
     respondMock.mockResolvedValue({ ok: false, error: "boom", status: 500 });
     await expect(pushBookingRespond("bk_1", "complete", { rating: 5 })).resolves.toBe(false);
+  });
+});
+
+describe("booking fields the market screens read", () => {
+  beforeEach(() => {
+    respondMock.mockReset();
+    useBookingsStore.setState({ bookings: [seedBooking({ status: "requested", requesterName: "Alex Morgan" })] });
+  });
+
+  it("keeps the declined time and the requester's name across a respond", async () => {
+    respondMock.mockResolvedValue({
+      ok: true,
+      data: {
+        booking: {
+          id: "bk_1",
+          consultantProfileId: "prof_1",
+          draftId: null,
+          status: "declined",
+          responseNote: "At capacity",
+          declinedAt: 5_000,
+          bookedAt: 1_000,
+          expectedDeliveryAt: 2_000,
+          messages: [],
+        },
+      },
+    });
+    await pushBookingRespond("bk_1", "decline", { note: "At capacity" });
+    const b = useBookingsStore.getState().bookings[0];
+    expect(b.declinedAt).toBe(5_000);
+    // The respond DTO has no requesterName (only the inbox does): kept.
+    expect(b.requesterName).toBe("Alex Morgan");
+  });
+});
+
+describe("pushBookingMessage failure toasts", () => {
+  beforeEach(() => {
+    messageMock.mockReset();
+    vi.mocked(toast.error).mockReset();
+  });
+
+  it("says it didn't send, with no em dash", async () => {
+    messageMock.mockResolvedValue({ ok: false, error: "HTTP 404", status: 404 });
+    await expect(pushBookingMessage("bk_1", "requester", "Hello")).resolves.toBe(false);
+    expect(toast.error).toHaveBeenCalledWith("Message didn't send. Check your connection and try again.");
+  });
+
+  it("stays quiet when asked (the words go another way too)", async () => {
+    messageMock.mockResolvedValue({ ok: false, error: "HTTP 404", status: 404 });
+    await expect(pushBookingMessage("bk_1", "requester", "Hello", { quiet: true })).resolves.toBe(false);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("never sends or toasts an empty message", async () => {
+    await expect(pushBookingMessage("bk_1", "requester", "   ")).resolves.toBe(false);
+    expect(messageMock).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("uses a full stop, not an em dash, when the booking already changed", async () => {
+    respondMock.mockResolvedValue({ ok: false, error: "conflict", status: 409 });
+    await pushBookingRespond("bk_1", "accept");
+    expect(toast.error).toHaveBeenCalledWith("This booking already changed. Refreshing its status.");
   });
 });

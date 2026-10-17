@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { BookingPaymentStatus } from "./consultantApi";
 
 /**
  * Booking lifecycle states. Forward-only — once a booking lands in a
@@ -61,6 +62,9 @@ export type Booking = {
   acceptedAt?: number;
   deliveredAt?: number;
   completedAt?: number;
+  /** When the consultant declined (absent on bookings declined before the
+   *  server recorded it). */
+  declinedAt?: number;
   expectedDeliveryAt: number;
   status: BookingStatus;
   /** Per-booking chat thread — added 2026-05-20. Older records normalise
@@ -78,13 +82,30 @@ export type Booking = {
   consultantName?: string;
   consultantRole?: string;
   consultantPhotoUrl?: string;
+  /** The HR person who booked, as the consultant sees them (inbox only). */
+  requesterName?: string;
   consultantCurrency?: "£" | "$" | "€";
   consultantPrice?: number;
+  /** Agreed price snapshot (minor units, lowercase ISO currency). */
+  priceAmount?: number;
+  priceCurrency?: string;
+  /** Server payment state; only "paid" lets work start. */
+  paymentStatus?: BookingPaymentStatus;
+  /** "priority": back within 24 hours of payment, at the expert's priority
+   *  price. Absent means standard. */
+  turnaround?: "standard" | "priority";
+  /** The standard rate when a priority booking was placed (minor units). */
+  standardPriceAmount?: number;
+  /** When a priority review is due: payment plus 24 hours. */
+  priorityDueAt?: number;
+  /** A priority review delivered late refunds the difference. */
+  lateRefundStatus?: "pending" | "refunded" | "owed" | "failed";
+  lateRefundAmount?: number;
 };
 
 type RecordBookingInput = Omit<
   Booking,
-  "id" | "bookedAt" | "status" | "acceptedAt" | "deliveredAt" | "completedAt" | "responseNote" | "deliveryNote" | "rating"
+  "id" | "bookedAt" | "status" | "acceptedAt" | "deliveredAt" | "completedAt" | "declinedAt" | "responseNote" | "deliveryNote" | "rating"
 >;
 
 type Store = {
@@ -157,7 +178,7 @@ export const useBookingsStore = create<Store>()(
         set((state) => ({
           bookings: state.bookings.map((b) =>
             b.id === id
-              ? { ...b, status: "declined", responseNote: responseNote ?? b.responseNote }
+              ? { ...b, status: "declined", declinedAt: Date.now(), responseNote: responseNote ?? b.responseNote }
               : b,
           ),
         })),

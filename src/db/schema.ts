@@ -7,6 +7,8 @@ import {
   jsonb,
   uuid,
   integer,
+  bigint,
+  primaryKey,
   boolean,
   date,
   index,
@@ -269,9 +271,17 @@ export const drafts = pgTable(
     answersJson: jsonb("answers_json").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    // Soft-delete tombstone. A deleted draft keeps its row (content scrubbed)
+    // so the sync pull can tell other devices to drop it and a stale upsert of
+    // the id is refused rather than re-creating the letter.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // Bumped on every accepted write. Clients send the revision they last saw
+    // and a write against an older one is rejected with 409.
+    revision: integer("revision").notNull().default(0),
   },
   (t) => [
     index("drafts_tenant_idx").on(t.tenantId),
+    index("drafts_tenant_deleted_idx").on(t.tenantId, t.deletedAt),
     index("drafts_author_idx").on(t.authorUserId),
     index("drafts_matter_idx").on(t.matterId),
   ],
@@ -409,6 +419,16 @@ export const approvals = pgTable(
 // row_hash = sha256(prev_hash || ':' || canonicalJson(payload) || ':' || kind ||
 //                   ':' || subject_id || ':' || created_at_epoch_ms)
 // Genesis prev_hash is 64 zeros.
+//
+// seq is the per-tenant position in the chain (1, 2, 3, ...). It is assigned
+// inside the append transaction while the tenant's chain head is held under an
+// advisory lock, and the chain is ordered by seq, never by created_at: two
+// appends in the same millisecond (or from instances with skewed clocks) used
+// to tie on created_at and could fork the chain. The unique (tenant_id, seq)
+// index makes a duplicate position impossible even if the lock were bypassed.
+// Migration 0021 also installs a trigger that rejects UPDATE and DELETE on this
+// table (other than the FK cascade/set-null paths), so the chain is append-only
+// at the database level too.
 export const auditEvents = pgTable(
   "audit_events",
   {
@@ -421,6 +441,7 @@ export const auditEvents = pgTable(
     subjectId: uuid("subject_id").notNull(),
     actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
     payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull(),
+    seq: bigint("seq", { mode: "number" }).notNull(),
     prevHash: text("prev_hash").notNull(),
     rowHash: text("row_hash").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -428,6 +449,7 @@ export const auditEvents = pgTable(
   (t) => [
     index("audit_events_tenant_created_idx").on(t.tenantId, t.createdAt.desc()),
     uniqueIndex("audit_events_tenant_rowhash_uniq").on(t.tenantId, t.rowHash),
+    uniqueIndex("audit_events_tenant_seq_uniq").on(t.tenantId, t.seq),
     check(
       "audit_events_row_hash_hex64",
       sql`char_length(${t.rowHash}) = 64 AND ${t.rowHash} ~ '^[0-9a-f]{64}$'`,
@@ -471,6 +493,10 @@ export const consultantProfiles = pgTable(
     /** Filter-chip tags driving /consultants search. JSON string array. */
     specialties: jsonb("specialties").notNull().default(sql`'[]'::jsonb`),
     price: integer("price").notNull().default(150),
+    /** Priority rate (back within 24 hours of payment), whole units like
+     *  price and always above it. Null: the expert doesn't offer priority.
+     *  Only offered while the operator has priority reviews switched on. */
+    priorityPrice: integer("priority_price"),
     currency: text("currency", { enum: ["GBP", "USD", "EUR"] })
       .notNull()
       .default("GBP"),
@@ -547,6 +573,12 @@ export const consultantBookings = pgTable(
     responseNote: text("response_note"),
     deliveryNote: text("delivery_note"),
     rating: integer("rating"),
+    /** Price agreed when the booking was placed, in minor units (pence/cents),
+     *  and its lowercase ISO currency. Checkout charges from this snapshot,
+     *  never the consultant's live rate, so a rate change after booking can't
+     *  alter what the requester pays. Null only on legacy rows. */
+    priceAmount: integer("price_amount"),
+    priceCurrency: text("price_currency"),
     bookedAt: timestamp("booked_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -554,7 +586,28 @@ export const consultantBookings = pgTable(
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    /** Random bearer token generated when the booking is accepted. Tied
+    /** When the consultant declined (null on rows declined before 0023). */
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
+    /** 'standard', or 'priority': back within 24 hours of payment, for the
+     *  expert's priority price (priceAmount holds it). Fixed at booking. */
+    turnaround: text("turnaround", { enum: ["standard", "priority"] })
+      .notNull()
+      .default("standard"),
+    /** The expert's standard rate when a priority booking was placed (minor
+     *  units), so a late delivery refunds exactly the difference. */
+    standardPriceAmount: integer("standard_price_amount"),
+    /** When a priority review is due: payment time plus 24 hours. Null
+     *  until paid, and on standard bookings. */
+    priorityDueAt: timestamp("priority_due_at", { withTimezone: true }),
+    /** A priority review delivered after priorityDueAt refunds the
+     *  difference: 'pending' while the refund is made, then 'refunded',
+     *  'owed' (Stripe off or the payment can't be found, so it's done by
+     *  hand) or 'failed'. Null when nothing is owed. */
+    lateRefundStatus: text("late_refund_status", {
+      enum: ["pending", "refunded", "owed", "failed"],
+    }),
+    lateRefundAmount: integer("late_refund_amount"),
+    /** Random bearer token generated once the booking is paid. Tied
      *  to {bookingId, draftId}; expires shareTokenExpiresAt. Used by the
      *  consultant to fetch the specific draft they're reviewing without
      *  needing membership in the HR tenant. */
@@ -596,7 +649,8 @@ export const stripeConnectAccounts = pgTable(
   (t) => [index("stripe_connect_accounts_account_idx").on(t.accountId)],
 );
 
-// Payment state for a booking (HR pays for the review at booking time).
+// Payment state for a booking (HR pays once the consultant accepts; nothing is
+// delivered and no draft access is granted until this row is "paid").
 export const bookingPayments = pgTable(
   "booking_payments",
   {
@@ -605,12 +659,24 @@ export const bookingPayments = pgTable(
       .references(() => consultantBookings.id, { onDelete: "cascade" }),
     checkoutSessionId: text("checkout_session_id"),
     paymentIntentId: text("payment_intent_id"),
-    status: text("status").notNull().default("unpaid"), // unpaid | paid | refunded
+    // unpaid | processing (async method, e.g. Direct Debit, not yet settled) |
+    // paid | failed | refunded (full refund) | disputed | dispute_lost.
+    // Only "paid" unlocks delivery, completion, rating and draft access.
+    status: text("status").notNull().default("unpaid"),
     amount: integer("amount"), // minor units (pence/cents)
     currency: text("currency"),
+    /** Stripe charge and the destination-charge transfer to the consultant's
+     *  Connect account, recorded from charge events so a refund can reverse it. */
+    chargeId: text("charge_id"),
+    transferId: text("transfer_id"),
+    amountRefunded: integer("amount_refunded"), // minor units
+    disputeId: text("dispute_id"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("booking_payments_session_idx").on(t.checkoutSessionId)],
+  (t) => [
+    index("booking_payments_session_idx").on(t.checkoutSessionId),
+    index("booking_payments_payment_intent_idx").on(t.paymentIntentId),
+  ],
 );
 
 // --- billing (subscriptions, one-off purchases, credit ledger) ---------------
@@ -657,6 +723,9 @@ export const entitlementPurchases = pgTable(
     // increments once per letter created against it. Remaining = total − used.
     lettersTotal: integer("letters_total"),
     lettersUsed: integer("letters_used").notNull().default(0),
+    // Set when the purchase's charge is fully refunded (charge.refunded). A
+    // refunded purchase authorises nothing and its included credits are revoked.
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("entitlement_purchases_user_idx").on(t.userId)],
@@ -673,8 +742,10 @@ export const creditLedger = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }), // drip expires at cycle end; packs null
     // Idempotency anchor for grants that must land exactly once regardless of how
     // many webhook deliveries carry them — e.g. per-period plan drip keyed
-    // `drip:<subId>:<periodStartUnix>`. NULL for one-off grants/spends (already
-    // deduped upstream). Enforced by a partial-unique index (non-null only).
+    // `drip:<subId>:<windowStartUnix>` (one window per month, also for annual
+    // plans), `purchase:<paymentIntentId>` for a one-off's included credits, and
+    // `revoke:<grantRowId>` for a refund clawback that targets that one grant.
+    // NULL for spends and spend refunds. Enforced by a partial-unique index.
     grantKey: text("grant_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -693,7 +764,93 @@ export const webhookEventsSeen = pgTable("webhook_events_seen", {
   seenAt: timestamp("seen_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Durable rate-limit counters (api/_utils/rate-limit.ts). Fixed windows: one
+// row per (key, window_start), incremented atomically with
+// INSERT ... ON CONFLICT DO UPDATE ... RETURNING so every serverless instance
+// shares the same count. Old windows are pruned opportunistically.
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.key, t.windowStart] }),
+    index("rate_limits_window_start_idx").on(t.windowStart),
+  ],
+);
+
 // --- inferred types ----------------------------------------------------------
+
+// --- review links (migration 0022_trusted_review_links) ----------------------
+// One row per review a letter is sent out for: the secure link for "someone
+// you trust" (only the SHA-256 hash of the token), the letter as shared, the
+// files the asker chose to share, and the review's progress (rounds,
+// messages, the reviewer's points). Used by api/review-links.
+//   trusted  token_hash set; opened by the token alone, no account
+//   team     reviewer_user_id set; the teammate works inside the app
+//   expert   booking_id set; the consultant on that paid booking
+export const reviewLinks = pgTable(
+  "review_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** The letter (server uuid). No foreign key: a letter can live only on
+     *  the asker's device, and the reviewer works from the snapshot below. */
+    draftId: uuid("draft_id").notNull(),
+    /** The review request's id in the asker's browser (reviews.ts). */
+    clientReviewId: text("client_review_id").notNull(),
+    kind: text("kind", { enum: ["team", "trusted", "expert"] }).notNull(),
+    /** trusted: hex SHA-256 of the link token. Null for team and expert. */
+    tokenHash: text("token_hash"),
+    bookingId: uuid("booking_id").references(() => consultantBookings.id, { onDelete: "set null" }),
+    reviewerName: text("reviewer_name").notNull(),
+    reviewerEmail: text("reviewer_email"),
+    reviewerUserId: uuid("reviewer_user_id").references(() => users.id, { onDelete: "set null" }),
+    askerUserId: uuid("asker_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    askerName: text("asker_name").notNull(),
+    ask: text("ask"),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    shareEvidence: boolean("share_evidence").notNull().default(false),
+    shareHearingNotes: boolean("share_hearing_notes").notNull().default(false),
+    approveInSameStep: boolean("approve_in_same_step").notNull().default(false),
+    /** The letter as shared: { title, letterType, jurisdiction, mode, company, sections }. */
+    letter: jsonb("letter").notNull(),
+    /** Only the evidence the asker chose to share. */
+    evidence: jsonb("evidence").notNull().default(sql`'[]'::jsonb`),
+    status: text("status", { enum: ["out", "back", "recalled", "finished"] })
+      .notNull()
+      .default("out"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    /** { rounds, messages, points } */
+    state: jsonb("state")
+      .notNull()
+      .default(sql`'{"rounds":[],"messages":[],"points":[]}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    check("review_links_kind_check", sql`${t.kind} IN ('team', 'trusted', 'expert')`),
+    check("review_links_status_check", sql`${t.status} IN ('out', 'back', 'recalled', 'finished')`),
+    check(
+      "review_links_trusted_token_check",
+      sql`${t.kind} <> 'trusted' OR (${t.tokenHash} IS NOT NULL AND ${t.expiresAt} IS NOT NULL)`,
+    ),
+    uniqueIndex("review_links_token_hash_uniq").on(t.tokenHash),
+    uniqueIndex("review_links_client_review_uniq").on(t.tenantId, t.clientReviewId),
+    index("review_links_draft_idx").on(t.tenantId, t.draftId),
+    index("review_links_booking_idx").on(t.bookingId),
+    index("review_links_reviewer_idx").on(t.reviewerUserId),
+  ],
+);
 
 export type Subscription = typeof subscriptions.$inferSelect;
 export type NewSubscription = typeof subscriptions.$inferInsert;
@@ -725,3 +882,5 @@ export type ConsultantProfile = typeof consultantProfiles.$inferSelect;
 export type NewConsultantProfile = typeof consultantProfiles.$inferInsert;
 export type ConsultantBooking = typeof consultantBookings.$inferSelect;
 export type NewConsultantBooking = typeof consultantBookings.$inferInsert;
+export type ReviewLinkRow = typeof reviewLinks.$inferSelect;
+export type NewReviewLinkRow = typeof reviewLinks.$inferInsert;

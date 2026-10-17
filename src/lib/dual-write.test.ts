@@ -6,9 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Draft } from "./letters/types";
 
 vi.mock("sonner", () => ({
-  toast: {
+  toast: Object.assign(vi.fn(), {
     error: vi.fn(),
-  },
+    warning: vi.fn(),
+  }),
 }));
 
 beforeEach(() => {
@@ -19,6 +20,8 @@ beforeEach(() => {
   // tests; clear its call history so per-test toast assertions don't see
   // calls leaked from earlier tests.
   vi.clearAllMocks();
+  // Sync metadata is persisted; start every test from a clean device.
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -201,37 +204,29 @@ describe("dual-write enqueueSync", () => {
     expect(mod.isDualWriteEnabled()).toBe(false);
   });
 
-  it("syncAllPending posts one request per draft with no _syncedAt", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+  it("syncAllPending posts each never-synced draft once, and nothing on the next load", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ok: true, revision: 1 }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const mod = await import("./dual-write");
-    const result = await mod.syncAllPending(() => [makeDraft("a"), makeDraft("b"), makeDraft("c")]);
+    const all = [makeDraft("a", 1), makeDraft("b", 1), makeDraft("c", 1)];
+    const result = await mod.syncAllPending(() => all);
     expect(result).toEqual({ ok: 3, failed: 0 });
     expect(fetchMock).toHaveBeenCalledTimes(3);
-  });
 
-  it("does not retry a stale snapshot until a newer revision exists", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: false, error: "stale revision" }), { status: 409 }));
-    vi.stubGlobal("fetch", fetchMock);
+    // A reload (fresh module, persisted metadata) with unchanged drafts must
+    // not re-post the workspace into the rate limiter.
+    vi.resetModules();
+    const reloaded = await import("./dual-write");
+    fetchMock.mockClear();
+    const again = await reloaded.syncAllPending(() => all.map((d) => ({ ...d })));
+    expect(again).toEqual({ ok: 0, failed: 0 });
+    expect(fetchMock).not.toHaveBeenCalled();
 
-    const mod = await import("./dual-write");
-    let draft = makeDraft("stale_1", 100);
-    mod.setDualWriteSnapshotGetter(() => draft);
-
-    await mod.syncDraft("stale_1");
+    // Only the draft whose content changed goes out.
+    const edited = { ...all[1], sections: [{ ...all[1].sections[0], html: "<p>Changed</p>" }] };
+    await reloaded.syncAllPending(() => [all[0], edited, all[2]]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("[dual-write] stale snapshot skipped", "stale_1", 409);
-
-    mod.enqueueSync("stale_1");
-    await vi.advanceTimersByTimeAsync(450);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    draft = makeDraft("stale_1", 101);
-    mod.enqueueSync("stale_1");
-    await vi.advanceTimersByTimeAsync(450);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("shows one toast after repeated server-ahead 409 conflicts", async () => {
@@ -313,16 +308,22 @@ describe("dual-write enqueueSync", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    // syncDraft now fires the upsert POST for the restored draft.
-    expect(fetchMock).toHaveBeenCalled();
+    // syncDraft now fires the upsert POST for the restored draft, asking the
+    // server to lift its tombstone.
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/store/drafts");
     expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string).restore).toBe(true);
 
-    // And a later ordinary sync is no longer dropped.
+    // A later edit is no longer dropped by the tombstone guard (and no longer
+    // carries the restore flag).
     fetchMock.mockClear();
+    const edited = { ...draft, title: "Renamed" };
+    mod.setDualWriteSnapshotGetter(() => edited);
     await mod.syncDraft("undel_1");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).restore).toBeUndefined();
   });
 
   it("orders an Undo's restore POST after a still-in-flight DELETE", async () => {

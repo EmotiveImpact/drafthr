@@ -1,25 +1,18 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Draft, SectionId } from "@/lib/letters/types";
+import { Field, KitDialogContent, KitDialogFooter } from "@/components/wizard/kit";
 
 /**
- * "Save as template" modal — captures the current draft's per-section
- * html (keyed by canonical SectionId) + answers as a reusable
- * CustomTemplate stored at workspace level.
+ * "Save as template": captures the letter's per-section wording (keyed by
+ * canonical SectionId) and its answers as a firm template, saved in the
+ * workspace under Your templates.
  */
 export function SaveAsTemplateModal({
   draft,
@@ -35,7 +28,7 @@ export function SaveAsTemplateModal({
   const [description, setDescription] = useState("");
   const meta = getLetterMeta(draft.letterType);
 
-  // Count sections with non-empty html so the user knows what's being captured.
+  // Count sections with content so the user knows what's being captured.
   const populatedCount = useMemo(
     () => draft.sections.filter((s) => s.html.trim().length > 0).length,
     [draft.sections]
@@ -43,9 +36,9 @@ export function SaveAsTemplateModal({
 
   const handleSubmit = () => {
     const trimmed = name.trim();
-    if (!trimmed) return;
-    // Build sectionHtml keyed by canonical SectionId (not per-draft id) so a
-    // new draft spawned from this template can match sections by sectionId.
+    if (!trimmed || populatedCount === 0) return;
+    // Keyed by canonical SectionId (not per-draft id) so a new letter
+    // started from this template can match sections by sectionId.
     const sectionHtml: Partial<Record<SectionId, string>> = {};
     for (const sec of draft.sections) {
       if (sec.html.trim().length === 0) continue;
@@ -60,7 +53,9 @@ export function SaveAsTemplateModal({
       sectionHtml,
       answers: draft.answers,
     });
-    toast.success(`Saved "${trimmed}" to My Templates`);
+    toast.success(`Saved "${trimmed}" to Your templates`, {
+      description: "Find it under Templates, Your templates, to start a new letter from it.",
+    });
     setName("");
     setDescription("");
     onOpenChange(false);
@@ -68,67 +63,70 @@ export function SaveAsTemplateModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <KitDialogContent>
         <DialogHeader>
           <DialogTitle>Save as template</DialogTitle>
           <DialogDescription>
-            Reuse this letter's section text across future drafts. Stored
-            in your workspace under <span className="font-medium">My Templates</span>.
+            Reuse this letter's wording for future letters. Saved in your workspace under Your templates.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 py-2">
-          <div className="grid gap-1.5">
-            <Label htmlFor="tpl-name">Name</Label>
+        <form
+          id="save-as-template-form"
+          className="grid gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit();
+          }}
+        >
+          <Field label="Name" htmlFor="tpl-name" required>
             <Input
               id="tpl-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={`e.g. "Acme settlement language"`}
+              placeholder="Depot lateness warning"
               autoFocus
               maxLength={120}
             />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="tpl-desc">Description (optional)</Label>
+          </Field>
+          <Field label="Description (optional)" htmlFor="tpl-desc">
             <Textarea
               id="tpl-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What this template is for, when to use it…"
+              placeholder="What this template is for, and when to use it"
               rows={3}
               maxLength={500}
             />
-          </div>
+          </Field>
 
-          {/* Capture summary — gives the user a sense of what gets saved. */}
-          <div className="text-[12px] text-[var(--ds-muted)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-3 py-2">
+          <div className="rounded-[12px] bg-[var(--ds-surface-2)] px-3.5 py-3 text-[13px] leading-relaxed text-[var(--ds-muted)]">
             <div>
-              Base: <span className="text-[var(--ds-ink)] font-medium">{meta.shortTitle}</span>
+              Base: <span className="font-medium text-[var(--ds-ink)]">{meta.shortTitle}</span>
               {" · "}
-              <span className="capitalize">{draft.mode}</span>
+              {draft.mode === "employer" ? "HR" : "Employee"}
               {" · "}
               {draft.context.jurisdiction}
             </div>
             <div className="mt-0.5">
               Capturing{" "}
-              <span className="text-[var(--ds-ink)] font-medium">
+              <span className="font-medium text-[var(--ds-ink)]">
                 {populatedCount} of {draft.sections.length}
               </span>{" "}
               sections with content.
             </div>
           </div>
-        </div>
+        </form>
 
-        <DialogFooter>
+        <KitDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!name.trim() || populatedCount === 0}>
+          <Button type="submit" form="save-as-template-form" disabled={!name.trim() || populatedCount === 0}>
             Save template
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </KitDialogFooter>
+      </KitDialogContent>
     </Dialog>
   );
 }

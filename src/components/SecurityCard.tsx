@@ -1,29 +1,31 @@
 /**
- * Settings → Security card.
+ * Settings, Security section: the Password card.
  *
  * Lets a signed-in user trigger a password-reset email to their own address.
- * /sign-in/forgot-password is signed-OUT-only (signed-in users are redirected
+ * /sign-in/forgot-password is signed-out only (signed-in users are redirected
  * away), so without this card a signed-in user has no way to change their
  * password.
  *
- * Why we don't take the current password + new password inline:
+ * Why we don't take the current password and a new password inline:
  *   1. WorkOS's user-management API doesn't expose an "authenticated change
- *      password" call — the supported flow is token-based reset.
+ *      password" call; the supported flow is token-based reset.
  *   2. The reset-link flow is the same path a forgotten-password recovery
- *      uses, so there's exactly one place to harden (rate-limits, audit).
- *   3. Email-confirmation step prevents an attacker with a hijacked session
- *      from quietly rotating the password without the legitimate user
- *      noticing — the inbox is a second channel.
+ *      uses, so there's exactly one place to harden (rate limits, audit).
+ *   3. The email step stops an attacker with a hijacked session from quietly
+ *      rotating the password without the legitimate user noticing: the inbox
+ *      is a second channel.
  *
  * Wires to POST /api/auth/password-reset-request (5/min/IP) using the
  * signed-in user's email. The endpoint always returns 200 (anti-enumeration),
- * so the UI surfaces a generic "Check your inbox" toast regardless of
+ * so the UI shows a generic "Check your inbox" toast regardless of the
  * downstream outcome.
  */
 import { useState } from "react";
-import { Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { KeyRound, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/wizard/kit";
+import { SettingsCard } from "@/routes/settings/parts";
 import { useAuth } from "@/lib/auth";
 
 export function SecurityCard() {
@@ -46,12 +48,12 @@ export function SecurityCard() {
         },
         body: JSON.stringify({ email: user.email }),
       });
-      // The endpoint is designed to almost never 4xx — rate-limit is the
-      // realistic failure case. Anything else, surface the literal message
-      // so the user knows it didn't go.
+      // The endpoint is designed to almost never 4xx; a rate limit is the
+      // realistic failure. Anything else, show the literal message so the
+      // user knows it didn't go.
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(data.error ?? `Could not send reset link (HTTP ${res.status})`);
+        toast.error(data.error ?? "Couldn't send the reset link. Try again in a minute.");
         return;
       }
       setLastSentAt(new Date());
@@ -67,43 +69,33 @@ export function SecurityCard() {
   };
 
   return (
-    <Card size="3">
-      <Flex direction="column" gap="3">
-        <Flex align="center" gap="2">
-          <KeyRound className="size-4 text-[var(--ds-muted)]" aria-hidden />
-          <Heading as="h3" size="3" weight="medium">
-            Security
-          </Heading>
-        </Flex>
-
-        <Text size="2" color="gray" as="p" style={{ maxWidth: 560 }}>
+    // Laid out like the Audit log copy card beside it: the explanation is the
+    // card's description under the title, and the action sits below the
+    // header (CREATE-X33).
+    <SettingsCard
+      icon={<KeyRound />}
+      title="Password"
+      description={
+        <>
           We'll email a one-time reset link to{" "}
-          <Text weight="medium" highContrast>
-            {user.email}
-          </Text>
-          . The link expires in a few minutes for safety. Sign-in stays active
-          until you finish the reset on the linked page.
-        </Text>
+          <strong className="font-medium text-[var(--ds-ink)]">{user.email}</strong>. The link expires in a few minutes
+          for safety. You stay signed in until you finish the reset on the linked page.
+        </>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={() => void onSendReset()} disabled={sending}>
+          {sending ? <Spinner /> : <Mail className="size-4" aria-hidden />}
+          {sending ? "Sending…" : "Send password reset link"}
+        </Button>
+      </div>
 
-        <Box>
-          <Button
-            type="button"
-            onClick={() => void onSendReset()}
-            disabled={sending}
-            highContrast
-          >
-            <Mail className="size-4" aria-hidden />
-            {sending ? "Sending…" : "Send password reset link"}
-          </Button>
-        </Box>
-
-        {lastSentAt && (
-          <Text size="1" color="gray">
-            Last sent {lastSentAt.toLocaleTimeString()}. If the email hasn't
-            arrived in a couple of minutes, check spam, or try again.
-          </Text>
-        )}
-      </Flex>
-    </Card>
+      {lastSentAt && (
+        <p className="m-0 mt-3 text-[12.5px] text-[var(--ds-subtle)]">
+          Last sent {lastSentAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}. If the email
+          hasn't arrived in a couple of minutes, check spam, or try again.
+        </p>
+      )}
+    </SettingsCard>
   );
 }

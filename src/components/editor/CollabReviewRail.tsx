@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Check,
@@ -19,7 +19,7 @@ import { canApprove, canSubmitForReview } from "@/lib/permissions";
 import { meIdentity } from "@/lib/comments/identity";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { uid } from "@/lib/utils";
-import { Avatar, avatarColor } from "@/components/ds";
+import { Avatar } from "@/components/ds";
 import { CommentsPanel } from "./CommentsPanel";
 import { SuggestEditDialog } from "./SuggestEditDialog";
 import type { ReviewDialogKind } from "./ReviewDialog";
@@ -57,8 +57,16 @@ export function CollabReviewRail({
   onFocusCommentConsumed,
   openSuggest,
   onOpenSuggestConsumed,
+  submitBlockedReason,
+  stageFooter,
 }: {
   draft: Draft;
+  /** Replaces the "Submit for approval" footer while a review is out or
+   *  back: the review's own next step (Recall, Finish review). */
+  stageFooter?: ReactNode;
+  /** Set when the journey holds the submit (a required check fails). The
+   *  Submit and Re-submit buttons are disabled and this reason is shown. */
+  submitBlockedReason?: string | null;
   role: WorkspaceRole | undefined;
   /** Whether the viewer may Accept/Reject suggestions (the canvas edit gate). */
   canResolve: boolean;
@@ -144,13 +152,16 @@ export function CollabReviewRail({
   }, [openSuggest, draft.sections, onOpenSuggestConsumed]);
 
   // Clicking a comment highlight in the letter focuses that thread here.
+  // Scope the lookup to the rail: the page highlight carries the same
+  // data-comment-id and comes first in the DOM.
+  const railRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!focusCommentId) return;
     setTab("comments");
     // Defer so the Comments tab has mounted before we look for the thread.
     const t = setTimeout(() => {
-      document
-        .querySelector<HTMLElement>(`[data-comment-id="${focusCommentId}"]`)
+      railRef.current
+        ?.querySelector<HTMLElement>(`[data-comment-id="${CSS.escape(focusCommentId)}"]`)
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
       onFocusCommentConsumed?.();
     }, 60);
@@ -176,7 +187,7 @@ export function CollabReviewRail({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={railRef} className="flex h-full min-h-0 flex-col">
       {/* ── header: title + open count + reviewers ── */}
       <div className="shrink-0 border-b border-[var(--ds-line-2)] px-4 pt-3.5 pb-3">
         <div className="flex items-center gap-2">
@@ -194,6 +205,7 @@ export function CollabReviewRail({
             sub={role ? roleLabel(role) : undefined}
             status={role === "reviewer" ? "Reviewing" : "Author"}
             tone="neutral"
+            avatarName={me.name}
           />
           {reviewers
             .filter((r) => r.name !== me.name)
@@ -322,7 +334,8 @@ export function CollabReviewRail({
               : "border-[var(--ds-line)] bg-[var(--ds-surface-2)]")
         }
       >
-        {reviewStatus === "draft" && (
+        {reviewStatus === "draft" && stageFooter}
+        {reviewStatus === "draft" && !stageFooter && (
           <>
             <p className="mb-2 text-[12px] leading-snug text-[var(--ds-muted)]">
               Ready for a second pair of eyes? Send it to a teammate for sign-off.
@@ -330,11 +343,17 @@ export function CollabReviewRail({
             <Button
               size="sm"
               className="w-full"
-              disabled={!canSubmitForReview(role)}
+              disabled={!canSubmitForReview(role) || Boolean(submitBlockedReason)}
+              title={submitBlockedReason ?? undefined}
               onClick={() => onOpenReviewDialog("submit")}
             >
               <Send className="mr-1.5 size-3.5" /> Submit for approval
             </Button>
+            {submitBlockedReason && (
+              <p data-testid="submit-blocked-reason" className="mt-1.5 text-[11.5px] leading-snug text-[var(--ds-muted)]">
+                {submitBlockedReason}
+              </p>
+            )}
           </>
         )}
 
@@ -399,17 +418,23 @@ export function CollabReviewRail({
             <Button
               size="sm"
               className="w-full"
-              disabled={!canSubmitForReview(role)}
+              disabled={!canSubmitForReview(role) || Boolean(submitBlockedReason)}
+              title={submitBlockedReason ?? undefined}
               onClick={() => onOpenReviewDialog("submit")}
             >
               <Send className="mr-1.5 size-3.5" /> Re-submit for approval
             </Button>
+            {submitBlockedReason && (
+              <p data-testid="submit-blocked-reason" className="mt-1.5 text-[11.5px] leading-snug text-[var(--ds-muted)]">
+                {submitBlockedReason}
+              </p>
+            )}
           </>
         )}
 
         {reviewStatus === "approved" && (
           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--ds-green-fg)]">
-            <CheckCircle2 className="size-3.5" /> Approved — clear to export and send.
+            <CheckCircle2 className="size-3.5" /> Approved. Clear to export and send.
           </div>
         )}
       </div>
@@ -444,9 +469,12 @@ function ReviewerRow({
   sub,
   status,
   tone,
+  avatarName,
 }: {
   seed: string;
   name: string;
+  /** The name the initials come from, when the row reads "You". */
+  avatarName?: string;
   sub?: string;
   status: string;
   tone: "good" | "warn" | "info" | "neutral";
@@ -461,7 +489,7 @@ function ReviewerRow({
           : "bg-[var(--ds-line-2)] text-[var(--ds-muted)]";
   return (
     <div className="flex items-center gap-2 rounded-md px-1 py-1">
-      <Avatar seed={seed} name={name === "You" ? sub ?? name : name} size="md" />
+      <Avatar seed={seed} name={avatarName || name} size="md" />
       <div className="min-w-0 flex-1 leading-tight">
         <span className="block truncate text-[12px] font-semibold text-[var(--ds-ink)]">
           {name}
@@ -524,7 +552,8 @@ function SuggestionCard({
 
   const human = Boolean(pending.authorName);
   const seed = pending.authorId ?? pending.authorName ?? "";
-  const accent = human ? avatarColor(seed) : "var(--ds-amber-fg)";
+  // A person's card has the reviewer's lilac rim (as in the margin).
+  const accent = human ? "var(--ds-lilac-line)" : "var(--ds-amber-fg)";
   const isInline = (pending.diffViewMode ?? "inline") === "inline";
   // Inline mode: section.html carries the word-level <ins>/<del> marks — show
   // JUST the changed words as a compact redline (reference design), not two
@@ -551,22 +580,35 @@ function SuggestionCard({
           <Sparkles className="size-3.5 shrink-0 text-[var(--ds-amber-fg)]" />
         )}
         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[var(--ds-ink)]">
-          {human ? `${pending.authorName} suggests` : "AI proposed"}
+          {human ? `${pending.authorName} suggests` : "DraftHR suggests"}
           <span className="ml-1 font-normal text-[var(--ds-subtle)]">· {section.title}</span>
         </span>
       </button>
       {fragments.length > 0 ? (
         <p className="mx-3 mb-1 font-serif text-[12px] leading-relaxed text-[var(--ds-body)]">
+          {/* DraftHR's change green and red, a person's lilac (as on the
+           * page and in the workspace's Edits cards, REVIEW-X23). */}
           {fragments.map((f, i) =>
             f.kind === "del" ? (
               <del
                 key={i}
-                className="mr-1 text-[var(--ds-red-fg)] line-through decoration-[var(--ds-red-fg)]/40"
+                className={
+                  human
+                    ? "mr-1 rounded-[2px] bg-[var(--ds-lilac-soft)] text-[var(--ds-lilac-fg)] line-through decoration-[var(--ds-lilac-line)]"
+                    : "mr-1 text-[var(--ds-red-fg)] line-through decoration-[var(--ds-red-fg)]/40"
+                }
               >
                 {f.text}
               </del>
             ) : (
-              <ins key={i} className="mr-1 font-medium text-[var(--ds-green-fg)] no-underline">
+              <ins
+                key={i}
+                className={
+                  human
+                    ? "mr-1 rounded-[2px] border-b-[1.5px] border-[var(--ds-lilac-ring)] bg-[var(--ds-lilac-bg)] font-medium text-[var(--ds-lilac-ink)] no-underline"
+                    : "mr-1 font-medium text-[var(--ds-green-fg)] no-underline"
+                }
+              >
                 {f.text}
               </ins>
             ),
@@ -574,8 +616,8 @@ function SuggestionCard({
         </p>
       ) : (
         <div className="mx-3 mb-2 flex flex-col gap-1">
-          <DiffPane label="Before" tone="rem" html={beforeHtml} />
-          <DiffPane label="After" tone="add" html={pending.proposedHtml} />
+          <DiffPane label="Before" tone="rem" html={beforeHtml} human={human} />
+          <DiffPane label="After" tone="add" html={pending.proposedHtml} human={human} />
         </div>
       )}
       {pending.instruction && pending.instruction !== "Suggested edit" && (
@@ -595,7 +637,7 @@ function SuggestionCard({
           <button
             type="button"
             onClick={onAccept}
-            className="flex h-7 flex-1 items-center justify-center gap-1 rounded-md bg-[var(--ds-green-fg)] text-[11.5px] font-semibold text-white hover:brightness-110"
+            className="flex h-7 flex-1 items-center justify-center gap-1 rounded-md bg-[var(--ds-accent)] text-[11.5px] font-semibold text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
           >
             <Check className="size-3" /> Accept
           </button>
@@ -625,24 +667,19 @@ function extractInlineDiff(html: string): { kind: "del" | "ins"; text: string }[
     .filter((f) => f.text);
 }
 
-function DiffPane({ label, tone, html }: { label: string; tone: "rem" | "add"; html: string }) {
+function DiffPane({ label, tone, html, human }: { label: string; tone: "rem" | "add"; html: string; human?: boolean }) {
+  // A person's change is lilac in both panes; DraftHR's red then green.
+  const box = human
+    ? tone === "rem"
+      ? "border-[var(--ds-lilac-bd)] bg-[var(--ds-lilac-soft)]"
+      : "border-[var(--ds-lilac-bd)] bg-[var(--ds-lilac-bg)]"
+    : tone === "rem"
+      ? "border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)]/50"
+      : "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/60";
+  const ink = human ? "text-[var(--ds-lilac-fg)]" : tone === "rem" ? "text-[var(--ds-red-fg)]" : "text-[var(--ds-green-fg)]";
   return (
-    <div
-      className={
-        "rounded-md border px-2 py-1.5 " +
-        (tone === "rem"
-          ? "border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)]/50"
-          : "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/60")
-      }
-    >
-      <span
-        className={
-          "mb-0.5 block text-[9.5px] font-bold uppercase tracking-[0.06em] " +
-          (tone === "rem" ? "text-[var(--ds-red-fg)]" : "text-[var(--ds-green-fg)]")
-        }
-      >
-        {label}
-      </span>
+    <div className={"rounded-md border px-2 py-1.5 " + box}>
+      <span className={"mb-0.5 block text-[9.5px] font-bold uppercase tracking-[0.06em] " + ink}>{label}</span>
       <div
         className="max-h-24 overflow-hidden text-[11.5px] leading-snug text-[var(--ds-body)] [&_p]:m-0 [&_p]:mb-1"
         // eslint-disable-next-line react/no-danger

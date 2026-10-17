@@ -144,7 +144,7 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
         {evaluations.length === 0 && (
           <p className="text-[11.5px] text-[var(--ds-muted)] leading-relaxed break-words">
             No specific compliance rules configured for this letter / jurisdiction
-            yet — Tier 1 disclaimer still applies.
+            yet. The Tier 1 disclaimer still applies.
           </p>
         )}
 

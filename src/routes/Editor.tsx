@@ -1,72 +1,50 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { Editor as TiptapEditor } from "@tiptap/react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import * as Dialog from "@radix-ui/react-dialog";
+import { toast } from "sonner";
+import { ChevronLeft, Clock3, Lightbulb, Loader2, MessageSquare, MessageSquareWarning, Minimize2, Send, ShieldCheck, Sparkles, ArrowUp, X } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
+import { useProfileStore } from "@/lib/profile";
+import { meIdentity } from "@/lib/comments/identity";
+import { generateAllSections, regenerateSectionAsPending } from "@/lib/llm/draft";
+import { PlanRequiredError } from "@/lib/llm/client";
+import type { Section } from "@/lib/letters/types";
+import { getLetterMeta } from "@/lib/letters/catalog";
+import { canSubmitForReview, canEditDraft } from "@/lib/permissions";
+import { todayDateOnly } from "@/lib/date-only";
+import { useIsLargeViewport } from "@/lib/use-large-viewport";
+import { toServerUuid } from "@/lib/remote-ids";
+import { runHealthChecks, type HealthCheck } from "@/lib/finalize/healthChecks";
+import { markOwnLetterReady, useJourney } from "@/lib/journey/stage";
+import { currentRound, firstName, useLatestReview, useNewestReview, useReviewStore } from "@/lib/journey/reviews";
+import { useJourneyUI } from "@/components/journey/ui-store";
+import { ReviewDialogsHost } from "@/components/journey/ReviewDialogsHost";
+import {
+  focusReviewReply,
+  openRoundsHistory,
+  openTeammateComposer,
+  requestFinishReview,
+  requestRecall,
+  useReviewerMode,
+} from "@/components/journey/review/review-ui";
+import { CommentQuoteMarks, TeammatePointCard, TeammateSelection, editTeammatePoint, removeTeammatePoint, suggestionNumbers, useTeammatePoints } from "@/components/journey/review/teammate";
+import { isAskerOf, isReviewerOf, useMe } from "@/components/journey/review/actions";
+import { evidenceSharedWith } from "@/components/journey/review/model";
+import { undoMarkedSent, undoToastText } from "@/components/journey/send/actions";
+import { Seal } from "@/components/journey/ui";
+import { uid, cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
 import { EmployeeRail } from "@/components/editor/EmployeeRail";
 import { CompliancePanel } from "@/components/editor/CompliancePanel";
-import { EditableTitleBar } from "@/components/editor/EditableTitleBar";
 import { SectionEditor } from "@/components/editor/SectionEditor";
-import { RightRail, type RightRailTab } from "@/components/editor/RightRail";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
-import { DocumentPopover } from "@/components/editor/DocumentPopover";
 import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
-import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { PagedlyDocEditor } from "@/components/editor/paged-edit/PagedlyDocEditor";
 import type { PagedEditorActions } from "@/components/editor/paged-edit/types";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
-import { InlineSuggestionBanner } from "@/components/editor/InlineSuggestionBanner";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Loader2,
-  Sparkles,
-  ChevronLeft,
-  StopCircle,
-  PanelLeft,
-  PanelRight,
-  FileEdit,
-  Eye,
-  MoreHorizontal,
-  UserPlus,
-  Settings2,
-  ShieldCheck,
-  Maximize2,
-  Minimize2,
-  ArrowUp,
-  ArrowRight,
-  Clock3,
-  MessageSquare,
-  Wand2,
-  FileDown,
-  Search,
-  TextSelect,
-  Undo2,
-  Redo2,
-  Paperclip,
-  BookmarkPlus,
-  Send,
-  CheckCircle2,
-  MessageSquareWarning,
-  Smartphone,
-  Undo,
-  Lightbulb,
-} from "lucide-react";
-import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
-import type { Section } from "@/lib/letters/types";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import { BrandMark, AvatarStack } from "@/components/ds";
-import { Wordmark } from "@/components/ds/Wordmark";
-import { useProfileStore } from "@/lib/profile";
-import { listIdentities, meIdentity } from "@/lib/comments/identity";
 import { SuggestEditDialog } from "@/components/editor/SuggestEditDialog";
-import { uid } from "@/lib/utils";
-import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 import { FloatingCommentPanel, type FloatingAnchor } from "@/components/editor/FloatingCommentPanel";
@@ -75,40 +53,106 @@ import { EvidenceDrawer } from "@/components/editor/EvidenceDrawer";
 import { SaveAsTemplateModal } from "@/components/templates/SaveAsTemplateModal";
 import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
 import { notifyReviewRequested } from "@/lib/collab-notify";
-import { canApprove, canSubmitForReview, canEditDraft } from "@/lib/permissions";
-import { MatterEmployeeChips } from "@/components/editor/MatterEmployeeChips";
 import { MobileShareDialog } from "@/components/editor/MobileShareDialog";
 import { TemplateSourceBanner } from "@/components/editor/TemplateSourceBanner";
+import { EvidenceHandoff, evaluateEvidenceHandoff, type EvidenceHandoffReason } from "@/components/editor/EvidenceHandoff";
+import { hasPendingSuggestions } from "@/lib/tiptap/suggestion-merge";
+import { DocumentBar, type DocumentBarProps, type SavedState } from "@/components/editor/DocumentBar";
+import { LetterSidePanel, editsShowsReview } from "@/components/editor/LetterSidePanel";
+import type { EditsFilter } from "@/components/editor/EditsTab";
+import { MobileBottomSheet } from "@/components/editor/MobileBottomSheet";
+import { CitationLayer } from "@/components/editor/Citations";
+import { useLetterExport } from "@/components/editor/useLetterExport";
+import { LetterNotices } from "@/components/editor/LetterNotices";
+import { ConfidentialLine, IssueDate, Letterhead } from "@/components/editor/Letterhead";
+import { MarginLayer } from "@/components/editor/MarginLayer";
+import { FindBar } from "@/components/editor/FindBar";
+import { ActivityDialog, type ActivityTab } from "@/components/editor/ActivityDialog";
+import { ChecksDialog } from "@/components/editor/LetterHealthCard";
+import { PhoneBottomBar, PhoneDisclaimer, PhoneFlagHint, PhoneStrip, PhoneTopBar, usePhoneFlag } from "@/components/editor/PhoneChrome";
+import { useLetterWorkspace, type WorkspaceHandlers } from "@/components/editor/workspace-store";
+import { planFix } from "@/components/editor/health-fix";
+import { letterEvidenceTier } from "@/components/editor/evidence-tier";
+import { blockWithText, openAnchoredComments, recordDecision, suggestedEdits } from "@/components/editor/suggestion-groups";
+import { draftErrorCopy } from "@/components/editor/draft-error";
+import { ConfirmDialog } from "@/components/letters/dialogs";
 import {
-  EvidenceHandoff,
-  evaluateEvidenceHandoff,
-  type EvidenceHandoffReason,
-} from "@/components/editor/EvidenceHandoff";
-import { deriveEvidenceTier } from "@/lib/letters/templates";
-import * as Dialog from "@radix-ui/react-dialog";
-import { AnimatePresence, motion } from "framer-motion";
-import { toast } from "sonner";
-import { useIsLargeViewport } from "@/lib/use-large-viewport";
-
+  APPROVER_ROLE_KEY,
+  APPROVER_USER_KEY,
+  activityEvents,
+  employeeFor,
+  myName,
+  peopleOnLetter,
+  submittedEntry,
+  viewerIsApproverFor,
+} from "@/components/editor/letter-facts";
+import "@/components/editor/letter-workspace.css";
 
 /* ---------------------------------------------------------------------------
- * Unified dock persistence — per-draft, localStorage-backed.
+ * Side panel persistence: per-draft, localStorage-backed.
  *
- * We store the full `pinnedDock` value ("evidence" | "ai") under the key
- * `drafthr.pinnedDock:{draftId}`. Absence means null (neither dock pinned).
- * Heavy-tier drafts default to "evidence" on first open when no stored pref
- * exists (same auto-pin behaviour as before).
- *
- * The old `scribehr-evidence-pinned:{draftId}` boolean key is no longer
- * written. Existing entries in localStorage are harmless orphans.
+ * `pinnedDock` drives the side panel at lg+: "ai" shows the Edits /
+ * Progress / Chat tabs, "evidence" shows the pinned evidence rail, null hides
+ * the panel. It is stored under `drafthr.pinnedDock:{draftId}`, with "none"
+ * recording a deliberately closed panel. With no stored value the panel opens
+ * on its tabs.
  * ------------------------------------------------------------------------ */
 const DOCK_KEY = (draftId: string) => `drafthr.pinnedDock:${draftId}`;
+
+/** The view picked last on the Sections / Page switch, for every letter. Only a
+ *  click on the switch saves it; jumps back to Sections (find, a section link)
+ *  leave it alone. */
+const VIEW_KEY = "drafthr.letter.view";
+
+function preferredView(): "edit" | "preview" {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === "preview" ? "preview" : "edit";
+  } catch {
+    return "edit";
+  }
+}
+
+/** The page is 640px wide; the margin column (256px) sits 20px to its right. */
+const PAGE_W = 640;
+const MARGIN_GAP = 20;
+const MARGIN_W = 256;
+const CANVAS_PAD_L = 48;
+/** The page's zoom when 100% leaves no room for the margin (a toolbar step). */
+const AUTO_ZOOM = 90;
+
+/**
+ * Where the side panel opens on a first visit: always the Edits / Progress
+ * / Chat tabs (mocks f1 to f8), so the tracker, the stage's main action and
+ * Ask DraftHR are there on every letter and for every mode. An
+ * evidence-led letter short of evidence says so in the Draft step ("0 of 2
+ * evidence items linked", with Add) instead of opening on the evidence and
+ * hiding the journey (LETTER-X3, X45). Pinning evidence is the person's
+ * choice and is remembered per letter.
+ */
+function defaultDock(): "evidence" | "ai" {
+  return "ai";
+}
+
+function useIsPhone(): boolean {
+  const query = "(max-width: 767px)";
+  const [m, setM] = useState(() => (typeof window === "undefined" ? false : window.matchMedia(query).matches));
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const on = (e: MediaQueryListEvent) => setM(e.matches);
+    mql.addEventListener("change", on);
+    setM(mql.matches);
+    return () => mql.removeEventListener("change", on);
+  }, []);
+  return m;
+}
 
 export function Editor() {
   const { draftId } = useParams<{ draftId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const employees = useDraftStore((s) => s.employees);
+  const matters = useDraftStore((s) => s.matters);
   const profile = useProfileStore((s) => s.profile);
   const updateSection = useDraftStore((s) => s.updateSection);
   const updateAnswers = useDraftStore((s) => s.updateAnswers);
@@ -116,288 +160,226 @@ export function Editor() {
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
 
+  // The journey: the stage, its main action, the lock. The approver is
+  // named when the letter is sent for approval.
+  const review = useLatestReview(draftId);
+  const approverNameEarly = draft ? submittedEntry(draft)?.reviewerName : undefined;
+  const viewerIsApprover = draft ? viewerIsApproverFor(draft, profile, approverNameEarly) : false;
+  // The named teammate reviewer sees their own review (mock f4 in the app):
+  // the Read / Suggest / Comment switch and "Send back to <asker>".
+  const reviewMe = useMe();
+  // Out, sent back (a calm read-only confirmation) or recalled (it says so):
+  // the named teammate never gets the author's controls (REVIEW-69, 94).
+  const newestReview = useNewestReview(draftId);
+  const reviewerOf = newestReview?.status === "recalled" ? newestReview : review;
+  const viewerIsReviewer =
+    reviewerOf?.kind === "team" &&
+    (reviewerOf.status === "out" || reviewerOf.status === "back" || reviewerOf.status === "recalled") &&
+    isReviewerOf(reviewerOf, reviewMe) &&
+    !isAskerOf(reviewerOf, reviewMe);
+  // Someone else's review (not the asker, not the named reviewer): read only.
+  const viewerIsAsker =
+    review && (review.status === "out" || review.status === "back") && !viewerIsReviewer ? isAskerOf(review, reviewMe) : undefined;
+  const journey = useJourney(draftId, { viewerIsApprover, viewerIsReviewer, viewerIsAsker });
+  const isLargeViewport = useIsLargeViewport();
+  const isPhone = useIsPhone();
+  const panelTab = useJourneyUI((s) => s.panelTab);
+  const setPanelTab = useJourneyUI((s) => s.setPanelTab);
+  const justSent = useJourneyUI((s) => s.justSent);
+
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [globallyStreaming, setGloballyStreaming] = useState(false);
   const [historySection, setHistorySection] = useState<Section | null>(null);
   const [suggestSection, setSuggestSection] = useState<Section | null>(null);
   const [retryEvent, setRetryEvent] = useState<RetryEvent | null>(null);
-  // Export was moved to the Review step — no pending-export state lives in
-  // the editor anymore. Kept the type alias below for any future surface
-  // that needs to type a format string.
   const [showSidebar, setShowSidebar] = useState(false);
-  // Controls the AI drawer (Sheet overlay) — independent of pin state.
-  // When `pinnedDock === "ai"`, the AI rail mounts inline in the grid and
-  // this state is irrelevant. When `pinnedDock !== "ai"`, this controls
-  // whether the AI slides in as a Sheet overlay (scrim, full-height) on
-  // top of the content.
+  // Below lg the side panel is a bottom sheet; this opens it.
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
-  /**
-   * Focus mode — collapses both rails + the secondary toolbar so the writer
-   * sees only the canvas. A floating outline pill (top-left) and a floating
-   * AI composer (bottom) preserve navigation and AI access. Press Esc to
-   * exit. See public/editor-designs.html#v6 for the proposal this implements.
-   */
+  /** Focus mode: only the page. Esc leaves it. */
   const [focusMode, setFocusMode] = useState(false);
-  const [rightTab, setRightTab] = useState<RightRailTab>("ai");
-  const [pendingComment, setPendingComment] = useState<{
-    sectionId: string;
-    quote?: string;
-    applyMark?: (commentId: string) => void;
-  } | null>(null);
   const [refineSectionId, setRefineSectionId] = useState<string | null>(null);
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
-  // Shared open state for the InvitePopover so the mobile overflow menu
-  // can open it (its trigger is hidden below md:).
   const [invitePopoverOpen, setInvitePopoverOpen] = useState(false);
-  // Change A: Timeline is no longer a right-rail tab; it's a dialog
-  // launched from the ⋯ overflow menu.
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
-  // Change A: All-comments index dialog. Floating panel stays the
-  // primary read path; this is the "sweep them all" overview surface
-  // — symmetric with how Timeline now works.
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [counselDialogOpen, setCounselDialogOpen] = useState(false);
   const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
-  // "Open on mobile" share dialog — shows the `/m/:draftId` link with
-  // copy / open affordances. Surfaced from the File menu.
   const [mobileShareOpen, setMobileShareOpen] = useState(false);
-  // Approval-workflow modal — null when closed, otherwise drives the
-  // submit / approve / request-changes dialog. Same shell, three kinds.
   const [reviewDialogKind, setReviewDialogKind] = useState<ReviewDialogKind | null>(null);
-  // Read-only "Review feedback" panel toggled by the changes_requested pill.
   const [reviewFeedbackOpen, setReviewFeedbackOpen] = useState(false);
-  // Unified dock state. `pinnedDock` is the single source of truth for which
-  // dock (if any) is mounted as the full-height right rail. Mutually exclusive.
-  // Lazy initialiser reads from localStorage on first mount so the correct
-  // dock is shown immediately — no flash of the unpinned state.
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityTab, setActivityTab] = useState<ActivityTab>("history");
+  const [checksOpen, setChecksOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [confirmDiscardTemplate, setConfirmDiscardTemplate] = useState(false);
+  // The zoom the person picked; until they pick one it follows the room.
+  const [zoomChoice, setZoomChoice] = useState<number | null>(null);
+  const [tickStep, setTickStep] = useState<string | null>(null);
   const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(() => {
-    if (typeof window === "undefined") return null;
+    const fallback = defaultDock();
+    if (typeof window === "undefined") return fallback;
     try {
-      const raw = window.localStorage.getItem(`drafthr.pinnedDock:${draft?.id ?? draftId}`);
-      return raw === "evidence" || raw === "ai" ? raw : null;
+      const raw = window.localStorage.getItem(DOCK_KEY(draft?.id ?? draftId ?? ""));
+      if (raw === "none") return null;
+      return raw === "evidence" || raw === "ai" ? raw : fallback;
     } catch {
-      return null;
+      return fallback;
     }
   });
-
-  // Imperative helper: collapse/expand the AI surface. Used by auto-collapse
-  // effects (preview, edit-on-page) and the focus-mode AI bar.
-  const setRailCollapsed = (next: boolean) => {
-    if (next) {
-      // collapse: close drawer + unpin
-      setAiDrawerOpen(false);
-      setPinnedDock((prev) => (prev === "ai" ? null : prev));
-    } else {
-      // expand: open as drawer (NOT pin)
-      setAiDrawerOpen(true);
-    }
-  };
-
-  const pinEvidence = () => setPinnedDock("evidence");
-  const pinAI = () => setPinnedDock("ai");
-  const unpinAll = () => setPinnedDock(null);
-
-  // Derived: evidence is pinned when pinnedDock === "evidence".
-  const evidencePinned = pinnedDock === "evidence";
-
-  /* ----------------------- Evidence drawer + pinned state -----------------
-   * Two modes:
-   *   - Floating drawer (Sheet overlay) — default for routine letters.
-   *   - Pinned rail — replaces the AI agent rail. Auto-enabled for "heavy"
-   *     evidence-tier templates (grievance, harassment, tribunal) on first
-   *     visit, persisted per draft thereafter.
-   * Pin state is localStorage-backed via DOCK_KEY(draftId).
-   * --------------------------------------------------------------------- */
+  const [editsFilter, setEditsFilter] = useState<EditsFilter>("edits");
+  const [sheetSnap, setSheetSnap] = useState<"closed" | "half" | "full">("full");
+  // The Tiptap editor of the section being edited: the ribbon drives it.
+  const [activeEditor, setActiveEditor] = useState<TiptapEditor | null>(null);
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
-
-  // Keep localStorage in sync whenever pinnedDock changes — regardless of
-  // which helper changed it (pinEvidence, pinAI, unpinAll).
-  useEffect(() => {
-    if (!draftId) return;
-    if (typeof window === "undefined") return;
-    const key = DOCK_KEY(draftId);
-    try {
-      if (pinnedDock) {
-        window.localStorage.setItem(key, pinnedDock);
-      } else {
-        window.localStorage.removeItem(key);
-      }
-    } catch {
-      // localStorage may be unavailable (private mode, quota) — non-fatal.
-    }
-  }, [draftId, pinnedDock]);
-
-  const handlePinnedChange = (next: boolean) => {
-    if (next) {
-      pinEvidence();
-      // Pinning also implicitly closes the floating drawer since the same
-      // surface is now permanent.
-      setEvidenceDrawerOpen(false);
-    } else {
-      unpinAll();
-    }
-  };
-
-  // Handoff modal state — shown when the user clicks Review and a soft
-  // evidence check trips. Lives at the editor level so we can swap the
-  // CTA's onClick handler.
-  const [handoffReason, setHandoffReason] = useState<EvidenceHandoffReason | null>(
-    null
-  );
-  // Gate which AI surface mounts — exactly one at a time. Crossing
-  // the breakpoint unmounts the previous surface (its useChat persists
-  // to draft.aiChat on idle ticks) and mounts the new one (its useChat
-  // hydrates from draft.aiChat via initialMessages). Conversation
-  // survives the viewport change.
-  const isLargeViewport = useIsLargeViewport();
-
-  // Change A: comments no longer open the right rail. They pop up as a
-  // floating panel anchored to the inline highlight (existing thread)
-  // or the selection rect at click time (new thread).
+  const [handoffReason, setHandoffReason] = useState<EvidenceHandoffReason | null>(null);
+  const handoffReturnFocus = useRef<HTMLElement | null>(null);
+  const handoffFrom = useRef<"bar" | "panel">("bar");
   const [floatingComment, setFloatingComment] = useState<
     | {
         anchor: FloatingAnchor;
         mode:
           | { kind: "new"; sectionId: string; quote?: string; applyMark?: (commentId: string) => void }
           | { kind: "existing"; commentId: string };
+        /** Put the cursor in the reply box (opened from a card's Reply). */
+        focusReply?: boolean;
+        /** Where focus goes back to when the thread closes. */
+        returnFocus?: HTMLElement | null;
       }
     | null
   >(null);
 
-  const commentCount = (sectionId: string) =>
-    (draft?.comments ?? []).filter((c) => c.sectionId === sectionId && !c.resolved).length;
-
-  const onFocusComment = (commentId: string) => {
-    // Find the inline mark in the canvas and open the floating thread
-    // panel anchored to it. No rail open, no scroll-jump — the user
-    // already tapped the mark so it's already in view.
-    const markEl = document.querySelector<HTMLElement>(
-      `mark[data-comment-id="${commentId}"]`
-    );
-    if (!markEl) return;
-    setFloatingComment({
-      anchor: {
-        getRect: () => markEl.getBoundingClientRect(),
-        containerEl: markEl,
-      },
-      mode: { kind: "existing", commentId },
-    });
-  };
+  // The page, the box holding the page and its margin, and the canvas.
+  const paperRef = useRef<HTMLElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const pagedEditorActionsRef = useRef<PagedEditorActions | null>(null);
+  const letterExport = useLetterExport(draft);
 
-  // Abort any in-flight AI stream when the editor unmounts (e.g. the user
-  // navigates to another draft or leaves the editor). Without this, an
-  // orphaned stream keeps calling appendToSection against the store after the
-  // component is gone, and — because the auto-generate gate uses local
-  // `globallyStreaming` which resets on remount — a remount could start a
-  // SECOND generation loop that interleaves with the orphan and corrupts
-  // section HTML. (Partial fix for E1: the remaining half is to gate
-  // auto-generate on store-derived streaming state — tracked in BUGS_AND_FIXES.)
+  const evidencePinned = pinnedDock === "evidence";
+
+  useEffect(() => {
+    if (!draftId || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(DOCK_KEY(draftId), pinnedDock ?? "none");
+    } catch {
+      // localStorage may be unavailable (private mode, quota): non-fatal.
+    }
+  }, [draftId, pinnedDock]);
+
+  // Abort any in-flight stream when the editor unmounts.
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
 
-  const meta = useMemo(
-    () => (draft ? getLetterMeta(draft.letterType) : null),
-    [draft]
-  );
+  const meta = useMemo(() => (draft ? getLetterMeta(draft.letterType) : null), [draft]);
 
-  // Auto-generate on first visit if all sections are empty.
+  // Auto-generate on first visit if all sections are empty. Also gated on
+  // the store's streaming state so a remount never starts a second run.
   useEffect(() => {
     if (!draft) return;
     const allEmpty = draft.sections.every((s) => s.status === "empty" && !s.html);
-    // Re-entry guard (E1b): also gate on STORE-derived streaming state, not
-    // just the local `globallyStreaming` flag. Local state resets to false on
-    // every mount, so navigating A→B→A while A's first generation is still in
-    // flight would otherwise re-enter runGenerateAll and start a second loop.
-    // The store survives remounts, so a section already "streaming" blocks the
-    // re-entry. (Strictly additive — a genuinely fresh draft has no streaming
-    // section, so first-generation is never blocked.)
     const alreadyStreaming = draft.sections.some((s) => s.status === "streaming");
     if (allEmpty && !globallyStreaming && !alreadyStreaming) {
-      void runGenerateAll();
+      void runGenerateAllRef.current?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
-  // On draft change, restore pinnedDock from the unified localStorage key.
-  // Falls back to tier-based default when no stored pref exists (heavy drafts
-  // auto-pin Evidence on first open). The lazy useState initialiser handles
-  // first mount; this effect handles subsequent draft changes in the same session.
-  //
-  // We compute the next value once and issue a single setPinnedDock call to
-  // avoid the double-render flicker that occurred when the previous version
-  // could queue two separate setState calls (one for the localStorage read,
-  // one for the tier fallback).
+  // A different letter: restore its dock and reset everything that carried
+  // the previous letter's ids.
+  const shownBack = useRef<string | null>(null);
   useEffect(() => {
-    if (!draftId) return;
-    if (typeof window === "undefined") return;
-    let next: "evidence" | "ai" | null = null;
+    if (!draftId || typeof window === "undefined") return;
+    const fallback = defaultDock();
+    let next: "evidence" | "ai" | null = fallback;
     try {
       const raw = window.localStorage.getItem(DOCK_KEY(draftId));
-      if (raw === "evidence" || raw === "ai") {
-        next = raw;
-      } else if (draft?.evidenceTier === "heavy") {
-        next = "evidence";
-      }
+      if (raw === "none") next = null;
+      else if (raw === "evidence" || raw === "ai") next = raw;
     } catch {
-      // Fallback to tier-based default if localStorage unavailable
-      if (draft?.evidenceTier === "heavy") next = "evidence";
+      // Fall back to the tier default.
     }
     setPinnedDock(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftId]);
-
-  // Reset ALL draft-scoped UI state when navigating to a different draft — the
-  // Editor instance persists across drafts (key="editor"), so anything carrying
-  // the previous draft's ids would target the wrong draft: a stale history/refine
-  // section, a floating comment that would save against draft A's section id in
-  // draft B, or a leftover "preview" viewMode driving a blank-page auto-generate
-  // on a fresh draft. (Drains the R16 stale-state class rather than per-symptom.)
-  useEffect(() => {
     setHistorySection(null);
     setActiveSectionId(null);
     setFloatingComment(null);
-    setPendingComment(null);
     setRefineSectionId(null);
     setReviewFeedbackOpen(false);
-    setViewMode("edit");
+    // Page view shows the letter as it was when opened, so a letter with no
+    // text yet (or a phone) always starts on Sections, where drafting shows.
+    const hasText = draft?.sections.some((s) => s.status === "ready" || s.status === "edited") ?? false;
+    setViewMode(hasText && !isPhone ? preferredView() : "edit");
+    setActiveEditor(null);
+    setEditsFilter("edits");
+    setFindOpen(false);
+    setPanelTab("progress");
+    shownBack.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
-  // Auto-open the floating evidence drawer when arriving with ?openEvidence=1
-  // (used by the legacy /editor/:draftId/evidence redirect so old bookmarks
-  // land on something useful). Clears the query param after consumption so a
-  // refresh doesn't re-open the drawer indefinitely.
+  // Back to you (B1): open on the Edits tab, where the reviewer's points
+  // are decided. Once per letter and round, so the person can move away.
+  // Runs after the reset above, which clears shownBack for a new letter.
+  // A round with nothing to decide stays on Progress, where the Review
+  // step's Finish review is.
+  const backKey = review?.status === "back" ? `${draftId}:${review.id}:${review.rounds?.length ?? 0}` : null;
+  useEffect(() => {
+    if (!backKey || shownBack.current === backKey || viewerIsReviewer) return;
+    shownBack.current = backKey;
+    const live = draftId ? useDraftStore.getState().drafts[draftId] : undefined;
+    if (!live) return;
+    const round = review?.rounds?.[review.rounds.length - 1];
+    const theirComments = new Set(round?.commentIds ?? []);
+    const toDecide =
+      suggestedEdits(live).some((e) => !e.ai) ||
+      (live.comments ?? []).some((c) => !c.resolved && theirComments.has(c.id));
+    if (!toDecide) return;
+    setPanelTab("edits");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backKey]);
+
+  // Leaving Back to you (finished, sent back with a question, recalled):
+  // the Edits tab stops being the Review step, so the panel moves to
+  // Progress, where what comes next is (the approver card, the timeline and
+  // the review summary; or the reviewer's card again) (LETTER-X53).
+  const latestReviewStatus = review?.status;
+  const wasBack = useRef<string | null>(null);
+  useEffect(() => {
+    const key = review && latestReviewStatus === "back" ? `${draftId}:${review.id}` : null;
+    if (key) {
+      wasBack.current = key;
+      return;
+    }
+    const was = wasBack.current;
+    wasBack.current = null;
+    if (!was || !was.startsWith(`${draftId}:`) || viewerIsReviewer) return;
+    if (useJourneyUI.getState().panelTab === "edits") setPanelTab("progress");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId, review?.id, latestReviewStatus]);
+
+  // ?openEvidence=1 opens the evidence drawer (old /evidence bookmarks).
   useEffect(() => {
     if (searchParams.get("openEvidence") !== "1") return;
-    if (evidencePinned) {
-      // Pinned rail is already showing — nothing to "open". Just clear the param.
-    } else {
-      setEvidenceDrawerOpen(true);
-    }
+    if (!evidencePinned) setEvidenceDrawerOpen(true);
     const next = new URLSearchParams(searchParams);
     next.delete("openEvidence");
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, evidencePinned]);
 
-  // Jump to a specific section when arriving with ?section=<id> — the Review
-  // step's "Fix this first" CTA links here (/editor/:id?section=<id>). Focus +
-  // scroll to it in the Sections view, then clear the param so a refresh doesn't
-  // re-jump. Without this the CTA silently landed at the top of the letter.
+  // ?section=<id> scrolls to and focuses that section.
   useEffect(() => {
     const sectionId = searchParams.get("section");
     if (!sectionId) return;
-    if (!draft?.sections.some((s) => s.id === sectionId)) return; // not this draft (yet)
-    setViewMode("edit"); // scrolling targets the Sections canvas
+    if (!draft?.sections.some((s) => s.id === sectionId)) return;
+    setViewMode("edit");
     setActiveSectionId(sectionId);
     const t = setTimeout(() => {
-      document
-        .querySelector(`[data-section-id="${sectionId}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.querySelector(`[data-section-id="${sectionId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
     const next = new URLSearchParams(searchParams);
     next.delete("section");
@@ -406,65 +388,285 @@ export function Editor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, draft]);
 
-  // Esc exits Focus mode. Bound at the route level so it works from any
-  // child surface (canvas, floating composer, etc.). We listen on keydown
-  // capture so Radix popovers/dialogs that swallow Escape don't beat us.
+  // ?review=expert&expert=<id>: back from the marketplace with an expert
+  // chosen. Open the reviewer picker on the expert pane with them on top.
+  useEffect(() => {
+    if (!draftId || searchParams.get("review") !== "expert") return;
+    const expertId = searchParams.get("expert") ?? undefined;
+    const due = searchParams.get("due");
+    const dueAt =
+      due && !Number.isNaN(Date.parse(due)) && Date.parse(due) > Date.now() ? new Date(due).toISOString() : undefined;
+    // A review already out (or back) is left alone, as in ReviewDialogsHost.
+    const reviewOpen = Object.values(useReviewStore.getState().requests).some(
+      (r) => r.draftId === draftId && (r.status === "out" || r.status === "back")
+    );
+    setPanelTab("progress");
+    if (isLargeViewport) setPinnedDock("ai");
+    if (!reviewOpen) {
+      useJourneyUI.getState().openReviewPicker(draftId, { kind: "expert", expertId, dueAt, from: "marketplace" });
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("review");
+    next.delete("expert");
+    next.delete("due");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, draftId]);
+
+  // Keyboard: Esc leaves focus mode, Ctrl or Cmd+L opens Chat, Ctrl or
+  // Cmd+F opens find in letter.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Esc exits focus mode.
       if (e.key === "Escape" && focusMode) {
         setFocusMode(false);
         return;
       }
-      // ⌘L / Ctrl+L jumps to the AI agent rail (and exits focus if on).
-      // Matches the affordance shown in the focus-mode floating composer.
       if ((e.metaKey || e.ctrlKey) && (e.key === "l" || e.key === "L")) {
         e.preventDefault();
         setFocusMode(false);
-        setRightTab("ai");
-        // Only open the drawer when AI is not already pinned as the inline
-        // rail. Setting aiDrawerOpen while pinnedDock==="ai" would leave a
-        // ghost true value that causes the scrim + drawer overlay to appear
-        // the moment the user later unpins — without any deliberate action.
-        if (pinnedDock !== "ai") {
-          setAiDrawerOpen(true);
-        }
+        setPanelTab("chat");
+        if (isLargeViewport) setPinnedDock("ai");
+        else setAiDrawerOpen(true);
         requestAnimationFrame(() => {
-          const el = document.querySelector<HTMLTextAreaElement>(
-            'textarea[placeholder*="Rewrite a section"]'
-          );
-          el?.focus();
+          document.querySelector<HTMLTextAreaElement>("textarea[data-ai-composer]")?.focus();
         });
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === "f" || e.key === "F") && viewMode === "edit") {
+        e.preventDefault();
+        setFindOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focusMode, pinnedDock]);
+  }, [focusMode, isLargeViewport, viewMode, setPanelTab]);
 
-  // Auto-collapse the AI rail when the user switches into the Page view —
-  // the full-width "see the actual letter" mode where the AI rail just steals
-  // page width. Doesn't auto-expand on exit — if the user later wants AI back,
-  // they tap the Ask AI pill, and that intent should stick.
+  // "Saving", then "Saved just now", each time the letter changes.
+  // Only a change to the letter itself (its text, title, details) counts:
+  // opening a letter, syncing its review or recording a view never shows
+  // "Saving", so a locked letter nobody edited reads "Saved".
+  const [saved, setSaved] = useState<SavedState>({ kind: "saved", at: draft?.updatedAt ?? Date.now() });
+  const contentSig = draft
+    ? `${draft.title ?? ""}\u0001${JSON.stringify(draft.context)}\u0001${draft.sections.map((x) => x.html).join("\u0001")}`
+    : "";
+  const lastContent = useRef<{ id?: string; sig?: string; openedAt: number }>({ openedAt: 0 });
   useEffect(() => {
-    if (viewMode === "preview") setRailCollapsed(true);
-  }, [viewMode]);
+    if (!draft) return;
+    const prev = lastContent.current;
+    const opened = prev.id !== draft.id || prev.sig === undefined;
+    lastContent.current = { id: draft.id, sig: contentSig, openedAt: opened ? Date.now() : prev.openedAt };
+    if (opened) {
+      setSaved({ kind: "saved", at: draft.updatedAt ?? Date.now() });
+      return;
+    }
+    if (prev.sig === contentSig) return;
+    // The section editors settle the stored html as they mount (no one has
+    // typed yet): not a save the person made.
+    if (Date.now() - prev.openedAt < 1500) return;
+    // DraftHR writing the first draft is not a person's edit either.
+    if (draft.sections.some((x) => x.status === "streaming")) return;
+    setSaved({ kind: "saving" });
+    const t = window.setTimeout(() => setSaved({ kind: "saved", at: Date.now() }), 700);
+    return () => window.clearTimeout(t);
+  }, [draft?.id, contentSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Imperative handle into the PagedEditor for the top File / Edit /
-  // Tools menubar. PagedEditor populates this on mount, nulls it on
-  // unmount. Read every menu click — never cache.
-  const pagedEditorActionsRef = useRef<PagedEditorActions | null>(null);
+  // Does the margin column fit beside the page at this width and zoom?
+  const [canvasW, setCanvasW] = useState(0);
+  useLayoutEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const measure = () => setCanvasW(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isPhone, focusMode, viewMode]);
+  // Only the page scales with zoom; the margin cards keep their size. The
+  // margin column shows when it fits beside the page at this zoom. When it
+  // does not (zoomed in, or a narrow window), the page centres in the
+  // canvas, never wider than the canvas, and the cards are in the Edits tab
+  // (LETTER-33): nothing is pushed under the side panel or cut off.
+  const fitsAt = (z: number) => !isPhone && canvasW >= CANVAS_PAD_L + (PAGE_W * z) / 100 + MARGIN_GAP + MARGIN_W + 16;
+  // On a laptop (1366 wide) the page at 100% leaves no room for the margin
+  // column, so the margin cards beside their paragraphs would be lost
+  // (LETTER-X1): until the person picks a zoom, the page steps down to 90%
+  // when that makes room. Narrower than that, the cards are in Edits.
+  const zoom = zoomChoice ?? (!fitsAt(100) && fitsAt(AUTO_ZOOM) ? AUTO_ZOOM : 100);
+  const pageW = (PAGE_W * zoom) / 100;
+  const marginFits = fitsAt(zoom);
 
-  if (!draft || !draftId || !meta) {
+  // Approval lands while the sender is looking: the approver's tick, a
+  // dark toast, the tracker's Approve step draws its tick.
+  const approvingHere = useRef(false);
+  const prevStatus = useRef<{ id?: string; status?: string }>({});
+  useEffect(() => {
+    if (!draft) return;
+    const status = draft.reviewStatus ?? "draft";
+    const prev = prevStatus.current;
+    prevStatus.current = { id: draft.id, status };
+    if (prev.id !== draft.id || prev.status !== "in_review" || status !== "approved") return;
+    const approved = [...(draft.approvals ?? [])].reverse().find((a) => a.decision === "approved");
+    if (approvingHere.current) {
+      approvingHere.current = false;
+      toast.success("Approved. It can be sent now.");
+    } else {
+      toast(`${approved?.reviewerName ?? "The approver"} approved this letter`, {
+        description: "You can send it now.",
+        className: "lw-toast-dark",
+        descriptionClassName: "lw-toast-dark-desc",
+        position: "bottom-right",
+        duration: 6000,
+      });
+    }
+  }, [draft?.id, draft?.reviewStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A tracker step completes while the letter is open (Draft on sending for
+  // review or approval, Review when it finishes, Approve when approved,
+  // Send when sent): its circle fills and its tick draws (letter-live).
+  const prevStep = useRef<{ id?: string; idx?: number }>({});
+  useEffect(() => {
+    if (!draft || !journey) return;
+    const prev = prevStep.current;
+    prevStep.current = { id: draft.id, idx: journey.stepIndex };
+    if (prev.id !== draft.id || prev.idx === undefined || journey.stepIndex <= prev.idx) return;
+    const done: number[] = [];
+    for (let i = prev.idx; i < Math.min(journey.stepIndex, 4); i++) done.push(i);
+    if (!done.length) return;
+    setTickStep(done.join(" "));
+    const t = window.setTimeout(() => setTickStep(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [draft?.id, journey?.stepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The workspace's handlers, reachable from the stage components and the
+  // health card. Registered as stable wrappers over the latest closures.
+  const handlersRef = useRef<Partial<WorkspaceHandlers>>({});
+  useEffect(() => {
+    if (!draftId) return;
+    const call =
+      <K extends keyof WorkspaceHandlers>(k: K) =>
+      (...args: Parameters<WorkspaceHandlers[K]>) =>
+        (handlersRef.current[k] as ((...a: Parameters<WorkspaceHandlers[K]>) => void) | undefined)?.(...args);
+    const handlers: WorkspaceHandlers = {
+      openEdits: call("openEdits"),
+      openEvidence: call("openEvidence"),
+      fixCheck: call("fixCheck"),
+      regenerateAll: call("regenerateAll"),
+      stop: call("stop"),
+      openReviewDialog: call("openReviewDialog"),
+      withdraw: call("withdraw"),
+      openCounsel: call("openCounsel"),
+      openFeedback: call("openFeedback"),
+      openVersions: call("openVersions"),
+      openTimeline: call("openTimeline"),
+      openChecks: call("openChecks"),
+      ask: call("ask"),
+      jumpToSection: call("jumpToSection"),
+      finalise: call("finalise"),
+      openRounds: call("openRounds"),
+      sendForReview: call("sendForReview"),
+    };
+    useLetterWorkspace.getState().register(draftId, { handlers });
+    return () => useLetterWorkspace.getState().reset(draftId);
+  }, [draftId]);
+
+  const runGenerateAllRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Facts the stage components read: kept in step after every render.
+  const liveRef = useRef<{
+    draftId: string;
+    streaming: boolean;
+    canEdit: boolean;
+    counselNeeded: boolean;
+    counselReview: { reviewedBy: string; reviewedOn: string } | null;
+  } | null>(null);
+  useEffect(() => {
+    const live = liveRef.current;
+    if (!live) return;
+    const ws = useLetterWorkspace.getState();
+    if (ws.draftId !== live.draftId) return;
+    if (
+      ws.streaming !== live.streaming ||
+      ws.canEdit !== live.canEdit ||
+      ws.counselNeeded !== live.counselNeeded ||
+      ws.counselReview?.reviewedBy !== live.counselReview?.reviewedBy ||
+      ws.counselReview?.reviewedOn !== live.counselReview?.reviewedOn
+    ) {
+      ws.register(live.draftId, {
+        streaming: live.streaming,
+        canEdit: live.canEdit,
+        counselNeeded: live.counselNeeded,
+        counselReview: live.counselReview,
+      });
+    }
+  });
+
+  // The failing check the phone flags in the letter.
+  const phoneFlag = usePhoneFlag(
+    draft ?? ({ sections: [] } as unknown as NonNullable<typeof draft>),
+    paperRef,
+    Boolean(draft) && isPhone && journey?.stage === "draft" && viewMode === "edit"
+  );
+
+  const people = useMemo(() => (draft ? peopleOnLetter(draft, profile, review) : []), [draft, profile, review]);
+  const me = myName(profile);
+  const activity = useMemo(() => {
+    if (!draft || !journey) return null;
+    if (journey.stage !== "approve" && journey.stage !== "send" && journey.stage !== "sent") return null;
+    return activityEvents(draft, review, me);
+  }, [draft, journey, review, me]);
+
+  // A teammate reviewer sees only the evidence they were given: files when
+  // the asker shared evidence, hearing notes only when those were shared.
+  const sharedView = useMemo(
+    () =>
+      draft && viewerIsReviewer && reviewerOf
+        ? { ...draft, evidence: evidenceSharedWith(draft.evidence, reviewerOf.share) }
+        : draft,
+    [draft, viewerIsReviewer, reviewerOf]
+  );
+
+  // The named teammate's own points (V1): margin cards with Edit and Remove
+  // while it is out, read only once sent back (REVIEW-90, 138).
+  const teammateReview =
+    viewerIsReviewer && reviewerOf && (reviewerOf.status === "out" || reviewerOf.status === "back") ? reviewerOf : null;
+  const teammatePoints = useTeammatePoints(draft, teammateReview);
+  const [reviewerMode] = useReviewerMode(draftId ?? "");
+  // The commented words get an amber highlight and bar (REVIEW-89): the
+  // teammate's own comments, or the reviewer's open ones once it is back.
+  const quotedComments = useMemo(() => {
+    if (!draft) return [];
+    const open = (draft.comments ?? []).filter((c) => !c.resolved && !c.parentId);
+    if (teammateReview) {
+      const ids = new Set(teammatePoints.filter((p) => p.kind === "comment").map((p) => p.id));
+      return open.filter((c) => ids.has(c.id));
+    }
+    if (review?.status === "back") {
+      const ids = new Set(currentRound(review)?.commentIds ?? []);
+      return open.filter((c) => ids.has(c.id));
+    }
+    return [];
+  }, [draft, teammateReview, teammatePoints, review]);
+
+  if (!draft || !draftId || !meta || !journey) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <p className="text-sm text-muted-foreground">Draft not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => nav("/")}>
-          <ChevronLeft className="size-4 mr-1" /> Back home
+      <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
+        <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found.</h1>
+        <p className="m-0 mt-2 text-[14px] leading-relaxed text-[var(--ds-muted)]">
+          This letter isn't in this workspace, or it was deleted.
+        </p>
+        <Button variant="outline" className="mt-6" onClick={() => nav("/")}>
+          <ChevronLeft className="size-4" /> Back home
         </Button>
       </div>
     );
   }
 
+  // DraftHR is writing: this editor's own run, or a run the store shows (a
+  // section streaming, started from the wizard, a stage control or another
+  // mount). The bar's "Drafting…", Stop and the page's streaming line follow it.
+  const streaming = globallyStreaming || draft.sections.some((s) => s.status === "streaming");
+  const storeActions = { appendToSection, setSectionStatus, pushSectionVersion, updateSection };
   const onRetry = (retryCount: number, delayMs: number, reason: string) => {
     setRetryEvent({ retryCount, delayMs, reason, startedAt: Date.now() });
     setTimeout(() => setRetryEvent(null), delayMs);
@@ -472,49 +674,53 @@ export function Editor() {
 
   const runGenerateAll = async () => {
     if (globallyStreaming) return;
-    // Store-derived re-entry guard (E1b): a section left "streaming" by an
-    // in-flight generation (e.g. from another mount of this draft) blocks a
-    // duplicate run that would interleave appendToSection writes.
     if (draft.sections.some((s) => s.status === "streaming")) return;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     setGloballyStreaming(true);
     try {
-      await generateAllSections(
-        draft,
-        { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
-        abortRef.current.signal,
-        { onRetry }
-      );
+      await generateAllSections(draft, storeActions, abortRef.current.signal, { onRetry });
     } catch (err) {
       console.error(err);
-      alert("Generation failed: " + (err instanceof Error ? err.message : "unknown error"));
+      toast.error("Generation failed", {
+        description: draftErrorCopy(err),
+        // A plan error is fixed on the plans page; trying again would only fail again.
+        action:
+          err instanceof PlanRequiredError
+            ? { label: "See plans", onClick: () => nav("/pricing") }
+            : { label: "Retry", onClick: () => void runGenerateAll() },
+      });
     } finally {
       setGloballyStreaming(false);
       setRetryEvent(null);
     }
   };
+  runGenerateAllRef.current = runGenerateAll;
 
-  const onRegenerateSection = async (section: Section, refineInstruction?: string) => {
-    if (globallyStreaming) return;
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    setGloballyStreaming(true);
+  /** Ask DraftHR to rewrite one section; the result arrives as a suggested edit. */
+  const proposeSection = async (section: Section, instruction?: string, category?: string): Promise<boolean> => {
+    const live = useDraftStore.getState().drafts[draft.id];
+    const sec = live?.sections.find((s) => s.id === section.id);
+    if (!live || !sec || sec.status === "streaming") return false;
+    if (category) useLetterWorkspace.getState().setFixCategory(sec.id, category);
+    const ctrl = new AbortController();
     try {
-      await regenerateSection(
-        draft,
-        section,
-        { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
-        abortRef.current.signal,
+      await regenerateSectionAsPending(
+        live,
+        sec,
+        { ...storeActions, proposeSectionChange: useDraftStore.getState().proposeSectionChange },
+        ctrl.signal,
         { onRetry },
-        refineInstruction
+        instruction
       );
+      return true;
     } catch (err) {
       console.error(err);
-      alert("Regeneration failed: " + (err instanceof Error ? err.message : "unknown error"));
-    } finally {
-      setGloballyStreaming(false);
-      setRetryEvent(null);
+      toast.error("DraftHR could not suggest a change", {
+        description: draftErrorCopy(err),
+        ...(err instanceof PlanRequiredError ? { action: { label: "See plans", onClick: () => nav("/pricing") } } : {}),
+      });
+      return false;
     }
   };
 
@@ -523,28 +729,17 @@ export function Editor() {
     setGloballyStreaming(false);
     setRetryEvent(null);
     draft.sections.forEach((s) => {
-      if (s.status === "streaming") {
-        setSectionStatus(draft.id, s.id, s.html ? "edited" : "empty");
-      }
+      if (s.status === "streaming") setSectionStatus(draft.id, s.id, s.html ? "edited" : "empty");
     });
   };
 
-  // Export logic moved to ReviewStep — that page handles format choice,
-  // counsel-review attestation, and recording the export. The editor no
-  // longer owns any export state.
-
-  // Template-source save: when isTemplateSource, the primary CTA writes
-  // the current draft's section html + answers into a CustomTemplate.
-  // First save creates the row; subsequent saves update in place via
-  // templateSourceId so we never duplicate.
+  // Template-source save: write the current sections and answers into the
+  // custom template (created on first save, updated in place after).
   const saveTemplateSource = () => {
     if (!draft.isTemplateSource) return;
     const answersRec = draft.answers as Record<string, unknown>;
     const templateName =
-      (answersRec._templateName as string | undefined)?.trim() ||
-      draft.title?.trim() ||
-      meta?.shortTitle ||
-      "Untitled template";
+      (answersRec._templateName as string | undefined)?.trim() || draft.title?.trim() || meta?.shortTitle || "Untitled template";
     const templateDescription = answersRec._templateDescription as string | undefined;
     const sectionHtml: Partial<Record<import("@/lib/letters/types").SectionId, string>> = {};
     for (const sec of draft.sections) {
@@ -552,8 +747,7 @@ export function Editor() {
       sectionHtml[sec.sectionId] = sec.html;
     }
     const store = useDraftStore.getState();
-    const myTemplatesUrl =
-      (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
+    const myTemplatesUrl = (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
     if (draft.templateSourceId && store.customTemplates[draft.templateSourceId]) {
       store.updateCustomTemplate(draft.templateSourceId, {
         name: templateName,
@@ -578,50 +772,63 @@ export function Editor() {
       useDraftStore.setState({ drafts: { ...store.drafts, [draft.id]: next } });
     }
     toast.success("Template saved", {
-      action: { label: "Open My Templates", onClick: () => nav(myTemplatesUrl) },
+      action: { label: "Open your templates", onClick: () => nav(myTemplatesUrl) },
     });
   };
 
   const discardTemplateSource = () => {
     if (!draft.isTemplateSource) return;
-    const ok = window.confirm(
-      "Discard this template and any saved version? This can't be undone."
-    );
-    if (!ok) return;
+    setConfirmDiscardTemplate(true);
+  };
+
+  const doDiscardTemplateSource = () => {
+    if (!draft.isTemplateSource) return;
     const store = useDraftStore.getState();
     if (draft.templateSourceId) store.deleteCustomTemplate(draft.templateSourceId);
-    const targetUrl =
-      (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
+    const targetUrl = (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
     store.deleteDraft(draft.id);
     nav(targetUrl);
   };
 
   const backTo = draft.mode === "employer" ? "/hr" : draft.mode === "employee" ? "/me" : "/";
-  const identities = listIdentities(draft, profile);
 
-  // Approval workflow — status pill + dialog gating off the workspace role.
   const reviewStatus = draft.reviewStatus ?? "draft";
   const role = profile.workspaceRole;
-  const canvasEditable = canEditDraft(role, reviewStatus);
-  const latestChangesRequest = (draft.approvals ?? [])
-    .slice()
-    .reverse()
-    .find((a) => a.decision === "changes_requested");
+  // The page can be typed into: the role allows it and the journey has not
+  // locked it (out for review, with the approver, approved, sent).
+  const canvasEditable = canEditDraft(role, reviewStatus) && !journey.locked;
+  const latestChangesRequest = (draft.approvals ?? []).slice().reverse().find((a) => a.decision === "changes_requested");
+  const matter = draft.matterId ? matters[draft.matterId] : undefined;
+  const employee = employeeFor(draft, employees);
+  const sentAt = journey.stage === "sent" ? journey.sentAt : undefined;
+  const sealAnimates = Boolean(justSent && justSent.draftId === draft.id && Date.now() - justSent.at < 4000);
 
-  const onReviewSubmit = (input: { reviewerName: string; body: string; reviewerUserId?: string }) => {
+  // Approve and Request changes belong to the named approver only, from
+  // every entry point (Approve step, document bar, More menu).
+  const openReviewAction = (kind: ReviewDialogKind) => {
+    if ((kind === "approve" || kind === "request_changes") && !viewerIsApprover) return;
+    setReviewDialogKind(kind);
+  };
+
+  const onReviewSubmit = (input: { reviewerName: string; body: string; reviewerUserId?: string; reviewerRole?: string }) => {
     if (!reviewDialogKind) return;
     const store = useDraftStore.getState();
     if (reviewDialogKind === "submit") {
       store.submitForReview(draft.id, input.reviewerName, input.body);
-      // Best-effort email to the picked workspace reviewer (fire-and-forget;
-      // the server validates membership + soft-fails without Resend).
-      if (input.reviewerUserId) {
-        notifyReviewRequested(draft.id, input.reviewerUserId, input.body || undefined);
+      try {
+        if (input.reviewerUserId) window.localStorage.setItem(APPROVER_USER_KEY(draft.id), input.reviewerUserId);
+        else window.localStorage.removeItem(APPROVER_USER_KEY(draft.id));
+        if (input.reviewerRole) window.localStorage.setItem(APPROVER_ROLE_KEY(draft.id), input.reviewerRole);
+        else window.localStorage.removeItem(APPROVER_ROLE_KEY(draft.id));
+      } catch {
+        // Remind will say it cannot reach them.
       }
-      toast.success("Submitted for approval");
+      if (input.reviewerUserId) notifyReviewRequested(draft.id, input.reviewerUserId, input.body || undefined);
+      toast.success(`Sent to ${firstName(input.reviewerName) || "the approver"} to approve`);
     } else if (reviewDialogKind === "approve") {
+      if (!viewerIsApprover) return;
+      approvingHere.current = true;
       store.approveDraft(draft.id, input.reviewerName, input.body);
-      toast.success("Draft approved");
     } else if (reviewDialogKind === "request_changes") {
       store.requestChanges(draft.id, input.reviewerName, input.body);
       toast("Changes requested");
@@ -633,9 +840,7 @@ export function Editor() {
     toast("Withdrawn from review");
   };
 
-  // Counsel-review status — derived from the most recent export attestation
-  // OR from a manual attestation in answers._counselReview. High-risk
-  // letters that haven't been reviewed show an amber "needs review" pill.
+  // Counsel review: the latest export attestation, or a manual one.
   const counselReview: { reviewedBy: string; reviewedOn: string } | null = (() => {
     const lastExport = (draft.exports ?? [])
       .slice()
@@ -644,1203 +849,981 @@ export function Editor() {
     if (lastExport?.reviewedBy && lastExport.reviewedOn) {
       return { reviewedBy: lastExport.reviewedBy, reviewedOn: lastExport.reviewedOn };
     }
-    const manual = (draft.answers as Record<string, unknown>)._counselReview as
-      | { reviewedBy?: string; reviewedOn?: string }
-      | undefined;
-    if (manual?.reviewedBy && manual.reviewedOn) {
-      return { reviewedBy: manual.reviewedBy, reviewedOn: manual.reviewedOn };
-    }
+    const manual = (draft.answers as Record<string, unknown>)._counselReview as { reviewedBy?: string; reviewedOn?: string } | undefined;
+    if (manual?.reviewedBy && manual.reviewedOn) return { reviewedBy: manual.reviewedBy, reviewedOn: manual.reviewedOn };
     return null;
   })();
+  const counselNeeded = Boolean(meta.legalReviewRequired || meta.riskClass === "high");
+  const activeSection = draft.sections.find((s) => s.id === activeSectionId) ?? null;
+  const unresolvedComments = (draft.comments ?? []).filter((c) => !c.resolved && !c.parentId).length;
+
+  // Everything waiting for a decision: section proposals plus each
+  // reviewer's loose tracked changes (the set the Edits tab and the margin
+  // list, one card each).
+  const pendingEdits = suggestedEdits(draft).length;
+  // Back to you (B1): the Edits tab counts the reviewer's open points, their
+  // comments as well as their suggested edits (REVIEW-70).
+  // Comments pinned to words in the letter count too, whoever wrote them
+  // (one card each in the margin, LETTER-X36); a reviewer's arrive with
+  // their round.
+  const reviewerOpenComments = (() => {
+    const ids = new Set(review?.status === "back" ? review.rounds[review.rounds.length - 1]?.commentIds ?? [] : []);
+    const open = new Set((draft.comments ?? []).filter((c) => ids.has(c.id) && !c.resolved).map((c) => c.id));
+    const rName = review?.status === "out" ? review.reviewer.name.trim().toLowerCase() : "";
+    for (const c of openAnchoredComments(draft)) {
+      if (rName && c.authorName.trim().toLowerCase() === rName) continue;
+      open.add(c.id);
+    }
+    return open.size;
+  })();
+
+  const rejectAllEdits = () => {
+    const sectionSnap = draft.sections.filter((s) => s.pendingChange).map((s) => ({ sectionId: s.id, pending: s.pendingChange! }));
+    const markSnap = draft.sections
+      .filter((s) => !s.pendingChange && hasPendingSuggestions(s.html))
+      .map((s) => ({ sectionId: s.id, html: s.html }));
+    const decided = suggestedEdits(draft);
+    const n = decided.length;
+    if (sectionSnap.length) useDraftStore.getState().rejectAllPending(draft.id);
+    if (markSnap.length) useDraftStore.getState().rejectAllSuggestions(draft.id);
+    if (n === 0) return;
+    recordDecision(draft.id, decided, false);
+    toast(`${n} suggested ${n === 1 ? "edit" : "edits"} rejected`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const store = useDraftStore.getState();
+          sectionSnap.forEach(({ sectionId, pending }) => store.proposeSectionChange(draft.id, sectionId, pending));
+          markSnap.forEach(({ sectionId, html }) => store.updateSection(draft.id, sectionId, html));
+        },
+      },
+    });
+  };
+
+  const acceptAllEdits = () => {
+    // Snapshot the clean pre-diff html so Undo can restore it.
+    const sectionSnap = draft.sections
+      .filter((s) => s.pendingChange)
+      .map((s) => ({ sectionId: s.id, html: s.pendingChange!.prevHtml ?? s.html, pending: s.pendingChange! }));
+    const markSnap = draft.sections
+      .filter((s) => !s.pendingChange && hasPendingSuggestions(s.html))
+      .map((s) => ({ sectionId: s.id, html: s.html }));
+    const decided = suggestedEdits(draft);
+    const n = decided.length;
+    if (sectionSnap.length) useDraftStore.getState().acceptAllPending(draft.id);
+    if (markSnap.length) useDraftStore.getState().acceptAllSuggestions(draft.id);
+    if (n === 0) return;
+    recordDecision(draft.id, decided, true);
+    toast.success(`${n} suggested ${n === 1 ? "edit" : "edits"} accepted`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const store = useDraftStore.getState();
+          sectionSnap.forEach(({ sectionId, html, pending }) => {
+            store.updateSection(draft.id, sectionId, html);
+            store.proposeSectionChange(draft.id, sectionId, pending);
+          });
+          markSnap.forEach(({ sectionId, html }) => store.updateSection(draft.id, sectionId, html));
+        },
+      },
+    });
+  };
+
+  // Side panel: in the frame at lg+, a bottom sheet below lg.
+  const panelOpen = isLargeViewport ? pinnedDock !== null : aiDrawerOpen;
+  const togglePanel = () => {
+    if (isLargeViewport) setPinnedDock((d) => (d ? null : "ai"));
+    else setAiDrawerOpen((v) => !v);
+  };
+  const openPanelTab = (t: "edits" | "progress" | "chat") => {
+    setFocusMode(false);
+    setPanelTab(t);
+    if (isLargeViewport) setPinnedDock("ai");
+    else setAiDrawerOpen(true);
+  };
+  const focusComposer = () =>
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLTextAreaElement>("textarea[data-ai-composer]")?.focus();
+    });
+
+  const openEvidence = () => {
+    if (evidencePinned) {
+      document.querySelector<HTMLInputElement>('[data-evidence-rail] input[type="search"]')?.focus();
+      return;
+    }
+    setEvidenceDrawerOpen(true);
+  };
+  const onEvidenceButton = () => {
+    if (evidencePinned) {
+      document.querySelector<HTMLInputElement>('[data-evidence-rail] input[type="search"]')?.focus();
+      return;
+    }
+    setEvidenceDrawerOpen((v) => !v);
+  };
+
+  const openReviewPicker = (from: "bar" | "panel" = handoffFrom.current) => {
+    // The picker lives with the journey panel: show Progress so it is mounted.
+    setPanelTab("progress");
+    if (isLargeViewport && pinnedDock === null) setPinnedDock("ai");
+    useJourneyUI.getState().openReviewPicker(draft.id, { from });
+  };
+
+  /** Send for review: the evidence check first, then the reviewer picker. */
+  const sendForReview = (from: "bar" | "panel" = "bar") => {
+    handoffFrom.current = from;
+    const tier = letterEvidenceTier(draft);
+    const reason = evaluateEvidenceHandoff(draft, tier);
+    if (reason) {
+      // Esc or Cancel on the check puts focus back on the button pressed.
+      handoffReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setHandoffReason(reason);
+      return;
+    }
+    openReviewPicker(from);
+  };
+  const goReviewStep = () => nav(`/editor/${draft.id}/review`);
+  const goFinalise = () => nav(`/editor/${draft.id}/finalize`);
+
+  const remindApprover = async () => {
+    const approver = journey.approverName && !/^workspace reviewer$/i.test(journey.approverName) ? journey.approverName : "";
+    const first = firstName(approver) || "the approver";
+    let userId: string | null = null;
+    try {
+      userId = window.localStorage.getItem(APPROVER_USER_KEY(draft.id));
+    } catch {
+      userId = null;
+    }
+    if (!userId) {
+      toast(`Couldn't remind ${first} from here`, {
+        description: `DraftHR doesn't know which teammate ${first === "the approver" ? "it is" : `${first} is`} on this device. Message them directly.`,
+      });
+      return;
+    }
+    try {
+      const r = await fetch("/api/store/notify", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          draftId: toServerUuid(draft.id),
+          kind: "review-requested",
+          recipientUserId: userId,
+          message: `A reminder: "${draft.title?.trim() || meta.shortTitle}" is waiting for your approval.`,
+        }),
+      });
+      const body = (await r.json().catch(() => null)) as { ok?: boolean; emailed?: boolean } | null;
+      if (r.ok && body?.emailed) {
+        toast(`Reminder sent to ${first}`);
+      } else {
+        toast(`Couldn't send a reminder to ${first}`, {
+          description: r.ok ? "Email isn't set up for this workspace yet. Message them directly." : "The server didn't accept it. Try again in a moment.",
+        });
+      }
+    } catch {
+      toast(`Couldn't send a reminder to ${first}`, { description: "You seem to be offline. Try again in a moment." });
+    }
+  };
+
+  const onJourneyAction = (id: import("@/lib/journey/stage").JourneyActionId) => {
+    switch (id) {
+      case "send-for-review":
+        sendForReview();
+        return;
+      case "skip-review":
+        // An employee's own letter has no approver (LETTER-X25).
+        if (markOwnLetterReady(draft.id)) {
+          toast.success("Ready to send");
+          return;
+        }
+        setReviewDialogKind("submit");
+        return;
+      case "send-for-approval":
+        setReviewDialogKind("submit");
+        return;
+      // Recall and Finish review go through the review loop's dialogs
+      // (ReviewDialogsHost): they confirm, revoke a secure link on the
+      // server and tell the person what happened.
+      case "recall":
+        if (review) requestRecall(draft.id);
+        return;
+      case "finish-review":
+        if (review) requestFinishReview(draft.id);
+        return;
+      case "approve":
+        openReviewAction("approve");
+        return;
+      case "remind":
+        void remindApprover();
+        return;
+      case "send-back":
+        sendBackFromBar();
+        return;
+      case "export":
+      case "download":
+        return;
+    }
+  };
+
+  const jumpToSection = (sectionId: string) => {
+    setViewMode("edit");
+    setActiveSectionId(sectionId);
+    if (!isLargeViewport) setAiDrawerOpen(false);
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-section-id="${sectionId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const onFocusComment = (commentId: string, from?: HTMLElement) => {
+    // Reply on a margin card: the thread opens under that card, beside the
+    // page rather than over the letter, with the reply box focused, and
+    // focus goes back to Reply when it closes (LETTER-X52).
+    const card = from?.closest<HTMLElement>(".lw-margin-card");
+    if (from && card) {
+      setFloatingComment({
+        anchor: { getRect: () => card.getBoundingClientRect(), containerEl: card, align: "end" },
+        mode: { kind: "existing", commentId },
+        focusReply: true,
+        returnFocus: from,
+      });
+      return;
+    }
+    // The comment's highlight, else (a reviewer's comment that came with
+    // only the words it is about) the paragraph holding those words, else
+    // its section (LETTER-X44).
+    // The highlight on screen: a hidden copy (page measuring) has no box.
+    let el =
+      [...document.querySelectorAll<HTMLElement>(`mark[data-comment-id="${CSS.escape(commentId)}"]`)].find(
+        (m) => m.getClientRects().length > 0
+      ) ?? null;
+    if (!el) {
+      const c = draft.comments?.find((x) => x.id === commentId);
+      const sectionEl = c?.sectionId
+        ? paperRef.current?.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(c.sectionId)}"]`) ?? null
+        : null;
+      el = (sectionEl && c?.quote ? blockWithText(sectionEl, c.quote) : null) ?? sectionEl;
+    }
+    if (!el) return;
+    const anchorEl = el;
+    setFloatingComment({
+      anchor: { getRect: () => anchorEl.getBoundingClientRect(), containerEl: anchorEl },
+      mode: { kind: "existing", commentId },
+    });
+  };
+
+  // Insert > Comment: a new thread on the selected text of the section
+  // being edited (or on the section itself when nothing is selected).
+  const commentOnSelection = () => {
+    const sid = activeSectionId;
+    if (!sid) return;
+    const sectionEl = document.querySelector<HTMLElement>(`[data-section-id="${sid}"]`);
+    if (!sectionEl) return;
+    let quote: string | undefined;
+    let applyMark: ((commentId: string) => void) | undefined;
+    const ed = activeEditor && !activeEditor.isDestroyed ? activeEditor : null;
+    if (ed) {
+      const { from, to, empty } = ed.state.selection;
+      if (!empty) {
+        quote = ed.state.doc.textBetween(from, to, " ").trim() || undefined;
+        applyMark = (commentId: string) => {
+          ed.chain().focus().setTextSelection({ from, to }).setCommentMark(commentId).run();
+        };
+      }
+    }
+    setFloatingComment({
+      anchor: { getRect: () => sectionEl.getBoundingClientRect(), containerEl: sectionEl },
+      mode: { kind: "new", sectionId: sid, quote, applyMark },
+    });
+  };
+
+  /** Fix one health check: DraftHR proposes the change, or the right place opens. */
+  const fixCheck = async (check: HealthCheck) => {
+    const plan = planFix(check, draft);
+    const ws = useLetterWorkspace.getState();
+    if (plan.kind === "ai") {
+      if (!canvasEditable) return;
+      // A suggestion already waiting in that section is never replaced
+      // silently (as in the Review step): decide it first.
+      const live = useDraftStore.getState().drafts[draft.id]?.sections.find((x) => x.id === plan.section.id);
+      if (live?.pendingChange || hasPendingSuggestions(live?.html ?? "")) {
+        toast("This section already has a suggested edit", {
+          description: "Accept or reject it first, then Fix again.",
+        });
+        jumpToSection(plan.section.id);
+        if (!marginFits) {
+          setEditsFilter("edits");
+          openPanelTab("edits");
+        }
+        return;
+      }
+      ws.setFixing(check.id, true);
+      const ok = await proposeSection(plan.section, plan.instruction, plan.category);
+      useLetterWorkspace.getState().setFixing(check.id, false);
+      if (ok && !marginFits) {
+        setEditsFilter("edits");
+        openPanelTab("edits");
+      }
+      if (ok) jumpToSection(plan.section.id);
+    } else if (plan.kind === "comments") {
+      setEditsFilter("comments");
+      openPanelTab("edits");
+    } else if (plan.kind === "evidence") {
+      openEvidence();
+    } else if (plan.kind === "settings") {
+      nav("/settings");
+    } else {
+      jumpToSection(plan.sectionId);
+    }
+  };
+
+  /** Undo "marked as sent": the letter goes back to ready to send. */
+  // Undo on the Sent banner clears the whole send record (the marked-sent
+  // exports, the given date, the appeal dates), records "Marked as not
+  // sent" and stops the seal (SEND-96 to 98).
+  const undoSent = () => {
+    const result = undoMarkedSent(draft.id, me || undefined);
+    if (result.undone) toast(undoToastText(result));
+  };
+
+  /** The reviewer's "Send back to <asker>" in the document bar: sends with
+   *  the verdict picked in Your review, or shows the verdict to pick first. */
+  const sendBackFromBar = () => {
+    openPanelTab("progress");
+    window.setTimeout(() => {
+      const button = document.querySelector<HTMLButtonElement>('[data-testid="reviewer-send-back"]');
+      if (button && !button.disabled) {
+        button.click();
+        return;
+      }
+      const verdict = document.querySelector<HTMLElement>('[data-testid="your-review"] [role="radiogroup"][aria-label="Your verdict"]');
+      verdict?.scrollIntoView({ block: "center", behavior: "smooth" });
+      verdict?.querySelector<HTMLElement>('[role="radio"]')?.focus({ preventScroll: true });
+      toast("Pick a verdict first", { description: "Then add a note and send it back." });
+    }, 120);
+  };
+
+  /** "Message" on the out-for-review strip: the conversation with the reviewer. */
+  const openReviewThread = () => {
+    openPanelTab("progress");
+    focusReviewReply(draft.id);
+  };
+
+  const askDraftHR = (prompt: string) => {
+    openPanelTab("chat");
+    window.dispatchEvent(new CustomEvent("drafthr:ask", { detail: { draftId: draft.id, prompt } }));
+  };
+
+  handlersRef.current = {
+    openEdits: (filter) => {
+      setEditsFilter(filter ?? "edits");
+      openPanelTab("edits");
+    },
+    openEvidence,
+    fixCheck: (c) => void fixCheck(c),
+    regenerateAll: () => void runGenerateAll(),
+    stop: stopStreaming,
+    openReviewDialog: (kind) => openReviewAction(kind),
+    withdraw: onWithdrawForReview,
+    openCounsel: () => setCounselDialogOpen(true),
+    openFeedback: () => setReviewFeedbackOpen(true),
+    openVersions: () => {
+      setActivityTab("versions");
+      setActivityOpen(true);
+    },
+    openTimeline: () => setTimelineDialogOpen(true),
+    openChecks: () => setChecksOpen(true),
+    ask: askDraftHR,
+    jumpToSection,
+    finalise: goFinalise,
+    // "See all rounds": the review loop's rounds history (RoundsList). The
+    // Activity dialog keeps its own Review rounds tab too.
+    openRounds: () => openRoundsHistory(draft.id),
+    sendForReview: (from) => sendForReview(from),
+  };
+  // Live facts the stage components read (registered after render).
+  liveRef.current = { draftId: draft.id, streaming, canEdit: canvasEditable, counselNeeded, counselReview };
+
+  const bar: DocumentBarProps = {
+    draft: sharedView ?? draft,
+    journey,
+    editor: activeEditor,
+    viewMode,
+    onViewMode: (m) => {
+      setViewMode(m);
+      try {
+        window.localStorage.setItem(VIEW_KEY, m);
+      } catch {
+        // Private windows: the choice lasts for this letter only.
+      }
+    },
+    pagedActions: pagedEditorActionsRef,
+    backTo,
+    streaming,
+    canEdit: canvasEditable,
+    role,
+    viewerIsApprover,
+    counselNeeded,
+    counselReview,
+    pendingEdits,
+    commentCount: unresolvedComments,
+    activeSection,
+    people,
+    saved: journey.stage === "sent" ? { kind: "locked" } : saved,
+    zoom,
+    onZoom: (z: number) => {
+      // Zooming in past the room for the margin: its cards move to the
+      // Edits tab, so open it when there is something there to decide.
+      const leaving = fitsAt(zoom) && !fitsAt(z);
+      setZoomChoice(z);
+      if (leaving && pendingEdits + reviewerOpenComments > 0 && !viewerIsReviewer) {
+        setEditsFilter("edits");
+        openPanelTab("edits");
+      }
+    },
+    panelOpen,
+    onTogglePanel: togglePanel,
+    outlineOpen: showSidebar,
+    onToggleOutline: () => setShowSidebar((s) => !s),
+    focusMode,
+    onToggleFocus: () => setFocusMode((f) => !f),
+    onOpenFind: () => {
+      setViewMode("edit");
+      setFindOpen(true);
+    },
+    evidenceActive: evidenceDrawerOpen || evidencePinned,
+    evidencePinned,
+    onEvidenceButton,
+    onOpenEvidence: openEvidence,
+    inviteOpen: invitePopoverOpen,
+    onInviteOpenChange: setInvitePopoverOpen,
+    onOpenOnMobile: () => setMobileShareOpen(true),
+    onExport: letterExport.requestExport,
+    exportBusy: letterExport.busy,
+    onFinalise: goFinalise,
+    onGoReview: goReviewStep,
+    onJourneyAction,
+    onSaveTemplate: saveTemplateSource,
+    onSaveAsTemplate: () => setSaveAsTemplateOpen(true),
+    onOpenEdits: () => {
+      setEditsFilter("edits");
+      openPanelTab("edits");
+    },
+    onAcceptAll: acceptAllEdits,
+    onRejectAll: rejectAllEdits,
+    onOpenComments: () => setAllCommentsOpen(true),
+    onComment: commentOnSelection,
+    onOpenActivity: () => {
+      setActivityTab("history");
+      setActivityOpen(true);
+    },
+    onOpenTimeline: () => setTimelineDialogOpen(true),
+    onShowSectionHistory: (s) => setHistorySection(s),
+    onRegenerateAll: () => void runGenerateAll(),
+    onStop: stopStreaming,
+    onRefineSection: () => {
+      if (activeSectionId) setRefineSectionId(activeSectionId);
+    },
+    onEditDetails: () => setEditDetailsOpen(true),
+    onReviewAction: (kind) => openReviewAction(kind),
+    onWithdraw: onWithdrawForReview,
+    onOpenFeedback: () => setReviewFeedbackOpen(true),
+    onOpenCounsel: () => setCounselDialogOpen(true),
+    onNavigate: (to) => nav(to),
+  };
+
+  // Reviewers on a locked letter can still suggest edits, per section.
+  const reviewOutToMe = review?.status === "out" && Boolean(me) && review.reviewer.name.trim().toLowerCase() === me.toLowerCase();
+  const reviewerMargin = teammateReview
+    ? { points: teammatePoints, me: reviewMe, canWork: teammateReview.status === "out" && role !== "viewer" }
+    : null;
+  const teammateNumbers = suggestionNumbers(teammatePoints);
+  const canSuggest =
+    !canvasEditable &&
+    // The named teammate suggests only in Suggest mode (Read changes nothing).
+    !(viewerIsReviewer && reviewerMode !== "suggest") &&
+    role !== "viewer" &&
+    ((reviewStatus === "in_review" && (role === "reviewer" || viewerIsApprover)) || (review?.status === "out" && (role === "reviewer" || reviewOutToMe)));
+
+  const sidePanel = (onClose: () => void, closeLabel: string) => (
+    <LetterSidePanel
+      draft={sharedView ?? draft}
+      tab={panelTab}
+      onTabChange={setPanelTab}
+      activeSectionId={activeSectionId}
+      editsFilter={editsFilter}
+      onEditsFilterChange={setEditsFilter}
+      canResolve={canvasEditable}
+      pendingEdits={pendingEdits + reviewerOpenComments}
+      onAcceptAll={acceptAllEdits}
+      onRejectAll={rejectAllEdits}
+      onJumpToSection={jumpToSection}
+      progress={{
+        journey,
+        viewerIsApprover,
+        viewerIsReviewer,
+        viewerIsAsker,
+        tickStep,
+        role,
+        counselNeeded,
+        counselReview,
+        canFix: canvasEditable,
+        onOpenEvidence: openEvidence,
+        onOpenCounsel: () => setCounselDialogOpen(true),
+        onGoReview: goReviewStep,
+        onFinalise: goFinalise,
+      }}
+      onOpenEvidence={openEvidence}
+      onClose={onClose}
+      closeLabel={closeLabel}
+    />
+  );
+
+  // The journey panel (Progress) hosts the review dialogs. When it is not
+  // on screen, host them here so the picker still opens.
+  const journeyPanelShown =
+    (panelTab === "progress" || (panelTab === "edits" && !!journey && editsShowsReview(journey, { viewerIsReviewer, viewerIsAsker }))) &&
+    (isLargeViewport ? pinnedDock === "ai" && !focusMode : true);
+
+  const pageInner = (
+    <>
+      <Letterhead draft={draft} fallbackName={profile.employer?.legalName} fallbackAddress={profile.employer?.address} />
+      {/* The seal sits in the flow at the top right, under the letterhead,
+       * and the lines beside it wrap around it: it never covers the
+       * letter's words, with or without an address block, on any width. */}
+      {sentAt && (
+        <Seal
+          date={sentAt}
+          animate={sealAnimates}
+          placed={false}
+          size={isPhone ? 60 : 84}
+          className={cn("relative z-10 float-right -rotate-[8deg]", isPhone ? "-mt-1 mb-1 ml-3" : "-mt-2 mb-2 ml-6 mr-1")}
+        />
+      )}
+      <IssueDate draft={draft} className="m-0 mb-2 font-sans text-[13px] text-[var(--ds-muted)] md:hidden" />
+      <ConfidentialLine draft={draft} />
+      {draft.sections.map((section) => (
+        <div key={section.id} className="group/sec relative">
+          <SectionEditor
+            // A new editor when the author tools come or go (the named
+            // reviewer signs in on this device): the selection bubble is
+            // moved out of React's tree and cannot be removed in place.
+            key={viewerIsReviewer ? "reviewer" : "author"}
+            draft={draft}
+            section={section}
+            variant="paper"
+            hideToolbar
+            onEditorFocus={setActiveEditor}
+            onEditorReady={(ed) => setActiveEditor((cur) => (cur && !cur.isDestroyed ? cur : ed))}
+            isStreaming={section.status === "streaming"}
+            active={activeSectionId === section.id}
+            onFocus={() => setActiveSectionId(section.id)}
+            onChange={(html) => updateSection(draft.id, section.id, html)}
+            onRegenerate={(instr) => void proposeSection(section, instr)}
+            onClear={() => updateSection(draft.id, section.id, "")}
+            onShowHistory={() => setHistorySection(section)}
+            onOpenCommentsThread={() => {
+              const sectionEl = document.querySelector<HTMLElement>(`[data-section-id="${section.id}"]`);
+              if (!sectionEl) return;
+              setFloatingComment({
+                anchor: { getRect: () => sectionEl.getBoundingClientRect(), containerEl: sectionEl },
+                mode: { kind: "new", sectionId: section.id },
+              });
+            }}
+            onOpenEvidenceBinder={() => {
+              setActiveSectionId(section.id);
+              nav(`/editor/${draft.id}/evidence?section=${section.id}`);
+            }}
+            onFocusComment={onFocusComment}
+            commentCount={(draft.comments ?? []).filter((c) => c.sectionId === section.id && !c.resolved).length}
+            onAcceptPending={() => useDraftStore.getState().acceptSectionPending(draft.id, section.id)}
+            onRejectPending={() => useDraftStore.getState().rejectSectionPending(draft.id, section.id)}
+            editable={canvasEditable}
+            authorChrome={!viewerIsReviewer}
+          />
+          {section.sectionId === "recipient_block" && <IssueDate draft={draft} className="m-0 mb-3 max-md:hidden" />}
+          {phoneFlag && phoneFlag.sectionId === section.id && <PhoneFlagHint target={phoneFlag} onFix={(c) => void fixCheck(c)} />}
+          {/* The teammate's own points under their paragraph when there is
+           * no room for the margin (phones, narrow windows; REVIEW-138). */}
+          {reviewerMargin && !marginFits && teammatePoints.some((x) => x.sectionId === section.id) && (
+            <div className="mb-4 flex flex-col gap-2 font-sans" data-slot="section-points">
+              {teammatePoints
+                .filter((x) => x.sectionId === section.id)
+                .map((x) => (
+                  <div key={x.id} data-point-id={x.id}>
+                    <TeammatePointCard
+                      point={x}
+                      n={teammateNumbers.get(x.id)}
+                      me={reviewerMargin.me}
+                      canWork={reviewerMargin.canWork}
+                      onEdit={() => editTeammatePoint(draft.id, x)}
+                      onRemove={() => removeTeammatePoint(draft.id, x)}
+                      className="shadow-[var(--ds-shadow-s)]"
+                    />
+                  </div>
+                ))}
+            </div>
+          )}
+          {canSuggest && !section.pendingChange && section.status !== "streaming" && (
+            // Shown when the paragraph is hovered or focused (always on touch
+            // screens), so a reviewer's page reads as a letter, not a form.
+            <div className="pointer-events-none absolute -bottom-3 right-0 z-[2] flex justify-end opacity-0 transition-opacity duration-[120ms] group-hover/sec:pointer-events-auto group-hover/sec:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:static [@media(hover:none)]:-mt-1 [@media(hover:none)]:mb-3 [@media(hover:none)]:opacity-100">
+              <button
+                type="button"
+                onClick={() =>
+                  viewerIsReviewer
+                    ? openTeammateComposer({ draftId: draft.id, kind: "suggest", sectionId: section.id })
+                    : setSuggestSection(section)
+                }
+                className="inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-[var(--ds-surface)] px-2.5 font-sans text-[12.5px] font-medium text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              >
+                <Lightbulb className="size-3.5" />
+                Suggest an edit
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      {streaming && (
+        <p role="status" className="mt-4 flex items-center gap-2 font-sans text-[12.5px] text-[var(--ds-muted)]">
+          <Loader2 className="size-3 animate-spin" />
+          Streaming sections from the model…
+        </p>
+      )}
+    </>
+  );
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      {/* Single canonical header — replaces the old EditorTopbar + action row.
-       * Layout: [brand · ← Letters · counsel pill] [TITLE centred + submeta]
-       * [avatars · actions]. Edit/Preview moved to the secondary toolbar so
-       * the title can claim centre stage. */}
-      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
-        {/* Topbar grid mirrors the body grid below it on lg+:
-         *   [300px left rail]  [1fr canvas]  [360px right rail]
-         * So the migrated secondary-toolbar items (Tone, Edit/Preview,
-         * pending/drafting/regen) sit DIRECTLY ABOVE their old positions
-         * over the canvas column, not jammed into the viewport-wide
-         * left/right clusters. Below lg the rails are drawers and the
-         * grid collapses to a single flex row. */}
-        <div className="relative h-full flex items-center gap-2 sm:gap-3 px-2 sm:px-4 lg:grid lg:grid-cols-[300px_minmax(0,1fr)_360px] lg:gap-0 lg:px-0">
-          {/* Column 1 — over the left rail / viewport-left on mobile.
-           * Brand mark + back-to-letters + counsel pill. */}
-          <div className="flex items-center gap-1 min-w-0 lg:px-4">
-            {/* Brand mark — single back/home affordance. Clicking the D
-             * returns to the letters list for the current mode (employer
-             * /hr or employee /me), so we don't need a separate ←
-             * Letters button next to it. */}
-            <Link
-              to={backTo}
-              aria-label="Back to letters"
-              title="Back to letters"
-              className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10"
+    <div className="lw-root relative flex min-h-0 flex-1 bg-[var(--ds-surface)]">
+      <div data-page-main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {isPhone ? (
+          <>
+            <PhoneTopBar bar={bar} matter={matter} />
+            <PhoneStrip draft={draft} journey={journey} matter={matter} />
+          </>
+        ) : (
+          !focusMode && <DocumentBar {...bar} />
+        )}
+
+        {/* Focus mode: the section pill (top left) leaves it; the bar at the
+         * bottom opens Chat. Esc also leaves. */}
+        {focusMode && (
+          <>
+            <button
+              type="button"
+              onClick={() => setFocusMode(false)}
+              className="absolute left-3 top-3 z-30 inline-flex items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-1.5 text-[12.5px] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              title="Exit focus mode (Esc)"
+              aria-label="Exit focus mode"
             >
-              <BrandMark size={36} />
-              <Wordmark size={16} className="hidden sm:inline" />
-            </Link>
+              <Minimize2 className="size-3" />
+              <span className="ds-mono font-medium text-[var(--ds-body)]">
+                {(() => {
+                  const idx = activeSectionId ? draft.sections.findIndex((s) => s.id === activeSectionId) : -1;
+                  return `${idx >= 0 ? idx + 1 : 1} / ${draft.sections.length}`;
+                })()}
+              </span>
+              <span className="max-w-[180px] truncate">{(activeSection ?? draft.sections[0])?.title ?? "Letter"}</span>
+              <span className="ds-mono ml-1 rounded bg-[var(--ds-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--ds-muted)]">Esc</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                openPanelTab("chat");
+                focusComposer();
+              }}
+              className="absolute bottom-6 left-1/2 z-30 inline-flex w-[min(560px,calc(100%-2rem))] -translate-x-1/2 items-center gap-2 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 py-2.5 text-[13.5px] text-[var(--ds-muted)] shadow-[var(--ds-shadow-ask)] transition-colors duration-[120ms] hover:border-[var(--ds-line-strong)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              title="Ask DraftHR (Ctrl or Cmd+L)"
+              aria-label="Open AI agent"
+            >
+              <Sparkles className="size-3.5 shrink-0" />
+              <span className="flex-1 truncate text-left">Ask DraftHR anything about this letter</span>
+              <span className="grid size-7 shrink-0 place-items-center rounded-[8px] bg-[var(--ds-accent)] text-[var(--ds-on-accent)]">
+                <ArrowUp className="size-3.5" />
+              </span>
+            </button>
+          </>
+        )}
 
-            {/* Change C: top menubar — File / Tools / View. Conventional
-             * desktop position: far-left, right after the brand mark.
-             * Mobile keeps the existing icon toolbar + ⋯ overflow. */}
-            <div className="hidden md:flex items-center gap-0.5 ml-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="h-7 px-2 rounded-md text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
-                  >
-                    File
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[220px]">
-                  <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
-                    <Settings2 className="size-4 mr-2" /> Edit details
-                  </DropdownMenuItem>
-                  {/* Approval-workflow actions — items vary by status + role.
-                   * Hidden for template-source drafts (no review needed). */}
-                  {!draft.isTemplateSource && (
-                    <>
-                      <DropdownMenuSeparator />
-                      {reviewStatus === "draft" && canSubmitForReview(role) && (
-                        <DropdownMenuItem onClick={() => setReviewDialogKind("submit")}>
-                          <Send className="size-4 mr-2" /> Submit for approval…
-                        </DropdownMenuItem>
-                      )}
-                      {reviewStatus === "changes_requested" && canSubmitForReview(role) && (
-                        <DropdownMenuItem onClick={() => setReviewDialogKind("submit")}>
-                          <Send className="size-4 mr-2" /> Re-submit for approval…
-                        </DropdownMenuItem>
-                      )}
-                      {reviewStatus === "in_review" && (
-                        <>
-                          <DropdownMenuItem onClick={onWithdrawForReview}>
-                            <Undo className="size-4 mr-2" /> Withdraw from review
-                          </DropdownMenuItem>
-                          {canApprove(role) && (
-                            <>
-                              <DropdownMenuItem onClick={() => setReviewDialogKind("approve")}>
-                                <CheckCircle2 className="size-4 mr-2" /> Approve
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setReviewDialogKind("request_changes")}>
-                                <MessageSquareWarning className="size-4 mr-2" /> Request changes…
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => nav(`/editor/${draft.id}/review`)}
-                      >
-                        <FileDown className="size-4 mr-2" /> Export…
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setSaveAsTemplateOpen(true)}>
-                        <BookmarkPlus className="size-4 mr-2" /> Save as template…
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setMobileShareOpen(true)}
-                    data-testid="open-on-mobile-menu-item"
-                  >
-                    <Smartphone className="size-4 mr-2" /> Open on mobile…
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => nav("/settings")}>
-                    <Settings2 className="size-4 mr-2" /> Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => nav("/privacy")}>
-                    <ShieldCheck className="size-4 mr-2" /> Privacy &amp; data
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="h-7 px-2 rounded-md text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
-                  >
-                    Tools
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[240px]">
-                  {globallyStreaming ? (
-                    <DropdownMenuItem onClick={stopStreaming}>
-                      <StopCircle className="size-4 mr-2" /> Stop generation
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem onClick={runGenerateAll}>
-                      <Sparkles className="size-4 mr-2" /> Regenerate all sections
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    disabled={!activeSectionId}
-                    onClick={() => {
-                      if (activeSectionId) setRefineSectionId(activeSectionId);
-                    }}
-                  >
-                    <Wand2 className="size-4 mr-2" /> Refine current section…
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setAllCommentsOpen(true)}>
-                    <MessageSquare className="size-4 mr-2" /> Comments
-                    {(() => {
-                      const n = (draft.comments ?? []).filter(
-                        (c) => !c.resolved && !c.parentId
-                      ).length;
-                      return n > 0 ? (
-                        <span className="ml-auto text-[10px] font-mono text-[var(--ds-muted)]">
-                          {n}
-                        </span>
-                      ) : null;
-                    })()}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTimelineDialogOpen(true)}>
-                    <Clock3 className="size-4 mr-2" /> Timeline
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Edit menu — only meaningful in edit-on-page mode. Items
-               * dispatch through the PagedEditor's actionsRef so the
-               * menubar drives whatever editor is mounted. Greyed out
-               * when not in edit-on-page since the actions wouldn't
-               * have anything to act on. */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="h-7 px-2 rounded-md text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
-                  >
-                    Edit
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[220px]">
-                  <DropdownMenuItem
-                    disabled={viewMode !== "preview"}
-                    onClick={() => pagedEditorActionsRef.current?.undo()}
-                  >
-                    <Undo2 className="size-4 mr-2" /> Undo
-                    <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘Z</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={viewMode !== "preview"}
-                    onClick={() => pagedEditorActionsRef.current?.redo()}
-                  >
-                    <Redo2 className="size-4 mr-2" /> Redo
-                    <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘⇧Z</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={viewMode !== "preview"}
-                    onClick={() => pagedEditorActionsRef.current?.selectAll()}
-                  >
-                    <TextSelect className="size-4 mr-2" /> Select all
-                    <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘A</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={viewMode !== "preview"}
-                    onClick={() => pagedEditorActionsRef.current?.openFind()}
-                  >
-                    <Search className="size-4 mr-2" /> Find in letter…
-                    <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘F</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="h-7 px-2 rounded-md text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
-                  >
-                    View
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[220px]">
-                  <DropdownMenuItem onClick={() => setViewMode("edit")}>
-                    <FileEdit className="size-4 mr-2" />
-                    Sections
-                    {viewMode === "edit" && (
-                      <span className="ml-auto text-[10px]">✓</span>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setViewMode("preview")}>
-                    <Eye className="size-4 mr-2" />
-                    Page
-                    {viewMode === "preview" && (
-                      <span className="ml-auto text-[10px]">✓</span>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setFocusMode((f) => !f)}>
-                    {focusMode ? (
-                      <Minimize2 className="size-4 mr-2" />
-                    ) : (
-                      <Maximize2 className="size-4 mr-2" />
-                    )}
-                    {focusMode ? "Exit focus mode" : "Enter focus mode"}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="lg:hidden" />
-                  <DropdownMenuItem
-                    className="lg:hidden"
-                    onClick={() => setShowSidebar((s) => !s)}
-                  >
-                    <PanelLeft className="size-4 mr-2" /> Sections rail
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="lg:hidden"
-                    onClick={() => setAiDrawerOpen((s) => !s)}
-                  >
-                    <PanelRight className="size-4 mr-2" /> AI rail
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            {/* Approval-workflow pill — visible when the draft is in any
-             * non-draft state, OR when a reviewer is acting. Click on
-             * "changes_requested" pops the feedback panel. */}
-            {reviewStatus !== "draft" && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (reviewStatus === "changes_requested") setReviewFeedbackOpen(true);
-                }}
-                disabled={reviewStatus !== "changes_requested"}
-                className={
-                  "inline-flex items-center gap-1 ml-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full border shrink-0 transition " +
-                  (reviewStatus === "approved"
-                    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] border-[var(--ds-green-bg)]"
-                    : reviewStatus === "in_review"
-                      ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border-[var(--ds-amber-bg)]"
-                      : "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] border-[var(--ds-red-bg)] hover:brightness-95 cursor-pointer")
-                }
-                title={
-                  reviewStatus === "approved"
-                    ? "Draft approved — ready to send"
-                    : reviewStatus === "in_review"
-                      ? "Awaiting reviewer sign-off"
-                      : "Reviewer requested changes — click to read feedback"
-                }
-              >
-                {reviewStatus === "approved" ? (
-                  <CheckCircle2 className="size-3" />
-                ) : reviewStatus === "in_review" ? (
-                  <Send className="size-3" />
-                ) : (
-                  <MessageSquareWarning className="size-3" />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <FindBar open={findOpen} onClose={() => setFindOpen(false)} rootRef={paperRef} version={draft.updatedAt} />
+          <div ref={canvasRef} data-slot="letter-canvas" className="relative min-h-0 flex-1 overflow-auto bg-[var(--ds-canvas)]">
+            {viewMode === "preview" ? (
+              // Page view: the paginated editor. Read-only while locked or
+              // while DraftHR is writing (it holds a snapshot of the letter).
+              <div className="lw-pageview contents">
+                <PagedlyDocEditor
+                  draft={draft}
+                  readOnly={!canvasEditable || streaming}
+                  actionsRef={pagedEditorActionsRef}
+                  // The Home ribbon formats the page, so pagedly's own toolbar
+                  // only shows where there is no ribbon (phones, focus mode).
+                  toolbar={isPhone || focusMode}
+                />
+                {/* The same numbered citation boxes as the Sections view. */}
+                <CitationLayer draft={draft} containerRef={canvasRef} onViewSource={openEvidence} />
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  isPhone
+                    ? "px-3 pb-[96px] pt-3"
+                    : marginFits
+                      ? "pb-20 pr-4 pt-5"
+                      : cn("flex justify-center px-4 pt-5 md:px-6", isLargeViewport ? "pb-20" : "pb-28")
                 )}
-                <span className="hidden md:inline">
-                  {reviewStatus === "approved"
-                    ? "Approved"
-                    : reviewStatus === "in_review"
-                      ? "In review"
-                      : "Changes requested"}
-                </span>
-              </button>
-            )}
-            {/* Counsel-review pill — only on high-risk letters or where the
-             * letter type's metadata flags counsel review as required. */}
-            {(meta.legalReviewRequired || meta.riskClass === "high") && (
-              <button
-                type="button"
-                onClick={() => setCounselDialogOpen(true)}
-                className={
-                  "inline-flex items-center gap-1 ml-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full border shrink-0 transition hover:brightness-95 cursor-pointer " +
-                  (counselReview
-                    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] border-[var(--ds-green-bg)]"
-                    : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border-[var(--ds-amber-bg)]")
-                }
-                title={
-                  counselReview
-                    ? `Counsel-reviewed by ${counselReview.reviewedBy} on ${counselReview.reviewedOn}. Click to update.`
-                    : "Counsel review required before export. Click to mark reviewed."
-                }
+                style={!isPhone && marginFits ? { paddingLeft: CANVAS_PAD_L } : undefined}
               >
-                <ShieldCheck className="size-3" />
-                <span className="hidden md:inline">{counselReview ? "Reviewed" : "Needs review"}</span>
-              </button>
-            )}
-          </div>
-
-          {/* Column 2 — over the canvas. Tone (left), Edit/Preview
-           * (centred), pending/drafting/regenerate (right). On lg+ this
-           * sits directly above the canvas column so the items appear
-           * where they used to on the secondary toolbar. Below lg this
-           * inline-flows after the left cluster. */}
-          <div className="relative flex-1 lg:flex-none flex items-center justify-center lg:justify-start gap-2 min-w-0 lg:px-3">
-            {/* Mobile-only icon toolbar — Tone, Regenerate. On md:+ these
-             * actions live inside the File/Tools menubar above. */}
-            <div className="md:hidden flex items-center gap-2">
-              <DocumentPopover draft={draft} />
-            {globallyStreaming ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={stopStreaming}
-                title="Stop the running generation"
-                aria-label="Stop generation"
-              >
-                <StopCircle className="size-3.5" />
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={runGenerateAll}
-                title="Regenerate all sections"
-                aria-label="Regenerate all sections"
-              >
-                <Sparkles className="size-3.5" />
-              </Button>
-            )}
-            </div>
-
-            {/* Edit / Preview — centred over the canvas. On lg+ the
-             * grid cell IS the canvas column so a plain centre works.
-             * Below lg, absolute-position against the topbar so it
-             * sits in the viewport centre. */}
-            <div
-              className="inline-flex lg:absolute lg:left-1/2 lg:-translate-x-1/2 items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7 mx-auto"
-              role="tablist"
-              aria-label="View mode"
-            >
-              <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Sections" />
-              <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Page" />
-            </div>
-
-            {/* Right-of-canvas: Edit-on-page + Focus + pending pill +
-             * Drafting indicator. ml-auto pushes them to the right edge
-             * of the canvas column. */}
-            <div className="ml-auto flex items-center gap-2">
-              {/* Focus mode lives in the View menu (+ Esc to exit); the old
-               * always-hidden header button here was dead and was removed. */}
-              {(() => {
-                const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
-                if (pendingCount === 0) return null;
-
-                const onRejectAll = () => {
-                  const snap = draft.sections
-                    .filter((s) => s.pendingChange)
-                    .map((s) => ({ sectionId: s.id, pending: s.pendingChange! }));
-                  useDraftStore.getState().rejectAllPending(draft.id);
-                  toast(`${snap.length} pending ${snap.length === 1 ? "change" : "changes"} rejected`, {
-                    action: {
-                      label: "Undo",
-                      onClick: () => {
-                        const store = useDraftStore.getState();
-                        snap.forEach(({ sectionId, pending }) =>
-                          store.proposeSectionChange(draft.id, sectionId, pending)
-                        );
-                      },
-                    },
-                  });
-                };
-
-                const onAcceptAll = () => {
-                  // Snapshot the CANONICAL pre-diff html so undo can restore.
-                  // In inline diff mode s.html already carries the staged
-                  // <ins>/<del> marks — restoring that and re-diffing it would
-                  // garble the marks. pendingChange.prevHtml is the clean text
-                  // captured before the diff was staged; prefer it.
-                  const snap = draft.sections
-                    .filter((s) => s.pendingChange)
-                    .map((s) => ({
-                      sectionId: s.id,
-                      html: s.pendingChange!.prevHtml ?? s.html,
-                      pending: s.pendingChange!,
-                    }));
-                  useDraftStore.getState().acceptAllPending(draft.id);
-                  toast.success(`${snap.length} pending ${snap.length === 1 ? "change" : "changes"} accepted`, {
-                    action: {
-                      label: "Undo",
-                      onClick: () => {
-                        const store = useDraftStore.getState();
-                        snap.forEach(({ sectionId, html, pending }) => {
-                          store.updateSection(draft.id, sectionId, html);
-                          store.proposeSectionChange(draft.id, sectionId, pending);
-                        });
-                      },
-                    },
-                  });
-                };
-
-                return (
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
-                    <span>{pendingCount} pending</span>
-                    <button
-                      type="button"
-                      onClick={onRejectAll}
-                      className="hover:underline"
-                      title="Reject every pending AI proposal"
-                    >
-                      Reject all
-                    </button>
-                    <span className="text-[var(--ds-amber-fg)]/50">·</span>
-                    <button
-                      type="button"
-                      onClick={onAcceptAll}
-                      className="hover:underline font-semibold"
-                      title="Accept every pending AI proposal"
-                    >
-                      Accept all
-                    </button>
-                  </div>
-                );
-              })()}
-              {globallyStreaming && (
-                <span className="flex text-[12px] text-[var(--ds-muted)] items-center gap-1.5">
-                  <Loader2 className="size-3 animate-spin" /> Drafting…
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Column 3 — over the right rail / viewport-right on mobile.
-           * People/Invite → Evidence → ⋯ → primary CTA.
-           * (Pending/Drafting/Regenerate moved into column 2.) */}
-          <div className="ml-auto lg:ml-0 flex items-center gap-2 justify-end min-w-0 lg:px-4">
-            {/* People / Invite — AvatarStack is the trigger when
-             * collaborators exist; otherwise a plain Invite button. */}
-            <InvitePopover
-              draft={draft}
-              open={invitePopoverOpen}
-              onOpenChange={setInvitePopoverOpen}
-              trigger={
-                identities.length > 0 ? (
-                  <button
-                    type="button"
-                    className="hidden md:flex items-center gap-1 rounded-full pl-0.5 pr-1.5 py-0.5 -my-0.5 hover:bg-[var(--ds-line-2)] transition"
-                    aria-label="People on this letter — click to manage or invite"
-                    title="Manage people"
-                  >
-                    <AvatarStack
-                      size="md"
-                      max={2}
-                      people={identities.map((i) => ({
-                        seed: i.email ?? i.id,
-                        email: i.email,
-                        name: i.name,
-                        initials: i.initials,
-                        title: i.name + (i.email ? ` <${i.email}>` : ""),
-                      }))}
+                <div
+                  ref={wrapperRef}
+                  data-slot="letter-wrapper"
+                  className="relative w-full"
+                  style={{ maxWidth: isPhone ? undefined : pageW, minWidth: !isPhone && marginFits ? pageW : undefined }}
+                >
+                  <div className="mb-3 flex min-w-0 flex-col gap-3 empty:hidden">
+                    {draft.isTemplateSource && <TemplateSourceBanner draft={draft} onDiscard={discardTemplateSource} />}
+                    {draft.isTemplateSource && (
+                      <ConfirmDialog
+                        open={confirmDiscardTemplate}
+                        onOpenChange={setConfirmDiscardTemplate}
+                        title="Discard this template?"
+                        body="This deletes the template and any saved version of it. You cannot undo this."
+                        confirmLabel="Discard template"
+                        destructive
+                        onConfirm={doDiscardTemplateSource}
+                      />
+                    )}
+                    <LetterNotices
+                      draft={draft}
+                      journey={journey}
+                      review={viewerIsReviewer ? (reviewerOf ?? review) : review}
+                      viewerIsReviewer={viewerIsReviewer}
+                      viewerIsAsker={viewerIsAsker}
+                      matter={matter}
+                      employee={employee}
+                      onMessage={openReviewThread}
+                      onUndoSent={canSubmitForReview(role) ? undoSent : undefined}
+                      animateSent={sealAnimates}
                     />
-                    <span
-                      className="grid place-items-center size-5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
-                      aria-hidden
-                    >
-                      <UserPlus className="size-3" />
-                    </span>
-                  </button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="hidden md:inline-flex px-2 sm:px-3"
-                    aria-label="Invite"
+                    <DeadlineBanner draft={draft} />
+                    <RetryBanner event={retryEvent} />
+                  </div>
+
+                  {/* The letter, on one white page. */}
+                  <article
+                    ref={paperRef}
+                    aria-label="Letter"
+                    data-slot="letter-page"
+                    className={cn(
+                      "lw-paper relative bg-[var(--ds-surface)]",
+                      isPhone
+                        ? "rounded-[6px] px-5 pb-7 pt-6 shadow-[var(--ds-shadow-s)]"
+                        : "min-h-[905px] rounded-[3px] px-[60px] py-12 shadow-[var(--ds-shadow-paper)] max-lg:px-10",
+                      sealAnimates && "ds-glow-once"
+                    )}
+                    style={!isPhone && zoom !== 100 ? { zoom: zoom / 100 } : undefined}
                   >
-                    <UserPlus className="size-3.5" />
-                    <span className="hidden md:inline">Invite</span>
-                  </Button>
-                )
-              }
-            />
-            {/* Evidence button — primary discoverability path for the
-             * hybrid drawer. Tap to toggle the floating drawer; when
-             * pinned, this tap focuses the rail (which is always visible).
-             * Amber-tinted when there's evidence, muted when zero. Filled
-             * dark when the drawer is open OR pinned. */}
-            {(() => {
-              const evidenceCount = draft.evidence?.length ?? 0;
-              const hasEvidence = evidenceCount > 0;
-              const active = evidenceDrawerOpen || evidencePinned;
-              const onClick = () => {
-                if (evidencePinned) {
-                  // Focus the pinned rail — scroll-into-view + focus the
-                  // search input so keyboard users land somewhere useful.
-                  const search = document.querySelector<HTMLInputElement>(
-                    '[data-evidence-rail] input[type="search"]'
-                  );
-                  search?.focus();
-                  return;
-                }
-                setEvidenceDrawerOpen((v) => !v);
-              };
-              return (
-                <button
-                  type="button"
-                  onClick={onClick}
-                  aria-pressed={active}
-                  aria-label={
-                    evidencePinned
-                      ? "Focus pinned evidence rail"
-                      : evidenceDrawerOpen
-                      ? "Close evidence drawer"
-                      : "Open evidence drawer"
-                  }
-                  title={
-                    evidencePinned
-                      ? "Evidence is pinned — focus the rail"
-                      : "Open evidence drawer (Pin → for a permanent rail)"
-                  }
-                  className={
-                    "inline-flex items-center gap-1.5 h-7 transition shrink-0 rounded-md border " +
-                    (hasEvidence ? "px-2" : "w-7 justify-center") +
-                    " " +
-                    (active
-                      ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-                      : hasEvidence
-                      ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border-[var(--ds-amber-fg)]/25 hover:border-[var(--ds-amber-fg)]/50"
-                      : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]")
-                  }
-                >
-                  <Paperclip className="size-3.5" />
-                  {hasEvidence && (
-                    <span
-                      className={
-                        "tabular-nums text-[10px] font-bold px-1.5 py-px rounded-full min-w-[18px] text-center " +
-                        (active
-                          ? "bg-white/20 text-white"
-                          : "bg-white/70 text-[var(--ds-amber-fg)]")
-                      }
-                    >
-                      {evidenceCount}
-                    </span>
+                    {pageInner}
+                  </article>
+                  <CitationLayer draft={draft} containerRef={paperRef} onViewSource={openEvidence} />
+                  {quotedComments.length > 0 && (
+                    <CommentQuoteMarks comments={quotedComments} paperRef={paperRef} wrapperRef={wrapperRef} version={draft.updatedAt} />
                   )}
-                </button>
-              );
-            })()}
-            {/* Mobile-only ⋯ overflow — on md:+ all these actions live in
-             * the File/Tools/View menubar at the start of column 2. */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden size-8" aria-label="More">
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[220px]">
-                {/* Mobile-only: Invite people. On md:+ the trigger lives in
-                 * the topbar so we hide this item to avoid duplication. */}
-                <DropdownMenuItem
-                  className="md:hidden"
-                  onClick={() => setInvitePopoverOpen(true)}
-                >
-                  <UserPlus className="size-4 mr-2" /> Invite people…
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="md:hidden" />
-                <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
-                  <Settings2 className="size-4 mr-2" /> Edit details
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAllCommentsOpen(true)}>
-                  <MessageSquare className="size-4 mr-2" /> Comments
-                  {(() => {
-                    const n = (draft.comments ?? []).filter((c) => !c.resolved && !c.parentId).length;
-                    return n > 0 ? (
-                      <span className="ml-auto text-[10px] font-mono text-[var(--ds-muted)]">
-                        {n}
-                      </span>
-                    ) : null;
-                  })()}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTimelineDialogOpen(true)}>
-                  <Clock3 className="size-4 mr-2" /> Timeline
-                </DropdownMenuItem>
-                {/* Mobile-only: Focus toggle. On md:+ Focus has its own
-                 * topbar button so we hide this item to avoid duplication. */}
-                <DropdownMenuItem
-                  className="md:hidden"
-                  onClick={() => setFocusMode((f) => !f)}
-                >
-                  {focusMode ? (
-                    <Minimize2 className="size-4 mr-2" />
-                  ) : (
-                    <Maximize2 className="size-4 mr-2" />
+                  {marginFits && (
+                    <MarginLayer
+                      draft={draft}
+                      journey={journey}
+                      review={review}
+                      wrapperRef={wrapperRef}
+                      canResolve={canvasEditable}
+                      activity={activity}
+                      onAllVersions={() => {
+                        setActivityTab("versions");
+                        setActivityOpen(true);
+                      }}
+                      // A teammate whose review was recalled or sent
+                      // back has nothing to reply to here (LETTER-X44).
+                      onReplyComment={viewerIsReviewer && reviewerOf?.status !== "out" ? undefined : onFocusComment}
+                      onResolveComment={(commentId) => useDraftStore.getState().resolveComment(draft.id, commentId, true)}
+                      onJumpToSection={jumpToSection}
+                      left={pageW + MARGIN_GAP}
+                      reviewer={reviewerMargin}
+                    />
                   )}
-                  {focusMode ? "Exit focus mode" : "Enter focus mode"}
-                </DropdownMenuItem>
-                {/* Regenerate all / Stop moved out of this menu — they live
-                 * as a visible button in the topbar right cluster now. */}
-                {/* Rail toggles — only meaningful at < lg where the rails
-                 * are drawers. At lg+ both rails are persistent so these
-                 * items would be no-ops; we hide them via Tailwind. */}
-                <DropdownMenuSeparator className="lg:hidden" />
-                <DropdownMenuItem
-                  className="lg:hidden"
-                  onClick={() => setShowSidebar((s) => !s)}
-                >
-                  <PanelLeft className="size-4 mr-2" /> Toggle sections rail
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="lg:hidden"
-                  onClick={() => setAiDrawerOpen((s) => !s)}
-                >
-                  <PanelRight className="size-4 mr-2" /> Toggle details rail
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {/* Export removed from the editor topbar — the only export
-             * entry is now the Review step, which is the natural place to
-             * choose format after the final checklist. Editor stays focused
-             * on writing.
-             *
-             * Hybrid evidence: the dedicated Evidence step is gone; both
-             * modes go Edit → Review. The handoff card below the CTA gates
-             * the transition when evidence is missing / unused.
-             *
-             * Template-source drafts replace this with Save template — the
-             * editor IS the template authoring surface for these. */}
-            {draft.isTemplateSource ? (
-              <Button
-                size="sm"
-                disabled={globallyStreaming}
-                onClick={saveTemplateSource}
-                aria-label="Save template"
-                title="Save template"
-                className="px-2 sm:px-3"
-              >
-                <BookmarkPlus className="size-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">Save template</span>
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                disabled={globallyStreaming}
-                onClick={() => {
-                  // Soft check — opens the handoff card only when the
-                  // soft-rule trips. Light tier always proceeds; if the user
-                  // hit "Don't ask for this draft", proceed silently too.
-                  const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
-                  const reason = evaluateEvidenceHandoff(draft, tier);
-                  if (reason) {
-                    setHandoffReason(reason);
-                    return;
-                  }
-                  nav(`/editor/${draft.id}/review`);
-                }}
-                aria-label="Next: Review"
-                title="Next: Review"
-                className="px-2 sm:px-3"
-              >
-                <span className="hidden sm:inline">Review</span>
-                <ArrowRight className="size-4 sm:ml-1.5" />
-              </Button>
+                </div>
+                {isPhone && <PhoneDisclaimer />}
+              </div>
             )}
           </div>
         </div>
-      </header>
-
-      {/* Editor body — three columns on lg; below lg, sections + rail are drawers.
-       * Apple-minimal: left rail has enough room for the outline labels while
-       * keeping the writing canvas dominant. In focus mode both rails
-       * collapse and the canvas takes the full width. */}
-      <div
-        className={
-          "flex-1 grid grid-cols-1 min-h-0 relative overflow-hidden " +
-          // The 3rd grid column is only non-zero when AI is pinned inline.
-          // In drawer mode the AI overlay is fixed-position (doesn't take
-          // grid space), so the canvas always gets the full remaining width
-          // until the user pins. Evidence pinned uses the same 360px slot.
-          "lg:transition-[grid-template-columns] lg:duration-[360ms] lg:ease-out motion-reduce:lg:transition-none " +
-          (focusMode
-            ? "lg:grid-cols-1"
-            : pinnedDock !== null
-            ? "lg:grid-cols-[300px_minmax(0,1fr)_360px]"
-            : "lg:grid-cols-[300px_minmax(0,1fr)_0px]")
-        }
-      >
-        <aside
-          className={
-            "border-r border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 flex flex-col overflow-hidden " +
-            (focusMode
-              ? "hidden"
-              : showSidebar
-              ? "absolute inset-y-0 left-0 z-40 w-[280px] shadow-xl lg:static lg:shadow-none lg:w-auto"
-              : "hidden lg:flex")
-          }
-        >
-          <WizardSidebar
-            draft={draft}
-            current="edit"
-            activeSectionId={activeSectionId}
-            onSelectSection={(id) => {
-              setActiveSectionId(id);
-              setShowSidebar(false);
-              const el = document.querySelector(`[data-section-id="${id}"]`);
-              el?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-            disabled={globallyStreaming}
-            secondaryTabLabel={
-              draft.mode === "employee" ? "Rights" : "Compliance"
-            }
-            secondaryTab={
-              draft.mode === "employee" ? (
-                <EmployeeRail draft={draft} />
-              ) : (
-                <CompliancePanel draft={draft} />
-              )
-            }
-          />
-        </aside>
-
-        <main className="flex flex-col bg-[var(--ds-canvas)] min-w-0 min-h-0 relative">
-          {/* Secondary toolbar removed — its contents (DocumentPopover,
-           * Edit/Preview toggle, pending pill, streaming indicator)
-           * now live in the main topbar above. Regenerate-all is in
-           * the ⋯ overflow menu. Canvas gets +36px of vertical space. */}
-
-          {/* Focus-mode overlays. Anchored to <main> (which is `relative`).
-           * Outline pill (top-left) shows progress + the active section so the
-           * writer stays oriented; click to exit. AI bar (bottom-center) is a
-           * one-click jumper back to the agent rail — full composer is in the
-           * rail, this is just the affordance. Esc also exits. */}
-          {focusMode && (
-            <>
-              <button
-                type="button"
-                onClick={() => setFocusMode(false)}
-                className="absolute top-3 left-3 z-30 inline-flex items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-1.5 text-[11px] text-[var(--ds-muted)] shadow-sm hover:bg-[var(--ds-line-2)] transition"
-                title="Exit focus mode (Esc)"
-                aria-label="Exit focus mode"
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <Minimize2 className="size-3" />
-                  <span className="tabular-nums text-[var(--ds-body)] font-medium">
-                    {(() => {
-                      const idx = activeSectionId
-                        ? draft.sections.findIndex((s) => s.id === activeSectionId)
-                        : -1;
-                      const n = idx >= 0 ? idx + 1 : 1;
-                      return `${n} / ${draft.sections.length}`;
-                    })()}
-                  </span>
-                </span>
-                <span className="truncate max-w-[180px]">
-                  {(() => {
-                    const sec = activeSectionId
-                      ? draft.sections.find((s) => s.id === activeSectionId)
-                      : draft.sections[0];
-                    return sec?.title ?? "Letter";
-                  })()}
-                </span>
-                <span className="ml-1 px-1.5 py-0.5 rounded bg-[var(--ds-line-2)] text-[10px] font-mono text-[var(--ds-muted)]">
-                  Esc
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFocusMode(false);
-                  setRightTab("ai");
-                  setAiDrawerOpen(true);
-                  requestAnimationFrame(() => {
-                    const el = document.querySelector<HTMLTextAreaElement>(
-                      'textarea[placeholder*="Rewrite a section"]'
-                    );
-                    el?.focus();
-                  });
-                }}
-                className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 inline-flex items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 py-2.5 text-[12px] text-[var(--ds-muted)] shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:shadow-[0_10px_28px_rgba(0,0,0,0.10)] hover:bg-[var(--ds-surface)] transition min-w-[420px] max-w-[640px]"
-                title="Open AI agent (⌘L)"
-                aria-label="Open AI agent"
-              >
-                <Sparkles className="size-3.5 text-[var(--ds-muted)]" />
-                <span className="flex-1 text-left text-[var(--ds-muted)]">
-                  Ask the AI to rewrite, tighten, or add a clause…
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-[var(--ds-line-2)] text-[10px] font-mono text-[var(--ds-muted)]">
-                  ⌘L
-                </span>
-                <span className="inline-grid place-items-center size-7 rounded-full bg-[var(--ds-ink)] text-white">
-                  <ArrowUp className="size-3.5" />
-                </span>
-              </button>
-            </>
-          )}
-
-          <div className="flex-1 overflow-auto min-h-0">
-          {viewMode === "preview" ? (
-            // The Page view IS the pagedly editor (editable) — you land here
-            // directly, no read-only intermediate. Read-only when the draft
-            // can't be edited (review lock) OR while any AI generation is
-            // streaming — pagedly holds a mount-time snapshot, so editing on
-            // the page mid-stream would fight the still-updating store.
-            <PagedlyDocEditor
-              draft={draft}
-              readOnly={
-                !canvasEditable ||
-                globallyStreaming ||
-                draft.sections.some((s) => s.status === "streaming")
-              }
-              actionsRef={pagedEditorActionsRef}
-            />
-          ) : (
-            <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
-              {/* Matter breadcrumb + linked-employee chip — render above
-               * the title when the draft is linked to either. Both are
-               * subtle pill chips that link out to their respective pages. */}
-              {!draft.isTemplateSource && <MatterEmployeeChips draft={draft} />}
-              {draft.isTemplateSource && (
-                <TemplateSourceBanner draft={draft} onDiscard={discardTemplateSource} />
-              )}
-              {/* Editable title sits at the very top of the canvas, above
-               * the disclaimer + sections. Click to rename — Google
-               * Docs / Notion pattern. */}
-              <EditableTitleBar draft={draft} />
-              <InlineDisclaimer draft={draft} />
-              {/* Read-only-during-review banner. Surfaces when the viewer is
-               * acting as a reviewer on a draft they cannot edit. Keeps the
-               * lock state discoverable rather than mysterious. */}
-              {!canvasEditable && reviewStatus === "in_review" && (
-                <div className="rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] text-[12.5px] px-3 py-2 flex items-center gap-2">
-                  <Send className="size-3.5 shrink-0" />
-                  <span className="leading-snug">
-                    Read-only during review — toggle role in{" "}
-                    <Link to="/settings" className="underline font-medium">
-                      Settings
-                    </Link>{" "}
-                    to edit.
-                  </span>
-                </div>
-              )}
-              {!canvasEditable && reviewStatus === "approved" && (
-                <div className="rounded-md border border-[var(--ds-green-fg)]/30 bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] text-[12.5px] px-3 py-2 flex items-center gap-2">
-                  <CheckCircle2 className="size-3.5 shrink-0" />
-                  <span className="leading-snug">Approved — canvas locked. Clear to export.</span>
-                </div>
-              )}
-              <DeadlineBanner draft={draft} />
-              <RetryBanner event={retryEvent} />
-              {/* Inline-diff banner — shows N pending track-changes marks
-               * with Accept all / Reject all + a one-click toggle between
-               * inline diff (default) and the legacy card view. Returns
-               * null when no section has pending suggestions. */}
-              <InlineSuggestionBanner draft={draft} />
-              {draft.sections.map((section) => (
-                <div key={section.id}>
-                <SectionEditor
-                  draft={draft}
-                  section={section}
-                  isStreaming={section.status === "streaming"}
-                  active={activeSectionId === section.id}
-                  onFocus={() => setActiveSectionId(section.id)}
-                  onChange={(html) => updateSection(draft.id, section.id, html)}
-                  onRegenerate={(instr) => onRegenerateSection(section, instr)}
-                  onClear={() => updateSection(draft.id, section.id, "")}
-                  onShowHistory={() => setHistorySection(section)}
-                  onOpenCommentsThread={() => {
-                    // Without an inline anchor, pop the floating panel
-                    // at the section header's rect — a sensible default.
-                    const sectionEl = document.querySelector<HTMLElement>(
-                      `[data-section-id="${section.id}"]`
-                    );
-                    if (!sectionEl) return;
-                    setFloatingComment({
-                      anchor: {
-                        getRect: () => sectionEl.getBoundingClientRect(),
-                        containerEl: sectionEl,
-                      },
-                      // Open as new-thread mode for this section (most
-                      // common reason to click the section's Comments
-                      // button is to start one).
-                      mode: { kind: "new", sectionId: section.id },
-                    });
-                  }}
-                  onOpenEvidenceBinder={() => {
-                    setActiveSectionId(section.id);
-                    nav(`/editor/${draft.id}/evidence?section=${section.id}`);
-                  }}
-                  onFocusComment={onFocusComment}
-                  commentCount={commentCount(section.id)}
-                  onAcceptPending={() =>
-                    useDraftStore.getState().acceptSectionPending(draft.id, section.id)
-                  }
-                  onRejectPending={() =>
-                    useDraftStore.getState().rejectSectionPending(draft.id, section.id)
-                  }
-                  editable={canvasEditable}
-                />
-                {/* Reviewer "Suggest an edit" — only when the canvas is locked
-                 * for this reviewer during review, and the section isn't
-                 * already carrying a pending suggestion. Opens a separate
-                 * composer; the proposal comes back as an attributed diff. */}
-                {!canvasEditable && reviewStatus === "in_review" && !section.pendingChange && section.status !== "streaming" && (
-                  <div className="mt-1 mb-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setSuggestSection(section)}
-                      className="inline-flex items-center gap-1.5 text-[11.5px] font-medium px-2.5 h-7 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
-                    >
-                      <Lightbulb className="size-3" />
-                      Suggest an edit
-                    </button>
-                  </div>
-                )}
-                </div>
-              ))}
-              {globallyStreaming && (
-                <p className="text-xs text-muted-foreground flex items-center gap-2 mt-4">
-                  <Loader2 className="size-3 animate-spin" />
-                  Streaming sections from the model…
-                </p>
-              )}
-            </div>
-          )}
-          </div>
-        </main>
-
-        {/* Desktop right rail — rendered ONLY at lg:+ when AI is pinned.
-         * Two surfaces share the slot:
-         *   - Evidence rail (pinned mode, evidence-heavy work)
-         *   - AI agent rail (pinned mode only; unpinned → drawer overlay)
-         * Exactly one mounts at a time. The AI drawer overlay below handles
-         * the unpinned case at all viewports. Resizing
-         * across the breakpoint unmounts one and mounts the other;
-         * conversation persists via draft.aiChat. */}
-        {isLargeViewport && evidencePinned && (
-          <aside
-            data-evidence-rail
-            className={
-              "flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] " +
-              (focusMode ? "hidden" : "")
-            }
-          >
-            <EvidenceDrawer
-              draft={draft}
-              editor={null}
-              open
-              onOpenChange={() => { /* pinned mode ignores Sheet open state */ }}
-              pinned
-              onPinnedChange={handlePinnedChange}
-            />
-          </aside>
-        )}
-        {/* Desktop pinned AI rail — inline in the grid, no animation.
-         * Only mounts when AI is explicitly pinned. When unpinned the
-         * grid 3rd column collapses to 0px so the canvas reclaims space. */}
-        {isLargeViewport && !evidencePinned && pinnedDock === "ai" && !focusMode && (
-          <aside
-            className="flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)]"
-          >
-            <RightRail
-              draft={draft}
-              tab={rightTab}
-              onTabChange={setRightTab}
-              pendingComment={pendingComment}
-              onPendingCommentConsumed={() => setPendingComment(null)}
-              activeSectionId={activeSectionId}
-              onCollapse={unpinAll}
-              onPin={pinAI}
-              onUnpin={unpinAll}
-              isPinned
-            />
-          </aside>
-        )}
-
-        {/* AI drawer overlay — slides in from the right as a Sheet overlay
-         * at ALL viewports. Scrim behind. Tap scrim or chevron to close.
-         * Pin button converts to inline pinned rail (closes this overlay). */}
-        <button
-          type="button"
-          className={
-            "fixed inset-0 z-30 bg-black/30 transition-opacity duration-200 motion-reduce:transition-none " +
-            (aiDrawerOpen && pinnedDock !== "ai"
-              ? "opacity-100"
-              : "opacity-0 pointer-events-none")
-          }
-          aria-label="Close AI drawer"
-          aria-hidden={(!aiDrawerOpen || pinnedDock === "ai") || undefined}
-          onClick={() => setAiDrawerOpen(false)}
-        />
-        <AnimatePresence>
-          {aiDrawerOpen && pinnedDock !== "ai" && !focusMode && (
-            <motion.aside
-              key="ai-drawer-overlay"
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{
-                type: "spring",
-                stiffness: 340,
-                damping: 42,
-                mass: 0.9,
-              }}
-              className="fixed inset-y-0 right-0 z-40 w-full max-w-[420px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden"
-            >
-              <RightRail
-                draft={draft}
-                tab={rightTab}
-                onTabChange={setRightTab}
-                pendingComment={pendingComment}
-                onPendingCommentConsumed={() => setPendingComment(null)}
-                activeSectionId={activeSectionId}
-                onCollapse={() => setAiDrawerOpen(false)}
-                onPin={() => { pinAI(); setAiDrawerOpen(false); }}
-                onUnpin={unpinAll}
-                isPinned={false}
-              />
-            </motion.aside>
-          )}
-        </AnimatePresence>
-
-        {/* Mobile scrim — only covers showSidebar (sections rail overlay).
-         * The AI drawer has its own all-viewport scrim above. */}
-        <button
-          type="button"
-          className={
-            "lg:hidden fixed inset-0 z-30 bg-black/30 transition-opacity duration-300 motion-reduce:transition-none " +
-            (showSidebar
-              ? "opacity-100"
-              : "opacity-0 pointer-events-none")
-          }
-          aria-label="Close panel"
-          aria-hidden={!showSidebar || undefined}
-          tabIndex={!showSidebar ? -1 : undefined}
-          onClick={() => {
-            setShowSidebar(false);
-          }}
-        />
-
-        {/* Floating "Ask AI" pill — MOBILE.
-         * lg:hidden so it only shows below the desktop breakpoint.
-         * Visible whenever the AI drawer is closed; fades + scales away
-         * while it's open. Now mirrors desktop: opens drawer overlay. */}
-        {!focusMode && (
-          <button
-            type="button"
-            onClick={() => {
-              setRightTab("ai");
-              setAiDrawerOpen(true);
-            }}
-            className={
-              "lg:hidden fixed bottom-4 right-4 z-30 inline-flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_6px_18px_rgba(0,0,0,0.16)] hover:opacity-90 active:scale-[0.98] " +
-              "transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none " +
-              (aiDrawerOpen
-                ? "opacity-0 scale-90 pointer-events-none"
-                : "opacity-100 scale-100")
-            }
-            aria-label="Open AI agent"
-            aria-hidden={aiDrawerOpen || undefined}
-            tabIndex={aiDrawerOpen ? -1 : undefined}
-          >
-            <span className="grid place-items-center size-5 rounded-full bg-white/15">
-              <Sparkles className="size-3" />
-            </span>
-            <span className="drafthr-text-shimmer text-[12px] font-medium">Ask AI</span>
-          </button>
-        )}
-
-        {/* Desktop dock tray — Evidence + Ask AI pills at bottom-right.
-         * Visibility rules:
-         *   pinnedDock === null      → both pills shown
-         *   pinnedDock === "evidence"→ only Ask AI pill (Evidence is the rail)
-         *   pinnedDock === "ai"      → neither pill (AI is the rail)
-         * AnimatePresence keeps the tray mounted for the exit transition. lg:+ only. */}
-        <AnimatePresence>
-          {!focusMode && pinnedDock !== "ai" && (
-            <motion.div
-              key="desktop-dock-tray"
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              transition={{
-                type: "spring",
-                stiffness: 380,
-                damping: 28,
-                mass: 0.7,
-                delay: 0.08,
-              }}
-              className="hidden lg:flex fixed bottom-4 right-4 z-30 items-end gap-2"
-            >
-              {pinnedDock !== "evidence" && (
-                <button
-                  type="button"
-                  onClick={() => setEvidenceDrawerOpen(true)}
-                  className="inline-flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border border-amber-200 shadow-[0_6px_18px_rgba(0,0,0,0.10)] hover:opacity-95"
-                  aria-label="Open evidence drawer"
-                >
-                  <span className="grid place-items-center size-5 rounded-full bg-white/40">
-                    <Paperclip className="size-3" />
-                  </span>
-                  <span className="text-[12px] font-semibold">Evidence</span>
-                  {(draft.evidence?.length ?? 0) > 0 && (
-                    <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--ds-amber-fg)] text-white text-[10px] font-bold">
-                      {draft.evidence?.length}
-                    </span>
-                  )}
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setAiDrawerOpen(true)}
-                className="inline-flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_6px_18px_rgba(0,0,0,0.16)] hover:opacity-95"
-                aria-label="Open AI agent"
-              >
-                <span className="grid place-items-center size-5 rounded-full bg-white/15">
-                  <Sparkles className="size-3" />
-                </span>
-                <span className="drafthr-text-shimmer text-[12px] font-medium">Ask AI</span>
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
-      {/* Change A: floating comment panel — anchored to text marks
-       * (existing thread) or selection rects (new thread). */}
+      {/* Side panel (lg+): Edits / Progress / Chat, or the pinned evidence. */}
+      {isLargeViewport && pinnedDock !== null && !focusMode &&
+        (evidencePinned ? (
+          <aside
+            data-evidence-rail
+            className="flex w-[380px] min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)]"
+          >
+            <EvidenceDrawer
+              draft={sharedView ?? draft}
+              editor={null}
+              canAdd={canvasEditable && !viewerIsReviewer}
+              canManage={!viewerIsReviewer}
+              open
+              onOpenChange={() => {
+                /* pinned mode ignores Sheet open state */
+              }}
+              pinned
+              onPinnedChange={(next) => {
+                if (next) {
+                  setPinnedDock("evidence");
+                  setEvidenceDrawerOpen(false);
+                } else setPinnedDock("ai");
+              }}
+            />
+          </aside>
+        ) : (
+          <aside
+            aria-label="Letter side panel"
+            className="flex w-[380px] min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--ds-line)]"
+          >
+            {sidePanel(() => setPinnedDock(null), "Hide side panel")}
+          </aside>
+        ))}
+
+      {/* Outline: the sections and the compliance or rights checklist. */}
+      {showSidebar && !focusMode && (
+        <>
+          <button type="button" className="absolute inset-0 z-30 bg-[var(--ds-scrim)]" aria-label="Close panel" onClick={() => setShowSidebar(false)} />
+          <aside
+            aria-label="Outline"
+            className="absolute inset-y-0 left-0 z-40 flex w-[300px] max-w-[85vw] min-h-0 flex-col overflow-hidden border-r border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)]"
+          >
+            <WizardSidebar
+              draft={draft}
+              current="edit"
+              chrome={false}
+              activeSectionId={activeSectionId}
+              onSelectSection={(id) => {
+                setShowSidebar(false);
+                jumpToSection(id);
+              }}
+              disabled={streaming}
+              secondaryTabLabel={draft.mode === "employee" ? "Rights" : "Compliance"}
+              secondaryTab={draft.mode === "employee" ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />}
+            />
+          </aside>
+        </>
+      )}
+
+      {/* Desktop, panel hidden: a quiet way back to the assistant. */}
+      {isLargeViewport && pinnedDock === null && !focusMode && (
+        <button
+          type="button"
+          onClick={() => {
+            openPanelTab("chat");
+            focusComposer();
+          }}
+          className="fixed bottom-5 right-5 z-30 inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--ds-accent)] pl-2.5 pr-3.5 text-[13.5px] font-medium text-[var(--ds-on-accent)] shadow-[var(--ds-shadow-m)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+          aria-label="Open AI agent"
+        >
+          <Sparkles className="size-3.5" />
+          Ask DraftHR
+        </button>
+      )}
+
+      {/* Below lg: the side panel is a bottom sheet, opened from the bottom bar. */}
+      {!isLargeViewport && (
+        <>
+          {!focusMode && (
+            <PhoneBottomBar
+              bar={bar}
+              sheetTab={panelTab}
+              sheetOpen={aiDrawerOpen}
+              showMain={isPhone}
+              reviewPoints={reviewerMargin ? teammatePoints.length : undefined}
+              onProgress={() => {
+                if (aiDrawerOpen && panelTab !== "chat") setAiDrawerOpen(false);
+                else openPanelTab(!reviewerMargin && pendingEdits > 0 && panelTab === "edits" ? "edits" : "progress");
+              }}
+              onChat={() => {
+                if (aiDrawerOpen && panelTab === "chat") setAiDrawerOpen(false);
+                else openPanelTab("chat");
+              }}
+            />
+          )}
+          <button
+            type="button"
+            className={cn(
+              "fixed inset-0 z-30 bg-[var(--ds-scrim)] transition-opacity duration-200 motion-reduce:transition-none",
+              aiDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
+            )}
+            aria-label="Close AI drawer"
+            aria-hidden={!aiDrawerOpen || undefined}
+            tabIndex={aiDrawerOpen ? undefined : -1}
+            onClick={() => setAiDrawerOpen(false)}
+          />
+          <MobileBottomSheet open={aiDrawerOpen} snap={sheetSnap} onSnapChange={setSheetSnap} onDismiss={() => setAiDrawerOpen(false)}>
+            {sidePanel(() => setAiDrawerOpen(false), "Close panel")}
+          </MobileBottomSheet>
+        </>
+      )}
+
+      {!journeyPanelShown && <ReviewDialogsHost />}
+
+      {letterExport.gate}
+
       {floatingComment && (
         <FloatingCommentPanel
           draft={draft}
           anchor={floatingComment.anchor}
           mode={floatingComment.mode}
+          focusReply={floatingComment.focusReply}
+          returnFocus={floatingComment.returnFocus}
           onClose={() => setFloatingComment(null)}
         />
       )}
 
-      {/* Floating evidence drawer — only rendered when NOT pinned. When the
-       * user pins it, the same component is mounted inside the right-rail
-       * slot above (with `pinned` set). editor=null because the section-
-       * level editors each own their own Tiptap instance; the top-level
-       * drawer surfaces evidence for browsing/management, and the section
-       * pickers handle in-cursor insertion. */}
+      {/* The floating evidence drawer, when evidence is not pinned. */}
       {!evidencePinned && (
         <EvidenceDrawer
-          draft={draft}
+          draft={sharedView ?? draft}
           editor={null}
+          canAdd={canvasEditable && !viewerIsReviewer}
+          canManage={!viewerIsReviewer}
           open={evidenceDrawerOpen}
           onOpenChange={setEvidenceDrawerOpen}
           pinned={false}
-          onPinnedChange={handlePinnedChange}
+          onPinnedChange={(next) => {
+            if (next) {
+              setPinnedDock("evidence");
+              setEvidenceDrawerOpen(false);
+            } else setPinnedDock("ai");
+          }}
         />
       )}
 
-      {/* Handoff card — opens when the Review CTA detects a soft evidence
-       * issue (unused items, or heavy-tier with too few items). */}
+      {/* Unused or missing evidence, before review. Continue opens the picker. */}
       <EvidenceHandoff
         open={handoffReason !== null}
         reason={handoffReason}
         draftId={draft.id}
         onOpenChange={(next) => {
-          if (!next) setHandoffReason(null);
+          if (next) return;
+          setHandoffReason(null);
+          const back = handoffReturnFocus.current;
+          handoffReturnFocus.current = null;
+          // Opened from code, the dialog has no trigger to return focus to.
+          window.requestAnimationFrame(() => {
+            if (back?.isConnected && !document.querySelector('[role="dialog"][data-state="open"]')) back.focus();
+          });
         }}
         onOpenDrawer={() => {
           setHandoffReason(null);
           if (!evidencePinned) setEvidenceDrawerOpen(true);
-          // When pinned, the rail is already visible — nothing to "open".
         }}
         onContinue={() => {
           setHandoffReason(null);
-          nav(`/editor/${draft.id}/review`);
+          openReviewPicker();
         }}
       />
 
@@ -1849,10 +1832,7 @@ export function Editor() {
         onOpenChange={setCounselDialogOpen}
         existing={counselReview}
         onAttest={(reviewedBy, reviewedOn) => {
-          updateAnswers(draft.id, {
-            ...draft.answers,
-            _counselReview: { reviewedBy, reviewedOn, attestedAt: Date.now() },
-          });
+          updateAnswers(draft.id, { ...draft.answers, _counselReview: { reviewedBy, reviewedOn, attestedAt: Date.now() } });
           setCounselDialogOpen(false);
           toast.success("Marked reviewed", { id: "counsel-reviewed", duration: 1400 });
         }}
@@ -1865,31 +1845,27 @@ export function Editor() {
         }}
       />
 
-      {/* Change A: All-comments index dialog. Click a row to close the
-       * dialog, scroll the canvas to the highlighted text, and open
-       * the FloatingCommentPanel anchored to that mark. */}
+      {/* All comments: click one to jump to its highlight and open the thread. */}
       <Dialog.Root open={allCommentsOpen} onOpenChange={setAllCommentsOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] max-w-[calc(100vw-2rem)] max-h-[80vh] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] flex flex-col">
-            <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
-              <Dialog.Title className="m-0 text-[14px] font-semibold inline-flex items-center gap-2">
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
+          <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[520px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-xl)]">
+            <header className="flex shrink-0 items-center justify-between border-b border-[var(--ds-line-2)] px-4 py-3">
+              <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[14.5px] font-medium text-[var(--ds-ink)]">
                 <MessageSquare className="size-4 text-[var(--ds-muted)]" /> Comments
               </Dialog.Title>
-              <Dialog.Description className="sr-only">
-                Every unresolved comment thread in this draft. Click one to jump to it.
-              </Dialog.Description>
+              <Dialog.Description className="sr-only">Every comment thread in this letter. Choose one to jump to it.</Dialog.Description>
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="size-7 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                  className="grid size-8 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                   aria-label="Close comments"
                 >
-                  <ChevronLeft className="size-4 rotate-45" />
+                  <X className="size-4" />
                 </button>
               </Dialog.Close>
             </header>
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               {(() => {
                 const all = draft.comments ?? [];
                 const roots = all.filter((c) => !c.parentId);
@@ -1897,39 +1873,19 @@ export function Editor() {
                 const resolved = roots.filter((c) => c.resolved);
                 if (roots.length === 0) {
                   return (
-                    <div className="px-6 py-12 text-center text-[var(--ds-muted)] text-[13px]">
+                    <div className="px-6 py-12 text-center text-[13.5px] text-[var(--ds-muted)]">
                       No comments yet. Highlight any text in the document and click <em>+ Comment</em> to start a thread.
                     </div>
                   );
                 }
                 const jumpTo = (commentId: string) => {
                   setAllCommentsOpen(false);
-                  // Wait a frame so the dialog has unmounted before we
-                  // open the floating panel — otherwise the dialog's
-                  // overlay swallows the panel's outside-click guard.
                   requestAnimationFrame(() => onFocusComment(commentId));
                 };
                 return (
                   <div className="py-1">
-                    {unresolved.length > 0 && (
-                      <CommentGroup
-                        label="Unresolved"
-                        comments={unresolved}
-                        draft={draft}
-                        replyCounts={all}
-                        onJump={jumpTo}
-                      />
-                    )}
-                    {resolved.length > 0 && (
-                      <CommentGroup
-                        label="Resolved"
-                        comments={resolved}
-                        draft={draft}
-                        replyCounts={all}
-                        onJump={jumpTo}
-                        muted
-                      />
-                    )}
+                    {unresolved.length > 0 && <CommentGroup label="Unresolved" comments={unresolved} draft={draft} replyCounts={all} onJump={jumpTo} />}
+                    {resolved.length > 0 && <CommentGroup label="Resolved" comments={resolved} draft={draft} replyCounts={all} onJump={jumpTo} muted />}
                   </div>
                 );
               })()}
@@ -1938,84 +1894,86 @@ export function Editor() {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Change A: Timeline dialog — moved out of the right rail into
-       * an overflow-menu launched modal. */}
+      {/* Timeline (overflow menu and Review tab). */}
       <Dialog.Root open={timelineDialogOpen} onOpenChange={setTimelineDialogOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[calc(100vw-2rem)] max-h-[80vh] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] flex flex-col">
-            <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
-              <Dialog.Title className="m-0 text-[14px] font-semibold inline-flex items-center gap-2">
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
+          <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[560px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-xl)]">
+            <header className="flex shrink-0 items-center justify-between border-b border-[var(--ds-line-2)] px-4 py-3">
+              <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[14.5px] font-medium text-[var(--ds-ink)]">
                 <Clock3 className="size-4 text-[var(--ds-muted)]" /> Timeline
               </Dialog.Title>
-              <Dialog.Description className="sr-only">
-                Audit timeline of regenerations, exports, comments, and attestations on this draft.
-              </Dialog.Description>
+              <Dialog.Description className="sr-only">Audit timeline of regenerations, exports, comments and attestations on this letter.</Dialog.Description>
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="size-7 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                  className="grid size-8 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                   aria-label="Close timeline"
                 >
-                  <ChevronLeft className="size-4 rotate-45" />
+                  <X className="size-4" />
                 </button>
               </Dialog.Close>
             </header>
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               <TimelinePanel draft={draft} />
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
+      <ActivityDialog
+        open={activityOpen}
+        onOpenChange={setActivityOpen}
+        draft={draft}
+        review={review}
+        tab={activityTab}
+        onTabChange={setActivityTab}
+        onShowSectionHistory={(s) => {
+          setActivityOpen(false);
+          setHistorySection(s);
+        }}
+      />
+
+      <ChecksDialog
+        open={checksOpen}
+        onOpenChange={setChecksOpen}
+        draft={draft}
+        checks={checksOpen ? runHealthChecks(draft) : []}
+        canFix={canvasEditable && journey.stage === "draft"}
+        onFix={(c) => {
+          setChecksOpen(false);
+          void fixCheck(c);
+        }}
+        onJump={(sid) => {
+          setChecksOpen(false);
+          jumpToSection(sid);
+        }}
+      />
+
       <VersionHistoryDialog
         open={Boolean(historySection)}
         onClose={() => setHistorySection(null)}
         section={historySection}
         onRestore={(html) => {
-          if (historySection) {
-            // Version the CURRENT html before overwriting it — otherwise a
-            // restore silently drops the current content if it was never
-            // versioned (e.g. hand-edits, which only go through updateSection).
-            // Read the live section from the store, not the dialog snapshot.
-            const current = useDraftStore
-              .getState()
-              .drafts[draft.id]?.sections.find((s) => s.id === historySection.id);
-            if (current && current.html && current.html !== html) {
-              pushSectionVersion(draft.id, historySection.id, {
-                id: `ver_${Date.now()}`,
-                createdAt: Date.now(),
-                html: current.html,
-              });
-            }
-            updateSection(draft.id, historySection.id, html);
-            setHistorySection(null);
+          if (!historySection) return;
+          // Keep the current text as a version before replacing it.
+          const current = useDraftStore.getState().drafts[draft.id]?.sections.find((s) => s.id === historySection.id);
+          if (current && current.html && current.html !== html) {
+            pushSectionVersion(draft.id, historySection.id, { id: `ver_${Date.now()}`, createdAt: Date.now(), html: current.html });
           }
+          updateSection(draft.id, historySection.id, html);
+          setHistorySection(null);
+          toast("Version restored. The text it replaced is kept as a version.");
         }}
       />
 
-      <EditDetailsSheet
-        open={editDetailsOpen}
-        onOpenChange={setEditDetailsOpen}
-        draft={draft}
-      />
+      <EditDetailsSheet open={editDetailsOpen} onOpenChange={setEditDetailsOpen} draft={draft} />
 
-      <SaveAsTemplateModal
-        draft={draft}
-        open={saveAsTemplateOpen}
-        onOpenChange={setSaveAsTemplateOpen}
-      />
+      <SaveAsTemplateModal draft={draft} open={saveAsTemplateOpen} onOpenChange={setSaveAsTemplateOpen} />
 
-      {/* "Open on mobile" — surfaces the /m/:draftId link so the HR
-       * director can pick up reading on a phone. Pure link UX (no QR). */}
-      <MobileShareDialog
-        open={mobileShareOpen}
-        onOpenChange={setMobileShareOpen}
-        draftId={draft.id}
-      />
+      <MobileShareDialog open={mobileShareOpen} onOpenChange={setMobileShareOpen} draftId={draft.id} />
 
-      {/* Approval-workflow dialog — three kinds (submit / approve / request
-       * changes) share one modal. Closed when reviewDialogKind is null. */}
+      {/* Send for approval, approve, request changes: one dialog, three kinds. */}
       {reviewDialogKind && (
         <ReviewDialog
           open
@@ -2026,27 +1984,28 @@ export function Editor() {
         />
       )}
 
-      {/* Reviewer "Suggest an edit" composer — stages the reviewer's proposal
-       * as an attributed pendingChange (author = the current user). Reuses the
-       * AI suggestion machinery so the author Accepts/Rejects exactly as they
-       * would an AI proposal. */}
+      {/* The named teammate: selected words offer Suggest or Comment. */}
+      {reviewerMargin && (
+        <TeammateSelection draftId={draft.id} enabled={reviewerMargin.canWork} paperRef={paperRef} />
+      )}
+
+      {/* A reviewer's "Suggest an edit": an attributed proposal the author
+       * accepts or rejects like DraftHR's. */}
       {suggestSection && (
         <SuggestEditDialog
           open
           onOpenChange={(next) => !next && setSuggestSection(null)}
           section={suggestSection}
           onSubmit={(proposedHtml) => {
-            const me = meIdentity(profile);
+            const ident = meIdentity(profile);
             useDraftStore.getState().proposeSectionChange(draft.id, suggestSection.id, {
               id: uid("sug"),
               createdAt: Date.now(),
               proposedHtml,
               instruction: "Suggested edit",
               source: "review",
-              // Stable, cross-user attribution: email seeds the reviewer's
-              // colour (matches how avatars/comments seed), name is displayed.
-              authorId: me.email || me.name,
-              authorName: me.name,
+              authorId: ident.email || ident.name,
+              authorName: ident.name,
               diffViewMode: "card",
             });
             toast.success("Suggestion sent to the author");
@@ -2054,30 +2013,25 @@ export function Editor() {
         />
       )}
 
-      {/* Review-feedback panel — opens when the user clicks the
-       * changes_requested pill. Shows the most recent reviewer pushback. */}
+      {/* Review feedback: opened from the changes-requested pill. */}
       <Dialog.Root open={reviewFeedbackOpen} onOpenChange={setReviewFeedbackOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[calc(100vw-2rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] p-4 text-[13px]">
-            <div className="flex items-center gap-2 mb-2">
-              <MessageSquareWarning className="size-4 text-[var(--ds-red-fg)]" />
-              <Dialog.Title className="text-[14px] font-semibold text-[var(--ds-ink)] m-0">
-                Review feedback
-              </Dialog.Title>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
+          <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[440px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 text-[13.5px] shadow-[var(--ds-shadow-xl)]">
+            <div className="mb-2 flex items-center gap-2">
+              <MessageSquareWarning className="size-4 text-[var(--ds-amber-fg)]" />
+              <Dialog.Title className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">Review feedback</Dialog.Title>
             </div>
             {latestChangesRequest ? (
               <>
-                <Dialog.Description className="text-[12px] text-[var(--ds-muted)] mb-2">
+                <Dialog.Description className="mb-2 text-[12.5px] text-[var(--ds-muted)]">
                   From {latestChangesRequest.reviewerName} ·{" "}
-                  {new Date(latestChangesRequest.createdAt).toLocaleString()}
+                  {new Date(latestChangesRequest.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </Dialog.Description>
-                <p className="m-0 text-[13px] text-[var(--ds-ink)] whitespace-pre-wrap leading-relaxed">
-                  {latestChangesRequest.body}
-                </p>
+                <p className="m-0 whitespace-pre-wrap text-[13.5px] leading-relaxed text-[var(--ds-ink)]">{latestChangesRequest.body}</p>
               </>
             ) : (
-              <p className="m-0 text-[13px] text-[var(--ds-muted)]">No feedback recorded yet.</p>
+              <p className="m-0 text-[13.5px] text-[var(--ds-muted)]">No feedback recorded yet.</p>
             )}
             <div className="mt-4 flex items-center justify-end gap-2">
               {reviewStatus === "changes_requested" && canSubmitForReview(role) && (
@@ -2088,7 +2042,7 @@ export function Editor() {
                     setReviewDialogKind("submit");
                   }}
                 >
-                  <Send className="size-3.5 mr-1.5" />
+                  <Send className="mr-1.5 size-3.5" />
                   Re-submit for approval
                 </Button>
               )}
@@ -2102,75 +2056,29 @@ export function Editor() {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Refine dialog — Preview's entry point into the per-section refine
-       * flow. Edit/Split surfaces use the inline RefinePopover. */}
+      {/* Refine (overflow menu, Review tab): the change arrives as a suggested edit. */}
       <RefineDialog
         open={Boolean(refineSectionId)}
         onOpenChange={(next) => !next && setRefineSectionId(null)}
-        sectionTitle={
-          refineSectionId
-            ? draft.sections.find((s) => s.id === refineSectionId)?.title
-            : undefined
-        }
+        sectionTitle={refineSectionId ? draft.sections.find((s) => s.id === refineSectionId)?.title : undefined}
         onRefineRegenerate={(instruction) => {
           const sec = draft.sections.find((s) => s.id === refineSectionId);
-          if (sec) void onRegenerateSection(sec, instruction);
+          if (sec) void proposeSection(sec, instruction);
           setRefineSectionId(null);
         }}
         onPlainRegenerate={() => {
           const sec = draft.sections.find((s) => s.id === refineSectionId);
-          if (sec) void onRegenerateSection(sec);
+          if (sec) void proposeSection(sec);
           setRefineSectionId(null);
         }}
       />
-
-      {/* High-risk export gate moved to the Review step — it lives at the
-       * point of attestation, not in the editor. */}
-
     </div>
   );
 }
 
-type ViewMode = "edit" | "preview";
-
-function ViewModeButton({
-  mode,
-  current,
-  setMode,
-  icon,
-  label,
-}: {
-  mode: ViewMode;
-  current: ViewMode;
-  setMode: (m: ViewMode) => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  const active = current === mode;
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={() => setMode(mode)}
-      className={
-        "inline-flex items-center gap-1.5 px-3 h-7 text-xs font-medium transition-colors " +
-        (active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/60")
-      }
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
 /**
- * Index row for the All Comments dialog. Shows: section title (subtle),
- * the quoted span (italic, truncated), author + relative time, body
- * preview. Clicking the row dismisses the dialog and re-opens the
- * floating panel anchored to the thread's mark.
+ * A row in the all-comments dialog: the section, the quoted text, who and
+ * when, the start of the comment. Choosing it opens the thread.
  */
 function CommentGroup({
   label,
@@ -2181,15 +2089,7 @@ function CommentGroup({
   muted,
 }: {
   label: string;
-  comments: Array<{
-    id: string;
-    sectionId: string;
-    authorName: string;
-    body: string;
-    quote?: string;
-    createdAt: number;
-    resolved?: boolean;
-  }>;
+  comments: Array<{ id: string; sectionId: string; authorName: string; body: string; quote?: string; createdAt: number; resolved?: boolean }>;
   draft: { sections: { id: string; title: string }[]; comments?: { parentId?: string }[] };
   replyCounts: Array<{ id: string; parentId?: string }>;
   onJump: (commentId: string) => void;
@@ -2197,8 +2097,8 @@ function CommentGroup({
 }) {
   return (
     <div className={muted ? "opacity-60" : undefined}>
-      <div className="px-4 pt-3 pb-1 text-[10px] uppercase tracking-wide text-[var(--ds-muted)]">
-        {label} · {comments.length}
+      <div className="px-4 pb-1 pt-3 text-[12.5px] text-[var(--ds-muted)]">
+        {label} <span className="ds-mono">{comments.length}</span>
       </div>
       {comments.map((c) => {
         const section = draft.sections.find((s) => s.id === c.sectionId);
@@ -2208,26 +2108,18 @@ function CommentGroup({
             key={c.id}
             type="button"
             onClick={() => onJump(c.id)}
-            className="w-full text-left px-4 py-3 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-line-2)] transition group"
+            className="group w-full border-b border-[var(--ds-line-2)] px-4 py-3 text-left transition-colors duration-[120ms] last:border-b-0 hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
           >
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="text-[11px] text-[var(--ds-muted)] truncate">
-                {section?.title ?? "Section"}
-              </span>
-              <span className="text-[10px] text-[var(--ds-subtle)] tabular-nums shrink-0">
-                {commentRelTime(c.createdAt)}
-              </span>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="truncate text-[12px] text-[var(--ds-muted)]">{section?.title ?? "Section"}</span>
+              <span className="shrink-0 text-[11.5px] tabular-nums text-[var(--ds-subtle)]">{commentRelTime(c.createdAt)}</span>
             </div>
-            {c.quote && (
-              <p className="text-[11.5px] italic text-[var(--ds-muted)] m-0 mb-1 truncate">
-                "{c.quote}"
-              </p>
-            )}
-            <p className="text-[12.5px] text-[var(--ds-ink)] m-0 line-clamp-2">
+            {c.quote && <p className="m-0 mb-1 truncate text-[12.5px] italic text-[var(--ds-muted)]">"{c.quote}"</p>}
+            <p className="m-0 line-clamp-2 text-[13px] text-[var(--ds-ink)]">
               <span className="font-medium">{c.authorName}:</span> {c.body}
             </p>
             {replyN > 0 && (
-              <p className="text-[10.5px] text-[var(--ds-muted)] mt-1 m-0">
+              <p className="m-0 mt-1 text-[11.5px] text-[var(--ds-muted)]">
                 {replyN} {replyN === 1 ? "reply" : "replies"}
               </p>
             )}
@@ -2247,15 +2139,13 @@ function commentRelTime(ts: number): string {
   if (h < 24) return `${h}h`;
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d`;
-  return new Date(ts).toLocaleDateString();
+  return new Date(ts).toLocaleDateString("en-GB");
 }
 
-/* ----------------------------------------------------------------------------
- * CounselReviewDialog — quick attestation surface for the topbar pill.
- * Lets a reviewer mark a letter as counsel-reviewed without going through
- * the Export → Review flow first. Updates draft.answers._counselReview so
- * the existing derivation in Editor picks it up immediately.
- * --------------------------------------------------------------------------*/
+/**
+ * Counsel review: record who reviewed a high-risk letter, without going
+ * through an export first. Saved in the draft's answers.
+ */
 function CounselReviewDialog({
   open,
   onOpenChange,
@@ -2270,89 +2160,74 @@ function CounselReviewDialog({
   onClear: () => void;
 }) {
   const [reviewedBy, setReviewedBy] = useState(existing?.reviewedBy ?? "");
-  const [reviewedOn, setReviewedOn] = useState(
-    existing?.reviewedOn ?? new Date().toISOString().slice(0, 10)
-  );
+  const [reviewedOn, setReviewedOn] = useState(existing?.reviewedOn ?? todayDateOnly());
 
-  // Reset to existing values whenever the dialog opens.
   useEffect(() => {
     if (open) {
       setReviewedBy(existing?.reviewedBy ?? "");
-      setReviewedOn(existing?.reviewedOn ?? new Date().toISOString().slice(0, 10));
+      setReviewedOn(existing?.reviewedOn ?? todayDateOnly());
     }
   }, [open, existing?.reviewedBy, existing?.reviewedOn]);
 
   const canSubmit = reviewedBy.trim().length > 0 && reviewedOn.length > 0;
+  const field =
+    "h-9 w-full rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13.5px] text-[var(--ds-ink)] outline-none focus:border-[var(--ds-line-strong)] focus-visible:shadow-[var(--ds-focus-ring)]";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-        <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] max-w-[calc(100vw-2rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] p-5">
-          <Dialog.Title className="m-0 text-[15px] font-semibold inline-flex items-center gap-2">
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
+        <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[460px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 shadow-[var(--ds-shadow-xl)]">
+          <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[15px] font-medium text-[var(--ds-ink)]">
             <ShieldCheck className="size-4 text-[var(--ds-muted)]" />
             {existing ? "Update counsel review" : "Mark counsel-reviewed"}
           </Dialog.Title>
-          <Dialog.Description className="text-[12px] text-[var(--ds-muted)] mt-1 mb-4">
-            High-risk letters require sign-off before export. Recording the
-            attestation here unlocks export and stamps the audit trail.
+          <Dialog.Description className="mb-4 mt-1 text-[12.5px] text-[var(--ds-muted)]">
+            High-risk letters need sign-off before export. Recording it here unlocks export and adds it to the audit trail.
           </Dialog.Description>
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[12px] font-medium text-[var(--ds-ink)] mb-1">
+              <label htmlFor="counsel-by" className="mb-1 block text-[12.5px] font-medium text-[var(--ds-ink)]">
                 Reviewer name *
               </label>
               <input
+                id="counsel-by"
                 type="text"
                 value={reviewedBy}
                 onChange={(e) => setReviewedBy(e.target.value)}
                 placeholder="Counsel name, role"
-                className="w-full h-9 rounded-md border border-[var(--ds-line)] bg-white px-3 text-[13px] outline-none focus:border-[var(--ds-ink)]"
+                className={field}
                 autoFocus
               />
             </div>
             <div>
-              <label className="block text-[12px] font-medium text-[var(--ds-ink)] mb-1">
+              <label htmlFor="counsel-on" className="mb-1 block text-[12.5px] font-medium text-[var(--ds-ink)]">
                 Reviewed on *
               </label>
-              <input
-                type="date"
-                value={reviewedOn}
-                onChange={(e) => setReviewedOn(e.target.value)}
-                className="w-full h-9 rounded-md border border-[var(--ds-line)] bg-white px-3 text-[13px] outline-none focus:border-[var(--ds-ink)]"
-              />
+              <input id="counsel-on" type="date" value={reviewedOn} onChange={(e) => setReviewedOn(e.target.value)} className={field} />
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-5">
+          <div className="mt-5 flex items-center justify-between">
             <div>
               {existing && (
                 <button
                   type="button"
                   onClick={onClear}
-                  className="text-[12px] text-[var(--ds-muted)] hover:text-destructive transition"
+                  className="rounded-[6px] text-[12.5px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:text-[var(--ds-red-fg)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                 >
                   Clear attestation
                 </button>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="h-8 px-3 rounded-md border border-[var(--ds-line)] text-[12px] hover:bg-[var(--ds-line-2)]"
-              >
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!canSubmit}
-                onClick={() => onAttest(reviewedBy.trim(), reviewedOn)}
-                className="h-8 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-medium disabled:opacity-40 hover:opacity-90"
-              >
+              </Button>
+              <Button size="sm" disabled={!canSubmit} onClick={() => onAttest(reviewedBy.trim(), reviewedOn)}>
                 {existing ? "Update" : "Mark reviewed"}
-              </button>
+              </Button>
             </div>
           </div>
         </Dialog.Content>

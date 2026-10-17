@@ -1,4 +1,5 @@
-import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
+import { toast } from "sonner";
+import { useEditor, EditorContent, BubbleMenu, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Underline from "@tiptap/extension-underline";
@@ -20,13 +21,15 @@ import { isAllowedEmbeddedImageFile, isSafeImageDataUrl } from "@/lib/safe-data-
 const MAX_EMBED_BYTES = 5 * 1024 * 1024;
 async function readImageAsDataUrl(file: File): Promise<string | null> {
   if (!isAllowedEmbeddedImageFile(file)) {
-    alert("Please use a PNG, JPEG, WEBP, or GIF image.");
+    toast.error("That image type cannot go in the letter", {
+      description: "Use a PNG, JPEG, WEBP or GIF image.",
+    });
     return null;
   }
   if (file.size > MAX_EMBED_BYTES) {
-    alert(
-      `${file.name} is larger than 5 MB. Add it as evidence via the 📎 button instead — that path stores the original file at full quality and references it from the section.`
-    );
+    toast.error(`${file.name} is larger than 5 MB`, {
+      description: "Add it as evidence with the paperclip button instead. That keeps the original file at full quality and references it from the section.",
+    });
     return null;
   }
   return new Promise<string | null>((resolve) => {
@@ -41,14 +44,16 @@ async function readImageAsDataUrl(file: File): Promise<string | null> {
 }
 import { useEffect, useRef, useState } from "react";
 import type { Draft, Section } from "@/lib/letters/types";
+import { sectionTitleText } from "@/lib/letters/display";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { FileText, Loader2, History, Trash2, MessageSquarePlus, Sparkles, Check, X } from "lucide-react";
+import { FileText, FolderOpen, Loader2, History, Trash2, MessageSquarePlus, Sparkles, Check, X } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
 import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
 import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
+import { RemoteImageEmbed } from "@/lib/tiptap/remote-image-embed";
 import { RefinePopover } from "./RefinePopover";
 import { CommentPopover } from "./CommentPopover";
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
@@ -88,6 +93,25 @@ type Props = {
   /** When false (e.g. draft is awaiting review and viewer is a reviewer,
    * or status is "approved"), Tiptap blocks edits. Defaults to true. */
   editable?: boolean;
+  /**
+   * "card" (default): the bordered section card used by the Evidence step.
+   * "paper": the 14B letter workspace, where sections sit on one white page
+   * with quiet titles and hover-only section actions.
+   */
+  variant?: "card" | "paper";
+  /** Hide the per-section format toolbar (the document bar's format row
+   * drives the focused section instead). */
+  hideToolbar?: boolean;
+  /** The author's section chrome: the hover actions (attach, evidence,
+   * comment, history, clear, Refine) and the selection "Comment" bubble.
+   * Off for a teammate reviewer, who has their own Suggest and Comment
+   * controls. Defaults to true. */
+  authorChrome?: boolean;
+  /** Reports this section's editor when it gains focus, so the document
+   * bar can drive formatting for whichever section is being edited. */
+  onEditorFocus?: (editor: Editor) => void;
+  /** Called once the section's editor exists, so the toolbar has a target before anything is focused. */
+  onEditorReady?: (editor: Editor) => void;
 };
 
 export function SectionEditor({
@@ -107,7 +131,17 @@ export function SectionEditor({
   active,
   onFocus,
   editable = true,
+  variant = "card",
+  hideToolbar = false,
+  authorChrome = true,
+  onEditorFocus,
+  onEditorReady,
 }: Props) {
+  const paper = variant === "paper";
+  const onEditorFocusRef = useRef(onEditorFocus);
+  onEditorFocusRef.current = onEditorFocus;
+  const onEditorReadyRef = useRef(onEditorReady);
+  onEditorReadyRef.current = onEditorReady;
   const lastWrittenContent = useRef<string>(section.html);
   const linkedEvidence = linkedEvidenceForSection(draft, section.id);
 
@@ -123,7 +157,7 @@ export function SectionEditor({
       StarterKit.configure({ codeBlock: false, code: false }),
       Underline,
       Link.configure({ openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer" } }),
-      Placeholder.configure({ placeholder: `Write the ${section.title.toLowerCase()}…` }),
+      Placeholder.configure({ placeholder: `Write the ${sectionTitleText(section.title).toLowerCase()}…` }),
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
@@ -164,6 +198,10 @@ export function SectionEditor({
           style: "max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0;",
         },
       }),
+      // Images pasted or dropped from a web page arrive with a remote src,
+      // which the export sanitiser drops. Embed them as data URLs right away
+      // (or leave a visible "[image not embedded]" note when the fetch fails).
+      RemoteImageEmbed,
       // Word-doc-style alignment (left / center / right / justify) on
       // paragraphs + headings. Applied via a data-text-align attribute
       // that the sanitiser already preserves on <p>/<h*>.
@@ -182,7 +220,10 @@ export function SectionEditor({
         onChange(html);
       }
     },
-    onFocus,
+    onFocus: ({ editor: ed }) => {
+      onFocus();
+      onEditorFocusRef.current?.(ed as Editor);
+    },
     editorProps: {
       handleClickOn(_view, _pos, _node, _nodePos, event) {
         const target = event.target as HTMLElement | null;
@@ -330,6 +371,11 @@ export function SectionEditor({
   // jitter where text appears to wrap mid-line as the doc rebuilds.
   // 60ms is faster than the eye can perceive (~16 fps still feels smooth)
   // but lets the browser settle between updates.
+  // Give the toolbar a target once the editor exists (after mount).
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) onEditorReadyRef.current?.(editor as Editor);
+  }, [editor]);
+
   useEffect(() => {
     if (!editor) return;
     if (section.html === editor.getHTML()) return;
@@ -363,41 +409,89 @@ export function SectionEditor({
   return (
     <section
       data-section-id={section.id}
+      data-section-kind={section.sectionId}
       data-streaming={isStreaming || undefined}
       className={cn(
-        // Mobile: strip the card chrome so text gets full viewport width
-        // — section title becomes a top divider only. Card returns at md:+.
-        "section-node bg-white transition-shadow",
-        "md:rounded-md md:border",
-        active
-          ? "md:border-foreground/20 md:shadow-sm"
-          : "md:border-letter-rule",
-        isStreaming && "md:border-primary/40",
-        // On mobile, draw a subtle top divider between stacked sections
-        // (except the first — visual handled by sibling spacing).
-        "[&:not(:first-child)]:border-t [&:not(:first-child)]:border-letter-rule md:[&:not(:first-child)]:border-t-0"
+        paper
+          ? // Paper: no card chrome. Sections flow down one white page; a
+            // faint wash marks the section being edited.
+            // The hover menu floats above the text (no reserved height), so
+            // the page reads as one letter and nothing jumps on hover.
+            "section-node lw-section group/sec relative"
+          : [
+              // Mobile: strip the card chrome so text gets full viewport width
+              // and the section title becomes a top divider only. Card returns at md:+.
+              "section-node bg-white transition-shadow",
+              "md:rounded-md md:border",
+              active
+                ? "md:border-foreground/20 md:shadow-sm"
+                : "md:border-letter-rule",
+              isStreaming && "md:border-primary/40",
+              // On mobile, draw a subtle top divider between stacked sections
+              // (except the first; visual handled by sibling spacing).
+              "[&:not(:first-child)]:border-t [&:not(:first-child)]:border-letter-rule md:[&:not(:first-child)]:border-t-0",
+            ],
       )}
       onClick={onFocus}
     >
-      <header className="flex items-center justify-between gap-2 px-3 py-2 md:border-b md:border-letter-rule">
+      <header
+        className={cn(
+          "flex items-center justify-between gap-2",
+          paper
+            ? // Phones: a row in the flow at the top of the section being
+              // edited, so it pushes the text down rather than sitting over
+              // the last line of the paragraph above (LETTER-X13). Wider
+              // screens: a column in the page's right margin, beside the
+              // section, so it never covers the text either.
+              "pointer-events-none z-20 font-sans max-md:relative max-md:mb-1.5 max-md:justify-end md:absolute md:left-full md:right-auto md:top-0 md:ml-1.5 md:flex-col md:items-start md:justify-start md:gap-1 lg:ml-3"
+            : "px-3 py-2 md:border-b md:border-letter-rule",
+        )}
+      >
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground truncate">
-            {section.title}
+          <span
+            className={
+              paper
+                ? "sr-only"
+                : "text-[10px] uppercase tracking-[0.18em] text-muted-foreground truncate"
+            }
+          >
+            {sectionTitleText(section.title)}
           </span>
           {isStreaming && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-primary">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 text-[11px] text-[var(--ds-blue-fg)]",
+                paper && "rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1 text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)]",
+              )}
+            >
               <Loader2 className="size-3 animate-spin" />
-              drafting
+              Drafting
             </span>
           )}
-          {section.status === "edited" && (
-            <span className="inline-flex items-center text-[10px] text-amber-700">edited</span>
+          {section.status === "edited" && !paper && (
+            <span className="inline-flex items-center text-[11px] text-[var(--ds-amber-fg)]">Edited</span>
           )}
-          {section.status === "ready" && (
-            <span className="inline-flex items-center text-[10px] text-green-700">ready</span>
+          {section.status === "ready" && !paper && (
+            <span className="inline-flex items-center text-[11px] text-[var(--ds-green-fg)]">Ready</span>
           )}
         </div>
-        <div className="flex items-center gap-0.5">
+        {authorChrome && (<div
+          className={cn(
+            "flex items-center gap-0.5",
+            // Paper: a small floating menu over the section's top right,
+            // shown when the section is hovered, focused or being edited.
+            paper &&
+              "pointer-events-auto rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-0.5 shadow-[var(--ds-shadow-m)] transition-[opacity,visibility] duration-[120ms] md:invisible md:opacity-0 md:group-hover/sec:visible md:group-hover/sec:opacity-100 md:group-focus-within/sec:visible md:group-focus-within/sec:opacity-100",
+            // The column: one button per row, and an invisible strip across
+            // the gap to the text so the pointer can reach it without the
+            // menu closing.
+            paper &&
+              "md:relative md:flex-col md:before:absolute md:before:inset-y-0 md:before:right-full md:before:w-3 md:before:content-['']",
+            // Phones: only the section being edited shows its actions.
+            paper && !active && "max-md:hidden",
+            paper && active && "md:visible md:opacity-100",
+          )}
+        >
           {/* Section-header paperclip — the primary "insert evidence" affordance.
            *
            * Behaviour:
@@ -429,8 +523,8 @@ export function SectionEditor({
                     e.stopPropagation();
                     onOpenEvidenceBinder?.();
                   }}
-                  aria-label="Open Evidence & Attachments — add evidence first"
-                  title="No evidence yet — click to open Evidence & Attachments"
+                  aria-label="Open evidence and attachments. Add evidence first."
+                  title="No evidence yet. Click to open Evidence & Attachments"
                 >
                   <Paperclip className="size-3.5" />
                 </Button>
@@ -451,7 +545,7 @@ export function SectionEditor({
               <Button
                 size="icon"
                 variant="ghost"
-                className="size-7 relative"
+                className="size-7 relative text-[var(--ds-muted)]"
                 onMouseDown={(e) => {
                   e.stopPropagation();
                   if (editor && !editor.isFocused) {
@@ -466,7 +560,7 @@ export function SectionEditor({
                 }}
                 aria-label={
                   linkedEvidence.length > 0
-                    ? `${linkedEvidence.length} linked — insert evidence at cursor`
+                    ? `${linkedEvidence.length} linked. Insert evidence at the cursor.`
                     : "Insert evidence at cursor"
                 }
                 title={
@@ -477,7 +571,7 @@ export function SectionEditor({
               >
                 <Paperclip className="size-3.5" />
                 {linkedEvidence.length > 0 && (
-                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
+                  <span className="ds-mono absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-semibold rounded-full bg-[var(--ds-accent)] text-[var(--ds-on-accent)]">
                     {linkedEvidence.length}
                   </span>
                 )}
@@ -498,6 +592,21 @@ export function SectionEditor({
               />
             );
           })()}
+          {paper && onOpenEvidenceBinder && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenEvidenceBinder();
+              }}
+              aria-label="Evidence for this section"
+              title="Evidence for this section"
+            >
+              <FolderOpen className="size-3.5" />
+            </Button>
+          )}
           <CommentPopover
             draft={draft}
             sectionId={section.id}
@@ -519,7 +628,7 @@ export function SectionEditor({
               >
                 <MessageSquarePlus className="size-3.5" />
                 {commentCount > 0 && (
-                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
+                  <span className="ds-mono absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-semibold rounded-full bg-[var(--ds-accent)] text-[var(--ds-on-accent)]">
                     {commentCount}
                   </span>
                 )}
@@ -541,32 +650,42 @@ export function SectionEditor({
             variant="ghost"
             className="size-7"
             onClick={(e) => { e.stopPropagation(); onClear(); }}
-            disabled={isStreaming}
+            disabled={isStreaming || !editable}
             aria-label="Clear section"
           >
             <Trash2 className="size-3.5" />
           </Button>
           <RefinePopover
-            disabled={isStreaming}
+            disabled={isStreaming || !editable}
             onRefineRegenerate={(instruction) => onRegenerate(instruction)}
             onPlainRegenerate={() => onRegenerate()}
             trigger={
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={isStreaming}
-                className="h-7 px-2 text-xs"
+                disabled={isStreaming || !editable}
+                className={cn("h-7 px-2 text-xs", paper && "md:w-7 md:px-0")}
                 onClick={(e) => e.stopPropagation()}
+                aria-label={paper ? "Refine this section" : undefined}
+                title={paper ? "Refine this section" : undefined}
               >
-                <Sparkles className="size-3 mr-1" />
-                Regenerate
+                <Sparkles className={cn("size-3 mr-1", paper && "md:mr-0")} />
+                {paper ? <span className="md:sr-only">Refine</span> : "Regenerate"}
               </Button>
             }
           />
-        </div>
+        </div>)}
       </header>
-      {linkedEvidence.length > 0 && (
-        <div className="flex items-center gap-2 border-b border-letter-rule bg-[var(--ds-surface-2)] px-3 py-1.5 text-[11px] text-[var(--ds-muted)]">
+      {linkedEvidence.length > 0 && !paper && (
+        <div
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--ds-muted)]",
+            paper
+              ? "mb-1 rounded-[var(--ds-r-s)] bg-[var(--ds-surface-2)] font-sans md:hidden md:group-hover/sec:flex md:group-focus-within/sec:flex"
+              : "border-b border-letter-rule bg-[var(--ds-surface-2)]",
+            paper && active && "md:flex",
+          )}
+        >
           <FileText className="size-3.5 shrink-0" />
           <span className="shrink-0 font-medium text-[var(--ds-body)]">Evidence</span>
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
@@ -595,7 +714,11 @@ export function SectionEditor({
           </button>
         </div>
       )}
-      {active && <EditorToolbar editor={editor} draft={draft} />}
+      {active && !hideToolbar && (
+        <div className={cn(paper && "mb-2 overflow-hidden rounded-[var(--ds-r-s)] border border-[var(--ds-line)]")}>
+          <EditorToolbar editor={editor} draft={draft} />
+        </div>
+      )}
 
       {/* Pending AI change for this section. Two render modes:
        *   - "card" (legacy): Cursor-style before/after card above the editor.
@@ -603,7 +726,7 @@ export function SectionEditor({
        *     <ins>/<del> marks rendered by the editor; the card is skipped
        *     and per-suggestion accept/reject runs from the floating bubble. */}
       {section.pendingChange && (section.pendingChange.diffViewMode ?? "inline") === "card" && (
-        <div className="px-7 pt-4">
+        <div className={paper ? "pb-2 pt-1 font-sans" : "px-7 pt-4"}>
           <PendingChangeCard
             section={section}
             canResolve={editable}
@@ -613,8 +736,8 @@ export function SectionEditor({
         </div>
       )}
 
-      <div className="px-3 py-3 md:px-7 md:py-5">
-        {editor && (
+      <div className={paper ? "pb-3" : "px-3 py-3 md:px-7 md:py-5"}>
+        {editor && authorChrome && (
           <BubbleMenu
             editor={editor}
             tippyOptions={{
@@ -647,7 +770,7 @@ export function SectionEditor({
                 e.preventDefault();
                 openCommentPopover();
               }}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md shadow-sm bg-[var(--ds-ink)] text-white hover:opacity-90"
+              className="inline-flex items-center gap-1 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2 py-1 font-sans text-xs font-medium text-[var(--ds-on-accent)] shadow-[var(--ds-shadow-m)] hover:bg-[var(--ds-accent-hover)]"
             >
               <MessageSquarePlus className="size-3" />
               Comment
@@ -655,14 +778,17 @@ export function SectionEditor({
           </BubbleMenu>
         )}
         {/* Edit mode uses Tailwind Typography's prose-sm — sans-serif
-         * (Geist, inherited from body), comfortable line-height, designed
+         * (Inter, inherited from body), comfortable line-height, designed
          * for writing. The serif look of the export render lives in
          * Preview (paged.js) and Edit-on-page (single-page contenteditable
          * — both use Iowan Old Style). Two intentional fonts: one for
          * writing, one for proofing. */}
         <EditorContent
           editor={editor}
-          className="prose prose-sm max-w-none focus:outline-none [&_p]:my-2 [&_p]:leading-relaxed [&_strong]:font-semibold [&_a]:underline [&_table]:border [&_table]:border-letter-rule [&_th]:border [&_th]:border-letter-rule [&_td]:border [&_td]:border-letter-rule [&_th]:bg-muted/40 [&_th]:text-left [&_th]:p-2 [&_td]:p-2"
+          className={cn(
+            "prose max-w-none focus:outline-none [&_strong]:font-semibold [&_a]:underline [&_table]:border [&_table]:border-letter-rule [&_th]:border [&_th]:border-letter-rule [&_td]:border [&_td]:border-letter-rule [&_th]:bg-muted/40 [&_th]:text-left [&_th]:p-2 [&_td]:p-2",
+            paper ? "prose-base" : "prose-sm [&_p]:my-2 [&_p]:leading-relaxed",
+          )}
         />
       </div>
       {/* Pattern D — Evidence drawer. Mounted once per section, opens when
@@ -679,7 +805,9 @@ export function SectionEditor({
        * clicked <ins>/<del> mark. Single-suggestion target (vs the
        * canvas-level "Accept all" banner). Closes on outside click via the
        * useEffect below. */}
-      {pendingSuggestion && (
+      {/* Locked drafts (approved, viewer, reviewer in review) can't accept or
+       * reject suggestions; the bubble only appears where editing is allowed. */}
+      {pendingSuggestion && editable && (
         <SuggestionAcceptBubble
           rect={pendingSuggestion.rect}
           kind={pendingSuggestion.kind}
@@ -753,16 +881,16 @@ function SuggestionAcceptBubble({
     <div
       ref={ref}
       role="dialog"
-      aria-label={`${kind === "insertion" ? "Proposed insertion" : "Proposed deletion"} — accept or reject`}
-      className="fixed z-50 inline-flex items-center gap-1 rounded-md shadow-md bg-[var(--ds-ink)] text-white px-1.5 py-1 text-[11.5px]"
+      aria-label={`${kind === "insertion" ? "Proposed insertion" : "Proposed deletion"}: accept or reject`}
+      className="fixed z-50 inline-flex items-center gap-1 rounded-[var(--ds-r-m)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-1.5 py-1 font-sans text-[12px] text-[var(--ds-ink)] shadow-[var(--ds-shadow-m)]"
       style={{ top, left }}
     >
       <span
         className={
-          "px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-[0.06em] " +
+          "rounded-[var(--ds-r-s)] px-1.5 py-0.5 text-[11px] font-medium " +
           (kind === "insertion"
-            ? "bg-[var(--ds-green-fg)]/30"
-            : "bg-[var(--ds-red-fg)]/40")
+            ? "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]"
+            : "bg-[var(--ds-surface-2)] text-[var(--ds-muted)]")
         }
         title={body ?? undefined}
       >
@@ -771,7 +899,7 @@ function SuggestionAcceptBubble({
       <button
         type="button"
         onClick={onAccept}
-        className="inline-flex items-center gap-1 px-2 h-6 rounded-md bg-[var(--ds-green-fg)] text-white hover:brightness-110 font-medium"
+        className="inline-flex h-6 items-center gap-1 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2 font-medium text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
         title="Accept this suggestion"
       >
         <Check className="size-3" />
@@ -780,7 +908,7 @@ function SuggestionAcceptBubble({
       <button
         type="button"
         onClick={onReject}
-        className="inline-flex items-center gap-1 px-2 h-6 rounded-md bg-white/15 text-white hover:bg-white/25"
+        className="inline-flex h-6 items-center gap-1 rounded-[var(--ds-r-s)] px-2 text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)]"
         title="Reject this suggestion"
       >
         <X className="size-3" />

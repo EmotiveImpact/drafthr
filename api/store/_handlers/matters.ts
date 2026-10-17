@@ -21,6 +21,7 @@ import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { rejectReadOnlyMember } from "../../_utils/workspace-role.js";
 import { toServerUuid } from "../../../src/lib/remote-ids.js";
 import { getDb } from "../../../src/db/index.js";
 import { matters } from "../../../src/db/schema.js";
@@ -203,6 +204,8 @@ async function guardWrite(req: Request): Promise<GuardResult> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return { ok: false, response: auth.response };
   if (!auth.activeTenant) return { ok: false, response: jsonError("No active workspace", 400) };
+  const readOnly = rejectReadOnlyMember(auth);
+  if (readOnly) return { ok: false, response: readOnly };
   return { ok: true, auth };
 }
 

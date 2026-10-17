@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { Mail, UserPlus, Copy, Check, X, Users as UsersIcon } from "lucide-react";
+import { Mail, UserPlus, Copy, Check, X, Users as UsersIcon, Smartphone } from "lucide-react";
 import type { CollaboratorRole, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { Avatar } from "@/components/ds";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ROLE_HINT: Record<CollaboratorRole, string> = {
-  owner: "Full access — only the draft creator",
+  owner: "Full access. Only the draft creator.",
   editor: "Can edit sections and regenerate",
   reviewer: "Can comment and attest counsel review",
-  viewer: "Read-only — can preview and export",
+  viewer: "Read-only. Can preview and export.",
 };
 
 /**
@@ -25,13 +26,23 @@ export function InvitePopover({
   defaultOpen,
   open: openProp,
   onOpenChange,
+  onOpenOnPhone,
+  anchor,
 }: {
   draft: Draft;
-  trigger: React.ReactNode;
+  /** Opens the popover; leave out when it only opens from elsewhere. */
+  trigger?: React.ReactNode;
   defaultOpen?: boolean;
   /** Controlled mode — pass open + onOpenChange to drive externally. */
   open?: boolean;
   onOpenChange?: (next: boolean) => void;
+  /** Shows "Open on your phone" under the share link (the mobile share dialog). */
+  onOpenOnPhone?: () => void;
+  /** Where the popover sits, when that is not always the trigger: the
+   *  element returned, read each time it is placed. The document bar hides
+   *  its avatars on a narrow bar, so "Share and invite…" in the More menu
+   *  places it under More instead (LETTER-X44). */
+  anchor?: () => Element | null;
 }) {
   const invite = useDraftStore((s) => s.inviteCollaborator);
   const remove = useDraftStore((s) => s.removeCollaborator);
@@ -68,7 +79,7 @@ I'd like you to ${role} this DRAFTHR draft with me.
 Open the draft here (you'll need access to our DRAFTHR workspace):
 ${shareLink}
 
-— sent from DRAFTHR`
+Sent from DRAFTHR`
       );
       window.location.href = `mailto:${encodeURIComponent(email.trim())}?subject=${subject}&body=${body}`;
     }
@@ -94,14 +105,21 @@ ${shareLink}
     }
   };
 
+  const anchorRef = useRef(anchor);
+  anchorRef.current = anchor;
+  const virtualAnchor = useRef({
+    getBoundingClientRect: () => anchorRef.current?.()?.getBoundingClientRect() ?? new DOMRect(),
+  });
+
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      {trigger && <Popover.Trigger asChild>{trigger}</Popover.Trigger>}
+      {anchor && <Popover.Anchor virtualRef={virtualAnchor} />}
       <Popover.Portal>
         <Popover.Content
           align="end"
           sideOffset={8}
-          className="z-50 w-[360px] max-w-[calc(100vw-1.5rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_10px_24px_rgba(15,17,21,0.10),0_1px_3px_rgba(15,17,21,0.04)] p-4 text-[13px]"
+          className="z-50 w-[360px] max-w-[calc(100vw-1.5rem)] rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)] p-4 text-[13px]"
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -131,7 +149,7 @@ ${shareLink}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="email@company.com"
-                className="w-full pl-8 pr-2 h-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+                className="w-full pl-8 pr-2 h-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-line-strong)]"
               />
             </div>
             <input
@@ -139,18 +157,23 @@ ${shareLink}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Display name (optional)"
-              className="w-full px-2.5 h-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+              className="w-full px-2.5 h-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-line-strong)]"
             />
             <div className="flex gap-2">
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as CollaboratorRole)}
-                className="flex-1 px-2 h-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
-              >
-                <option value="editor">Editor</option>
-                <option value="reviewer">Reviewer</option>
-                <option value="viewer">Viewer</option>
-              </select>
+              <Select value={role} onValueChange={(v) => setRole(v as CollaboratorRole)}>
+                <SelectTrigger
+                  size="sm"
+                  aria-label="Role"
+                  className="h-8 min-w-0 flex-1 rounded-md px-2 text-[12px]"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" className="z-[60]">
+                  <SelectItem value="editor">Editor</SelectItem>
+                  <SelectItem value="reviewer">Reviewer</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
               <Button type="submit" size="sm" disabled={!valid} className="h-8">
                 <UserPlus className="size-3.5" /> Add
               </Button>
@@ -189,6 +212,18 @@ ${shareLink}
               Opens for teammates already in your workspace. To give someone
               access, add them in Settings → Members.
             </p>
+            {onOpenOnPhone && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onOpenOnPhone();
+                }}
+                className="mt-1.5 inline-flex h-7 items-center gap-1.5 rounded-[var(--ds-r-s)] px-1.5 text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)]"
+              >
+                <Smartphone className="size-3.5" /> Open on your phone
+              </button>
+            )}
           </div>
 
           {/* Roster */}
@@ -253,15 +288,20 @@ function RosterRow({
           Owner
         </span>
       ) : (
-        <select
-          value={role}
-          onChange={(e) => onChangeRole?.(e.target.value)}
-          className="text-[11px] px-1.5 h-6 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] focus:outline-none"
-        >
-          <option value="editor">Editor</option>
-          <option value="reviewer">Reviewer</option>
-          <option value="viewer">Viewer</option>
-        </select>
+        <Select value={role} onValueChange={(v) => onChangeRole?.(v)}>
+          <SelectTrigger
+            size="sm"
+            aria-label={`Role for ${name}`}
+            className="h-6 gap-1 rounded-md px-1.5 text-[11px] text-[var(--ds-body)] data-[size=sm]:h-6 data-[size=sm]:text-[11px] [&_svg:not([class*='size-'])]:size-3"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="end" className="z-[60]">
+            <SelectItem value="editor">Editor</SelectItem>
+            <SelectItem value="reviewer">Reviewer</SelectItem>
+            <SelectItem value="viewer">Viewer</SelectItem>
+          </SelectContent>
+        </Select>
       )}
       {!isOwner && onRemove && (
         <button

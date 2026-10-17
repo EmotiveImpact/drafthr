@@ -24,9 +24,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Loader2, MailCheck } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
-import { AuthShell, ErrorAlert, PrimaryButton, TextField } from "@/routes/sign-in/AuthShell";
+import {
+  AUTH_INPUT_CLASS,
+  AuthCheckbox,
+  AuthShell,
+  ErrorAlert,
+  PasswordField,
+  PrimaryButton,
+  TextField,
+} from "@/routes/sign-in/AuthShell";
 import { AuthDivider, SocialAuthButtons } from "@/routes/sign-in/SocialAuthButtons";
 import { useConsultantStore } from "@/lib/consultantProfile";
+import { cn } from "@/lib/utils";
 
 type SignUpStage = "form" | "verify";
 
@@ -46,7 +55,14 @@ export function SignUp() {
   // (anti-enumeration). In that case we show a "try signing in" hint
   // instead of a useless code input.
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+  const [emailTouched, setEmailTouched] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
+  const [params] = useSearchParams();
+  // The marketplace door: /sign-in/signup?as=consultant. Linked from this
+  // page ("Join the marketplace") and from the marketing site; the flag
+  // travels with the URL into the check-your-email step, which enrols the
+  // consultant and opens their profile form after verification.
+  const asConsultant = params.get("as") === "consultant";
 
   useEffect(() => {
     emailRef.current?.focus();
@@ -62,9 +78,10 @@ export function SignUp() {
   // enforces the policy that actually counts; we just stop empty submits.
   const passwordTooShort = password.length > 0 && password.length < 8;
   const passwordsMismatch = confirm.length > 0 && password !== confirm;
+  const emailInvalid = emailTouched && email.trim().length > 0 && !EMAIL_RE.test(email.trim());
   const canSubmit =
     !submitting &&
-    !!email.trim() &&
+    EMAIL_RE.test(email.trim()) &&
     !!firstName.trim() &&
     !!lastName.trim() &&
     password.length >= 8 &&
@@ -93,7 +110,7 @@ export function SignUp() {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Sign-up failed (HTTP ${res.status})`);
+        throw new Error(data.error ?? "We couldn't create your account just now. Try again in a minute.");
       }
       // Success path is always the same — even for an existing email
       // (server anti-enumerates). userId is present for new + unverified-
@@ -114,14 +131,18 @@ export function SignUp() {
   };
 
   if (stage === "verify") {
-    return <CheckYourEmail email={email.trim()} userId={pendingUserId} />;
+    return <CheckYourEmail email={email.trim()} userId={pendingUserId} password={password} />;
   }
 
   return (
     <AuthShell
-      eyebrow="Sign up"
-      heading="Create your DraftHR account."
-      subheading="Start drafting tribunal-grade letters in minutes. Free while you’re evaluating."
+      eyebrow={asConsultant ? "Join the marketplace" : "Sign up"}
+      heading={asConsultant ? "Create your consultant account." : "Create your DraftHR account."}
+      subheading={
+        asConsultant
+          ? "Review letters for HR teams through the DraftHR marketplace. After you confirm your email you'll set up your listing."
+          : "Start drafting tribunal-grade letters in minutes. Free while you’re evaluating."
+      }
       withSlideshow
     >
       {/* Social sign-up — same OAuth shim as /sign-in. Going through Google,
@@ -141,8 +162,10 @@ export function SignUp() {
           inputMode="email"
           value={email}
           onChange={setEmail}
+          onBlur={() => setEmailTouched(true)}
           required
           disabled={submitting}
+          error={emailInvalid ? "Enter a full email address, like name@company.co.uk." : null}
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -174,8 +197,7 @@ export function SignUp() {
           autoComplete="new-password"
           disabled={submitting}
           hint="At least 12 characters recommended."
-          showError={passwordTooShort}
-          errorText="At least 8 characters."
+          error={passwordTooShort ? "Use at least 8 characters." : null}
         />
         <PasswordField
           id="confirm"
@@ -184,32 +206,24 @@ export function SignUp() {
           onChange={setConfirm}
           autoComplete="new-password"
           disabled={submitting}
-          showError={passwordsMismatch}
-          errorText="Passwords don’t match."
+          error={passwordsMismatch ? "Passwords don’t match." : null}
         />
 
-        <label className="mt-1 flex items-start gap-2.5 text-[12.5px] leading-snug text-[var(--ds-body)] select-none">
-          <input
-            type="checkbox"
-            checked={agree}
-            onChange={(e) => setAgree(e.target.checked)}
-            disabled={submitting}
-            className="mt-[2px] size-[15px] rounded-[4px] border border-[var(--ds-line)] text-[var(--ds-ink)] focus:ring-[var(--ds-ink)]/30"
-          />
-          <span>
+        <div className="pt-1">
+          <AuthCheckbox checked={agree} onChange={setAgree} disabled={submitting}>
             I agree to the{" "}
             <Link to="/terms" className="font-semibold text-[var(--ds-ink)] hover:underline">
               Terms
             </Link>{" "}
             and{" "}
             <Link to="/privacy" className="font-semibold text-[var(--ds-ink)] hover:underline">
-              Privacy Policy
+              Privacy policy
             </Link>
             .
-          </span>
-        </label>
+          </AuthCheckbox>
+        </div>
 
-        {error && <ErrorAlert message={error} />}
+        {error && <ErrorAlert title="Couldn't create your account" message={error} />}
 
         <PrimaryButton disabled={!canSubmit}>
           {submitting ? (
@@ -229,72 +243,38 @@ export function SignUp() {
           Sign in
         </Link>
       </p>
+
+      {/* The second door: consultants join the marketplace from here. */}
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 border-t border-[var(--ds-line-2)] pt-4 text-center text-[12.5px] text-[var(--ds-body)]">
+        {asConsultant ? (
+          <>
+            <span>Drafting letters for your team or yourself?</span>
+            <Link
+              to="/sign-in/signup"
+              className="font-semibold text-[var(--ds-ink)] hover:underline"
+            >
+              Create a standard account
+            </Link>
+          </>
+        ) : (
+          <>
+            <span>An HR consultant or employment solicitor?</span>
+            <Link
+              to="/sign-in/signup?as=consultant"
+              className="font-semibold text-[var(--ds-ink)] hover:underline"
+            >
+              Join the marketplace
+            </Link>
+          </>
+        )}
+      </div>
     </AuthShell>
   );
 }
 
-/* ─── Password field (with reveal toggle + inline error) ──────────────── */
-
-function PasswordField({
-  id,
-  label,
-  value,
-  onChange,
-  autoComplete,
-  disabled,
-  hint,
-  showError,
-  errorText,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  autoComplete?: string;
-  disabled?: boolean;
-  hint?: string;
-  showError?: boolean;
-  errorText?: string;
-}) {
-  const [show, setShow] = useState(false);
-  return (
-    <div>
-      <label
-        htmlFor={id}
-        className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5"
-      >
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          id={id}
-          type={show ? "text" : "password"}
-          autoComplete={autoComplete}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          required
-          disabled={disabled}
-          className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white pl-3 pr-16 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
-        />
-        <button
-          type="button"
-          onClick={() => setShow((v) => !v)}
-          tabIndex={-1}
-          aria-pressed={show}
-          aria-label={show ? "Hide password" : "Show password"}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
-        >
-          {show ? "Hide" : "Show"}
-        </button>
-      </div>
-      {showError && errorText ? (
-        <p className="mt-1 text-[11.5px] leading-snug text-[var(--ds-red-fg)]">{errorText}</p>
-      ) : hint ? (
-        <p className="mt-1 text-[11.5px] leading-snug text-[var(--ds-muted)]">{hint}</p>
-      ) : null}
-    </div>
-  );
-}
+/** A full address with one @ and a dot in the domain. The server and
+ * WorkOS do the real check; this only catches typing slips early. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* ─── "Check your email" screen with 6-digit OTP entry ─────────────────── */
 
@@ -302,6 +282,7 @@ export function CheckYourEmail({
   email,
   userId,
   pendingAuthenticationToken = null,
+  password,
   heading,
   blurb,
 }: {
@@ -310,6 +291,10 @@ export function CheckYourEmail({
   /** Flow B (sign-in-while-unverified): verify via this token instead of a
    *  userId. Exactly one of userId / pendingAuthenticationToken is set. */
   pendingAuthenticationToken?: string | null;
+  /** Flow A: the password from the sign-up form. The server sets it once the
+   *  code is accepted, because a repeat sign-up for an unverified address
+   *  replaces that account's password with a random one. */
+  password?: string;
   /** Optional copy overrides so the sign-in entry point can reword the screen. */
   heading?: string;
   blurb?: string;
@@ -363,12 +348,13 @@ export function CheckYourEmail({
           code: normalisedCode,
           userId: userId || undefined,
           pendingAuthenticationToken: pendingAuthenticationToken || undefined,
+          password: userId && password ? password : undefined,
         }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(
-          data.error ?? `Verification failed (HTTP ${res.status}). Try again.`,
+          data.error ?? "That code didn't work. Check it, or resend a new one.",
         );
       }
       // verify-email mints the iron-session cookie on success. Refresh
@@ -408,7 +394,7 @@ export function CheckYourEmail({
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Could not resend (HTTP ${res.status})`);
+        throw new Error(data.error ?? "Couldn't resend the code. Try again in a minute.");
       }
       setResendState("sent");
     } catch (err) {
@@ -420,14 +406,14 @@ export function CheckYourEmail({
   return (
     <AuthShell eyebrow="Check your email" heading={heading ?? "Verify your email."}>
       <div className="mt-1 flex items-start gap-3 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)]/60 p-4">
-        <MailCheck className="mt-0.5 size-5 text-[var(--ds-muted)]" aria-hidden />
+        <MailCheck className="mt-0.5 size-[18px] shrink-0 text-[var(--ds-muted)]" aria-hidden />
         <div className="text-[13.5px] leading-relaxed text-[var(--ds-body)]">
           {blurb ? (
             <>{blurb} </>
           ) : null}
           We sent a 6-digit code to{" "}
           <span className="font-semibold text-[var(--ds-ink)]">{displayEmail}</span>. Enter
-          it below — the code expires in 10 minutes.
+          it below. The code expires in 10 minutes.
         </div>
       </div>
 
@@ -435,7 +421,7 @@ export function CheckYourEmail({
         <div>
           <label
             htmlFor="verification-code"
-            className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5"
+            className="block text-[13px] font-medium text-[var(--ds-ink)] mb-1.5"
           >
             Verification code
           </label>
@@ -451,14 +437,15 @@ export function CheckYourEmail({
             onChange={(e) => setCode(e.target.value)}
             disabled={verifying}
             placeholder="000000"
-            className="w-full h-[44px] rounded-[8px] border border-[var(--ds-line)] bg-white px-3 text-center font-mono text-[20px] tracking-[0.4em] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
+            className={cn(AUTH_INPUT_CLASS, "h-[44px] text-center font-mono text-[20px] tracking-[0.4em]")}
           />
         </div>
 
-        {verifyError && <ErrorAlert message={verifyError} />}
-        {!userId && (
+        {verifyError && <ErrorAlert title="Couldn't verify that code" message={verifyError} />}
+        {!hasContext && (
           <ErrorAlert
-            message="If you already have an account, sign in instead — no new code was sent."
+            title="Couldn't find your sign-up"
+            message="If you already have an account, sign in instead. No new code was sent."
           />
         )}
 
@@ -479,7 +466,7 @@ export function CheckYourEmail({
           type="button"
           onClick={() => void onResend()}
           disabled={resendState === "sending"}
-          className="w-full inline-flex items-center justify-center gap-2 h-[36px] rounded-[8px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60"
+          className="w-full inline-flex items-center justify-center gap-2 h-[36px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60"
         >
           {resendState === "sending" && (
             <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -488,14 +475,14 @@ export function CheckYourEmail({
             <CheckCircle2 className="size-4 text-[var(--ds-green-fg)]" aria-hidden />
           )}
           {resendState === "sent"
-            ? "Sent — check your inbox"
+            ? "Sent. Check your inbox"
             : resendState === "sending"
               ? "Sending…"
               : "Didn't get a code? Resend"}
         </button>
         {resendError && (
           <div className="mt-2">
-            <ErrorAlert message={resendError} />
+            <ErrorAlert title="Couldn't resend the code" message={resendError} />
           </div>
         )}
       </div>

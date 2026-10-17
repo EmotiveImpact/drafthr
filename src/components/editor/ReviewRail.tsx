@@ -3,6 +3,7 @@ import { Tabs as TabsPrimitive } from "radix-ui";
 import { ArrowRight, Pin, PinOff, X } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { buildTemplateQualityReport } from "@/lib/template-quality";
+import { useLetterTemplate } from "@/lib/letters/templates";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { buildExpectedEvidenceStatus } from "@/lib/evidence";
@@ -35,6 +36,8 @@ export function ReviewRail({
   onJumpToSection,
   onJumpToEvidence,
   onContinueToFinalize,
+  finaliseBlockedReason,
+  finalisePrimary = true,
   isPinned,
   onPin,
   onUnpin,
@@ -46,6 +49,12 @@ export function ReviewRail({
   onJumpToSection: (sectionId: string) => void;
   onJumpToEvidence: () => void;
   onContinueToFinalize: () => void;
+  /** Set when finalising is held (a required check fails, or the letter is
+   *  with someone else). The CTA is disabled and the reason shown under it. */
+  finaliseBlockedReason?: string | null;
+  /** Solid primary only when finalising is the journey's next step (send or
+   *  sent); otherwise the CTA is an outline button so it does not compete. */
+  finalisePrimary?: boolean;
   /** True when this rail is pinned as an inline grid column. */
   isPinned?: boolean;
   /** Called when the user clicks Pin (drawer mode → pinned). */
@@ -59,6 +68,8 @@ export function ReviewRail({
   // old flat ReviewRail used. Wrapped in useMemo because the tab content is
   // remounted on tab switch and we don't want to re-do the template-quality
   // walk every time.
+  // Template constraints are lazy-loaded; recompute the rows once they land.
+  const template = useLetterTemplate(draft.letterType, draft.context.jurisdiction);
   const rows = useMemo<RailCheckRow[]>(
     () =>
       buildRailRows({
@@ -70,6 +81,7 @@ export function ReviewRail({
       }),
     [
       draft,
+      template,
       counselReviewedBy,
       unresolvedComments,
       onJumpToSection,
@@ -171,11 +183,25 @@ export function ReviewRail({
         <button
           type="button"
           onClick={onContinueToFinalize}
-          className="inline-flex items-center justify-center gap-1.5 w-full h-9 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12.5px] font-semibold hover:opacity-90 transition"
+          disabled={Boolean(finaliseBlockedReason)}
+          title={finaliseBlockedReason ?? undefined}
+          className={
+            "inline-flex items-center justify-center gap-1.5 w-full h-9 px-3 rounded-md text-[12.5px] font-semibold transition disabled:pointer-events-none " +
+            (finaliseBlockedReason
+              ? "border border-[var(--ds-line)] bg-[var(--ds-surface-2)] text-[var(--ds-faint)]"
+              : finalisePrimary
+                ? "bg-[var(--ds-accent)] text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
+                : "border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] hover:bg-[var(--ds-hover)]")
+          }
         >
           Finalise
           <ArrowRight className="size-3.5" />
         </button>
+        {finaliseBlockedReason && (
+          <p data-testid="finalise-blocked-reason" className="mt-1.5 text-[11.5px] leading-snug text-[var(--ds-muted)]">
+            {finaliseBlockedReason}
+          </p>
+        )}
       </div>
     </TabsPrimitive.Root>
   );

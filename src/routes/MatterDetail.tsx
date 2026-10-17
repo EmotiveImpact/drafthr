@@ -1,596 +1,484 @@
-import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Plus, Settings2, Archive, Trash2, FolderPlus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import { Archive, ArrowLeft, FolderCheck, FolderMinus, MoreHorizontal, Pencil, Plus, RotateCcw, ShieldCheck, Tag, Trash2, UserPlus } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
-import { useProfileStore, prefillsFromProfile } from "@/lib/profile";
-import { draftsInMatter, MATTER_COLOR_CLASSES, matterInitial } from "@/lib/matters";
-import { effectiveRiskBand } from "@/lib/matters/risk";
-import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import { briefTitleFor } from "@/lib/letters/display";
-import type { Draft, LetterTypeId, MatterType } from "@/lib/letters/types";
-import { PageHeader } from "@/components/ds";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Pill, type PillTone } from "@/components/ds";
+import { ListHeader } from "@/components/letters/ListHeader";
+import { LettersTable } from "@/components/letters/LettersTable";
+import { downloadText, MENU_MOTION, usePageTitle } from "@/components/letters/parts";
+import { PromptDialog, useMenuReturnFocus } from "@/components/letters/dialogs";
+import { MatterTypeDialog } from "@/components/matter/MatterTypeDialog";
 import { MatterRiskBadge } from "@/components/matter/MatterRiskBadge";
-import { NextActionBanner } from "@/components/matter/NextActionBanner";
 import { MatterParticipants } from "@/components/matter/MatterParticipants";
 import { MatterTasks } from "@/components/matter/MatterTasks";
 import { MatterCalendar } from "@/components/matter/MatterCalendar";
+import { useMatterRows, type MatterRow } from "@/components/matter/rows";
+import { DeleteMatterDialog, MatterMark, PeopleStack } from "@/components/matter/parts";
+import { deadlinePillText, deadlinesIcs, MATTER_TYPE_LABEL, relativeDays, shortDay } from "@/components/matter/model";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+  AddLetterDialog,
+  AskBox,
+  CardLink,
+  DeadlineTimeline,
+  EvidenceList,
+  evidenceRows,
+  HistoryList,
+  historyEntries,
+  LetterTiles,
+  NextStrip,
+  SectionCard,
+  SectionHead,
+} from "@/components/matter/cards";
+
+type TabId = "overview" | "letters" | "evidence" | "deadlines" | "notes" | "history";
+const TABS: TabId[] = ["overview", "letters", "evidence", "deadlines", "notes", "history"];
 
 /**
- * /matters/:matterId — single matter detail. Hero with parties +
- * countdown + counsel-review chip + status chip, followed by the
- * letters list and a matter timeline aggregated from each draft's
- * timeline events.
+ * /matters/:matterId (matter mock): the matter's header with its people,
+ * options menu and "Add a letter", then Overview (next step, ask box,
+ * letters, evidence, tasks, deadlines with the tribunal limit, history) and
+ * tabs for Letters, Evidence, Deadlines, Notes and History. The tab is in
+ * the URL (`?tab=`).
  */
 export function MatterDetail() {
   const { matterId } = useParams<{ matterId: string }>();
-  const nav = useNavigate();
-  const profile = useProfileStore((s) => s.profile);
-  const matter = useDraftStore((s) => (matterId ? s.matters[matterId] : undefined));
-  const drafts = useDraftStore((s) => s.drafts);
-  const archiveMatter = useDraftStore((s) => s.archiveMatter);
-  const closeMatter = useDraftStore((s) => s.closeMatter);
-  const deleteMatter = useDraftStore((s) => s.deleteMatter);
-  const updateMatter = useDraftStore((s) => s.updateMatter);
-  const createDraft = useDraftStore((s) => s.createDraft);
-  const assignDraftToMatter = useDraftStore((s) => s.assignDraftToMatter);
+  const rows = useMatterRows(true);
+  const row = rows.find((r) => r.matter.id === matterId);
+  usePageTitle(row?.matter.name ?? "Matter not found");
 
-  const allDrafts = useMemo(
-    () => Object.values(drafts).filter((d) => !d.isTemplateSource),
-    [drafts]
-  );
-  const matterDrafts = useMemo(
-    () => (matter ? draftsInMatter(allDrafts, matter.id) : []),
-    [allDrafts, matter]
-  );
-
-  const tasksMap = useDraftStore((s) => s.tasks);
-  const eventsMap = useDraftStore((s) => s.events);
-  const matterTasks = useMemo(
-    () =>
-      matter
-        ? Object.values(tasksMap).filter((t) => t.matterId === matter.id)
-        : [],
-    [tasksMap, matter]
-  );
-  const matterEvents = useMemo(
-    () =>
-      matter
-        ? Object.values(eventsMap).filter((e) => e.matterId === matter.id)
-        : [],
-    [eventsMap, matter]
-  );
-
-  const [showAddLetter, setShowAddLetter] = useState(false);
-
-  if (!matter) {
+  if (!row) {
     return (
-      <div className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-        <p className="text-sm text-[var(--ds-muted)] m-0">Matter not found.</p>
+      <div className="px-4 pt-10 md:px-12">
+        <h1 className="ds-title m-0 text-[34px] leading-[1.1]">Matter not found</h1>
+        <p className="m-0 mt-2 text-[15px] text-[var(--ds-muted)]">It may have been deleted, or the link is out of date.</p>
         <Link
           to="/matters"
-          className="inline-flex items-center gap-1.5 mt-4 text-[13px] text-[var(--ds-ink)] hover:underline"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-[6px] text-[14px] text-[var(--ds-ink)] outline-none hover:underline focus-visible:shadow-[var(--ds-focus-ring)]"
         >
           <ArrowLeft className="size-3.5" /> Back to all matters
         </Link>
       </div>
     );
   }
+  return <MatterPage row={row} />;
+}
 
-  const colors = MATTER_COLOR_CLASSES[matter.color];
-  const daysToDeadline = matter.deadlineISO
-    ? daysUntilDateOnly(matter.deadlineISO)
-    : undefined;
-  const deadlinePastDue = daysToDeadline !== undefined && daysToDeadline < 0;
-  const deadlineUrgent =
-    daysToDeadline !== undefined && daysToDeadline <= 14 && !deadlinePastDue;
-
-  const prefix = matter.mode === "employer" ? "/hr" : "/me";
-
-  const onNewLetter = (letterType: LetterTypeId) => {
-    const answers = prefillsFromProfile(profile, matter.mode);
-    const id = createDraft(letterType, answers, matter.mode);
-    assignDraftToMatter(id, matter.id);
-    setShowAddLetter(false);
-    nav(`/editor/${id}`);
+function MatterPage({ row }: { row: MatterRow }) {
+  const nav = useNavigate();
+  const m = row.matter;
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("tab") as TabId | null;
+  const tab: TabId = raw && TABS.includes(raw) ? raw : "overview";
+  const setTab = (id: string) => {
+    const next = new URLSearchParams(params);
+    if (id === "overview") next.delete("tab");
+    else next.set("tab", id);
+    setParams(next, { replace: true });
+    window.scrollTo({ top: 0 });
   };
 
-  const onDelete = () => {
-    if (
-      confirm(
-        `Delete the matter "${matter.name}"? Its ${matterDrafts.length} letter${
-          matterDrafts.length === 1 ? "" : "s"
-        } will stay but become unaffiliated (back to auto-grouping on Home).`
-      )
-    ) {
-      deleteMatter(matter.id);
-      nav("/matters");
-    }
+  const updateMatter = useDraftStore((s) => s.updateMatter);
+  const closeMatter = useDraftStore((s) => s.closeMatter);
+  const archiveMatter = useDraftStore((s) => s.archiveMatter);
+  const assignDraftToMatter = useDraftStore((s) => s.assignDraftToMatter);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [typeOpen, setTypeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const peopleReturnFocus = useMenuReturnFocus(peopleOpen);
+
+  const evidence = useMemo(() => evidenceRows(row.drafts), [row.drafts]);
+  const history = useMemo(() => historyEntries(row.drafts), [row.drafts]);
+  const lettersSorted = useMemo(() => [...row.letters].sort((a, b) => b.updatedAt - a.updatedAt), [row.letters]);
+
+  const subject = row.people[0];
+  const context = subject?.jobTitle || m.parties?.primaryContext;
+  const next = row.next;
+  const nextRel = next?.iso ? relativeDays(next.iso) : undefined;
+  const nextTone: PillTone = !nextRel ? "blue" : nextRel.tone === "late" || next?.kind === "tribunal" ? "red" : nextRel.tone === "soon" ? "amber" : "blue";
+  const closed = m.status !== "active";
+
+  const removeFromMatter = (id: string) => {
+    const label = row.letters.find((l) => l.id === id)?.label ?? "Letter";
+    assignDraftToMatter(id, null);
+    toast(`Removed "${label}" from the matter`, { action: { label: "Undo", onClick: () => assignDraftToMatter(id, m.id) } });
   };
+
+  const exportIcs = () => {
+    const entries = row.deadlines.filter((i) => i.iso).map((item) => ({ matter: m, item }));
+    downloadText(`${m.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-deadlines.ics`, deadlinesIcs(entries), "text/calendar;charset=utf-8");
+    toast(`Downloaded ${entries.length === 1 ? "1 deadline" : `${entries.length} deadlines`} as a calendar file`);
+  };
+  const datedCount = row.deadlines.filter((i) => i.iso).length;
+
+  const lede = (
+    <div key={m.status} className="flex min-w-0 flex-wrap items-center gap-x-0 gap-y-1.5 animate-in fade-in-0 duration-500 motion-reduce:duration-0">
+      {context && <span className="truncate">{context}</span>}
+      {context && <Sep />}
+      <span className="whitespace-nowrap">Opened {format(m.createdAt, "d MMM yyyy")}</span>
+      {m.status === "closed" && (
+        <>
+          <Sep />
+          <span className="whitespace-nowrap text-[var(--ds-ink)]">Closed {format(m.updatedAt, "d MMM yyyy")}</span>
+        </>
+      )}
+      <span className="ml-3 inline-flex flex-wrap items-center gap-1.5">
+        {m.status === "archived" && <Pill tone="grey">Archived</Pill>}
+        {m.status === "closed" && <Pill tone="grey">Closed</Pill>}
+        {row.typeLabel && <Pill tone="grey">{row.typeLabel}</Pill>}
+        <MatterRiskBadge band={row.risk} />
+        {!closed && next?.iso && nextRel && (
+          <Pill tone={nextTone} title={`${next.title}, ${shortDay(next.iso)}`}>
+            {deadlinePillText(next, next.iso)}
+          </Pill>
+        )}
+        {m.counselReviewed && <Pill tone="green">Counsel reviewed</Pill>}
+      </span>
+    </div>
+  );
+
+  const menu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="icon" aria-label="Matter options" title="Manage matter">
+          <MoreHorizontal className="size-[18px]" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent collisionPadding={16} align="end" sideOffset={8} className={cn("w-[248px] max-w-[calc(100vw-32px)]", MENU_MOTION)}>
+        <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+          <Pencil />
+          Rename matter
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setPeopleOpen(true)}>
+          <UserPlus />
+          Edit participants
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setTypeOpen(true)}>
+          <Tag />
+          {m.type ? "Change type" : "Set type"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => {
+            updateMatter(m.id, { counselReviewed: !m.counselReviewed });
+            toast(m.counselReviewed ? "Marked as not counsel reviewed" : "Marked as counsel reviewed");
+          }}
+        >
+          <ShieldCheck />
+          {m.counselReviewed ? "Mark as not counsel reviewed" : "Mark as counsel reviewed"}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {m.status === "active" ? (
+          <DropdownMenuItem
+            onSelect={() => {
+              closeMatter(m.id);
+              toast(`Closed "${m.name}"`);
+            }}
+          >
+            <FolderCheck />
+            Close matter
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            onSelect={() => {
+              updateMatter(m.id, { status: "active", archivedAt: undefined });
+              toast(`Re-opened "${m.name}"`);
+            }}
+          >
+            <RotateCcw />
+            Re-open matter
+          </DropdownMenuItem>
+        )}
+        {m.status !== "archived" && (
+          <DropdownMenuItem
+            onSelect={() => {
+              const prev = m.status;
+              archiveMatter(m.id);
+              toast(`Archived "${m.name}"`, { action: { label: "Undo", onClick: () => updateMatter(m.id, { status: prev, archivedAt: undefined }) } });
+            }}
+          >
+            <Archive />
+            Archive
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+          <Trash2 />
+          Delete matter
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
-    <div className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-      <PageHeader
-        crumbs={[
-          { label: matter.mode === "employer" ? "HR / Management" : "Employee", href: prefix },
-          { label: "Matters", href: "/matters" },
-          { label: matter.name },
-        ]}
-        title={matter.name}
+    <div className="min-w-0">
+      <ListHeader
+        crumbs={[{ label: "Matters", href: "/matters" }, { label: row.ref }]}
+        title={m.name}
+        mark={<MatterMark matter={m} size={46} italic className={cn("transition-opacity duration-500 motion-reduce:transition-none", closed && "opacity-60")} />}
+        lede={lede}
+        below={m.description ? <p className="m-0 mt-2.5 max-w-[680px] text-[14px] leading-relaxed text-[var(--ds-muted)]">{m.description}</p> : undefined}
         actions={
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Settings2 className="size-3.5" />
-                  <span className="hidden sm:inline">Manage</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[220px]">
-                <DropdownMenuItem
-                  onClick={() => {
-                    const newName = prompt("Rename matter", matter.name);
-                    if (newName && newName.trim()) {
-                      updateMatter(matter.id, { name: newName.trim() });
-                    }
-                  }}
-                >
-                  Rename matter
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    updateMatter(matter.id, { counselReviewed: !matter.counselReviewed })
-                  }
-                >
-                  {matter.counselReviewed ? "Mark not counsel-reviewed" : "Mark counsel-reviewed"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {matter.status === "active" ? (
-                  <DropdownMenuItem onClick={() => closeMatter(matter.id)}>
-                    Close matter
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    onClick={() => updateMatter(matter.id, { status: "active" })}
-                  >
-                    Re-open matter
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={() => archiveMatter(matter.id)}>
-                  <Archive className="size-4 mr-2" />
-                  Archive matter
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={onDelete}
-                  className="text-[var(--ds-red-fg)] focus:text-[var(--ds-red-fg)]"
-                >
-                  <Trash2 className="size-4 mr-2" />
-                  Delete matter
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button size="sm" onClick={() => setShowAddLetter((v) => !v)}>
-              <Plus className="size-3.5" />
-              Add letter
+          <>
+            {row.people.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPeopleOpen(true)}
+                aria-label={`People in this matter: ${row.people.map((p) => p.name).join(", ")}`}
+                className="mr-1 hidden rounded-full outline-none focus-visible:shadow-[var(--ds-focus-ring)] sm:inline-flex"
+              >
+                <PeopleStack people={row.people} size={30} max={4} />
+              </button>
+            )}
+            {menu}
+            <Button onClick={() => setAddOpen(true)}>
+              <Plus className="size-[17px]" />
+              Add a letter
             </Button>
-          </div>
+          </>
         }
+        tabs={[
+          { id: "overview", label: "Overview" },
+          { id: "letters", label: "Letters", count: row.letters.length },
+          { id: "evidence", label: "Evidence", count: evidence.length },
+          { id: "deadlines", label: "Deadlines", count: row.deadlines.length },
+          { id: "notes", label: "Notes" },
+          { id: "history", label: "History" },
+        ]}
+        activeTab={tab}
+        onTabChange={setTab}
+        countStyle="plain"
+        tabsLabel="Matter sections"
+        className={cn("transition-[filter] duration-500", closed && "[&_h1]:text-[var(--ds-body)]")}
       />
 
-      {/* Hero card */}
-      <div className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 mb-5 flex items-start gap-4">
-        <div
-          className={cn(
-            "size-12 rounded-lg grid place-items-center text-white font-semibold text-[20px] shrink-0",
-            colors.swatch
-          )}
-          style={{ fontFamily: "var(--font-serif)" }}
-        >
-          {matterInitial(matter)}
-        </div>
-        <div className="flex-1 min-w-0">
-          {matter.parties?.primaryName && (
-            <p className="text-[13px] text-[var(--ds-body)] m-0">
-              {matter.parties.primaryName}
-              {matter.parties.primaryContext && (
-                <span className="text-[var(--ds-muted)]">
-                  {" "}
-                  · {matter.parties.primaryContext}
-                </span>
-              )}
-            </p>
-          )}
-          {matter.description && (
-            <p className="text-[13px] text-[var(--ds-muted)] mt-2 m-0">{matter.description}</p>
-          )}
-          <div className="flex items-center gap-1.5 mt-3 flex-wrap">
-            <Pill
-              tone={matter.status === "active" ? "green" : "muted"}
-              label={
-                matter.status === "active"
-                  ? "Active"
-                  : matter.status === "closed"
-                  ? "Closed"
-                  : "Archived"
-              }
-            />
-            {matter.counselReviewed && <Pill tone="amber" label="⚠ Counsel-reviewed" />}
-            {matter.type && <Pill tone="blue" label={matterTypeLabel(matter.type)} />}
-            <MatterRiskBadge band={effectiveRiskBand(matter, matterDrafts)} />
-            <Pill
-              tone="muted"
-              label={`${matterDrafts.length} letter${matterDrafts.length === 1 ? "" : "s"}`}
-            />
-            {matter.mode === "employer" && (
-              <Pill tone="muted" label="HR / Management" />
-            )}
-          </div>
-        </div>
+      <div className="min-w-0 px-4 pb-14 pt-5 md:px-12 md:pt-6">
+        {tab === "overview" && (
+          <div className="grid min-w-0 gap-9 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-w-0">
+              <NextStrip matter={m} tasks={row.tasks} letters={row.letters} onAddLetter={() => setAddOpen(true)} />
+              <AskBox
+                matter={m}
+                counts={{ letters: row.letters.length, files: evidence.length, deadlines: datedCount }}
+                onFiles={() => setTab("evidence")}
+                onAddLetter={() => setAddOpen(true)}
+              />
+              <section className="mt-6" aria-label="Letters">
+                <SectionHead
+                  title="Letters"
+                  sub="Everything written and sent in this matter"
+                  action={row.letters.length > 0 ? <CardLink onClick={() => setTab("letters")}>View all</CardLink> : undefined}
+                />
+                {row.letters.length > 0 ? (
+                  <LetterTiles rows={lettersSorted.slice(0, 3)} onRemove={removeFromMatter} />
+                ) : (
+                  <EmptyBox>
+                    No letters in this matter yet. Use <b className="font-medium text-[var(--ds-ink)]">Add a letter</b> above to start one.
+                  </EmptyBox>
+                )}
+              </section>
+              <div className="mt-[22px] grid min-w-0 gap-3.5 md:grid-cols-2">
+                <SectionCard
+                  title="Evidence"
+                  action={evidence.length > 0 ? <CardLink onClick={() => setTab("evidence")}>View all {evidence.length}</CardLink> : undefined}
+                >
+                  {evidence.length > 0 ? (
+                    <EvidenceList rows={evidence.slice(0, 3)} />
+                  ) : (
+                    <p className="m-0 mb-3.5 text-[13px] text-[var(--ds-muted)]">
+                      No evidence yet. Add files from a letter's Evidence page and they show here.
+                    </p>
+                  )}
+                </SectionCard>
+                <MatterTasks matterId={m.id} tasks={row.tasks} />
+              </div>
+            </div>
 
-        {matter.deadlineISO && (
-          <div className="text-right shrink-0">
-            <div className="text-[11px] text-[var(--ds-muted)]">
-              {matter.deadlineLabel ?? "Deadline"}
-            </div>
-            <div
-              className={cn(
-                "font-mono text-[26px] font-bold leading-none mt-1",
-                deadlinePastDue
-                  ? "text-[var(--ds-red-fg)]"
-                  : deadlineUrgent
-                  ? "text-[var(--ds-amber-fg)]"
-                  : "text-[var(--ds-ink)]"
+            <aside className="min-w-0 space-y-4">
+              <SectionCard title="Deadlines" action={datedCount > 0 ? <CardLink onClick={exportIcs}>Export</CardLink> : undefined}>
+                {row.deadlines.length > 0 ? (
+                  <DeadlineTimeline items={row.deadlines} />
+                ) : (
+                  <div className="mb-3.5">
+                    <p className="m-0 text-[13px] text-[var(--ds-muted)]">No deadlines yet</p>
+                    <Button variant="outline" size="sm" className="mt-2.5" onClick={() => setTab("deadlines")}>
+                      <Plus />
+                      Add event
+                    </Button>
+                  </div>
+                )}
+              </SectionCard>
+              <SectionCard title="History" action={history.length > 0 ? <CardLink onClick={() => setTab("history")}>View all</CardLink> : undefined}>
+                {history.length > 0 ? (
+                  <HistoryList entries={history.slice(0, 3)} />
+                ) : (
+                  <p className="m-0 mb-3.5 text-[13px] text-[var(--ds-muted)]">Nothing has happened on this matter's letters yet.</p>
+                )}
+              </SectionCard>
+            </aside>
+          </div>
+        )}
+
+        {tab === "letters" &&
+          (row.letters.length > 0 ? (
+            <LettersTable
+              rows={lettersSorted}
+              columns={["recipient", "where", "health", "updated", "owner"]}
+              ariaLabel={`Letters in ${m.name}`}
+              menuExtra={(r) => (
+                <DropdownMenuItem onSelect={() => removeFromMatter(r.id)}>
+                  <FolderMinus />
+                  Remove from matter
+                </DropdownMenuItem>
               )}
-            >
-              {daysToDeadline !== undefined
-                ? daysToDeadline < 0
-                  ? `+${Math.abs(daysToDeadline)}d`
-                  : `${daysToDeadline}d`
-                : "—"}
-            </div>
-            <div className="text-[10px] text-[var(--ds-muted)] mt-1">
-              {formatDateOnly(matter.deadlineISO, { dateStyle: "medium" })}
-            </div>
+            />
+          ) : (
+            <EmptyBox>
+              No letters in this matter yet. Use <b className="font-medium text-[var(--ds-ink)]">Add a letter</b> above to start one.
+            </EmptyBox>
+          ))}
+
+        {tab === "evidence" && (
+          <div className="max-w-[860px]">
+            <SectionCard title="Evidence">
+              {evidence.length > 0 ? (
+                <EvidenceList rows={evidence} detailed />
+              ) : (
+                <p className="m-0 mb-3.5 text-[13.5px] text-[var(--ds-muted)]">
+                  No evidence yet. Open a letter in this matter and add files on its Evidence page.
+                </p>
+              )}
+            </SectionCard>
+          </div>
+        )}
+
+        {tab === "deadlines" && (
+          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+            <SectionCard title="Deadlines" action={datedCount > 0 ? <CardLink onClick={exportIcs}>Export</CardLink> : undefined}>
+              {row.deadlines.length > 0 ? (
+                <DeadlineTimeline items={row.deadlines} />
+              ) : (
+                <p className="m-0 mb-3.5 text-[13.5px] text-[var(--ds-muted)]">No deadlines yet. Add an event to start the timeline.</p>
+              )}
+            </SectionCard>
+            <MatterCalendar matterId={m.id} events={row.events} />
+          </div>
+        )}
+
+        {tab === "notes" && <MatterNotes key={m.id} matterId={m.id} value={m.description ?? ""} />}
+
+        {tab === "history" && (
+          <div className="max-w-[860px]">
+            <SectionCard title="History">
+              {history.length > 0 ? (
+                <HistoryList entries={history} detailed />
+              ) : (
+                <p className="m-0 mb-3.5 text-[13.5px] text-[var(--ds-muted)]">Nothing has happened on this matter's letters yet.</p>
+              )}
+            </SectionCard>
           </div>
         )}
       </div>
 
-      {/* Next-action banner — derived from matter.nextAction or soonest open task */}
-      <NextActionBanner
-        matter={matter}
-        tasks={matterTasks}
-        onGenerate={() => setShowAddLetter(true)}
+      <AddLetterDialog matter={m} open={addOpen} onOpenChange={setAddOpen} />
+      <PromptDialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        title="Rename matter"
+        label="Matter name"
+        initial={m.name}
+        onSave={(name) => {
+          updateMatter(m.id, { name });
+          toast("Matter renamed");
+        }}
       />
-
-      {/* Participants */}
-      <MatterParticipants matterId={matter.id} participants={matter.participants ?? []} />
-
-      {/* Tasks */}
-      <MatterTasks matterId={matter.id} tasks={matterTasks} />
-
-      {/* Calendar */}
-      <MatterCalendar matterId={matter.id} events={matterEvents} />
-
-      {/* Add letter quick picker */}
-      {showAddLetter && (
-        <AddLetterPicker
-          mode={matter.mode}
-          onPick={onNewLetter}
-          onCancel={() => setShowAddLetter(false)}
-        />
-      )}
-
-      {/* Letters */}
-      <section className="mb-5">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 mb-2">
-          Letters
-        </h2>
-        {matterDrafts.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface)] p-6 text-center">
-            <FolderPlus className="size-7 text-[var(--ds-muted)] mx-auto mb-2" />
-            <p className="text-[13px] text-[var(--ds-muted)] m-0">
-              No letters in this matter yet. Click <strong>Add letter</strong> above to start one.
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-            {matterDrafts.map((draft, i) => (
-              <LetterRow
-                key={draft.id}
-                draft={draft}
-                isFirst={i === 0}
-                onOpen={() => nav(`/editor/${draft.id}`)}
-                onRemove={() => assignDraftToMatter(draft.id, null)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Timeline (aggregated from draft.timeline) */}
-      <MatterTimeline drafts={matterDrafts} />
+      <Dialog open={peopleOpen} onOpenChange={setPeopleOpen}>
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] max-w-[520px] overflow-y-auto"
+          // Back to "Matter options" on close (Esc, Done or the x).
+          onCloseAutoFocus={peopleReturnFocus}
+          // Start on the dialog itself, not the first participant's remove
+          // button: opening it should never put focus on a destructive control.
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement | null)?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Edit participants</DialogTitle>
+            <DialogDescription>The people this matter is about, and anyone else involved.</DialogDescription>
+          </DialogHeader>
+          <MatterParticipants matterId={m.id} participants={m.participants ?? []} primary={row.people.find((p) => p.role === "primary") ?? null} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPeopleOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <MatterTypeDialog
+        open={typeOpen}
+        onOpenChange={setTypeOpen}
+        value={m.type}
+        onSave={(type) => {
+          updateMatter(m.id, { type });
+          toast(type ? `Type set to ${MATTER_TYPE_LABEL[type]}` : "Type cleared");
+        }}
+      />
+      <DeleteMatterDialog matter={m} letterCount={row.letters.length} open={deleteOpen} onOpenChange={setDeleteOpen} onDeleted={() => nav("/matters")} />
     </div>
   );
 }
 
-/* ============================================================================
- * Sub-components
- * ==========================================================================*/
-
-function Pill({
-  tone,
-  label,
-}: {
-  tone: "green" | "amber" | "red" | "muted" | "blue";
-  label: string;
-}) {
-  const toneCls = {
-    green: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-    amber: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-    red: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]",
-    blue: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-    muted: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
-  }[tone];
+function Sep() {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10px] px-2 py-[1px] rounded-full font-medium",
-        toneCls
-      )}
-    >
-      {label}
+    <span aria-hidden className="mx-2 text-[var(--ds-faint)]">
+      ·
     </span>
   );
 }
 
-function LetterRow({
-  draft,
-  isFirst,
-  onOpen,
-  onRemove,
-}: {
-  draft: Draft;
-  isFirst: boolean;
-  onOpen: () => void;
-  onRemove: () => void;
-}) {
-  const meta = getLetterMeta(draft.letterType);
-  const wordCount = draft.sections
-    .map((s) => s.html.replace(/<[^>]+>/g, " ").trim())
-    .join(" ")
-    .split(/\s+/)
-    .filter(Boolean).length;
-  const hasUnresolvedComments = (draft.comments ?? []).some((c) => !c.resolved);
-  const isExported = (draft.exports ?? []).length > 0;
-
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-3 px-4 py-3 hover:bg-[var(--ds-line-2)] transition cursor-pointer",
-        !isFirst && "border-t border-[var(--ds-line-2)]"
-      )}
-      onClick={onOpen}
-    >
-      <span
-        className="grid place-items-center size-6 rounded-md bg-[var(--ds-line-2)] text-[10px] text-[var(--ds-muted)] font-mono font-semibold shrink-0"
-        title={draft.letterType}
-      >
-        {meta.shortTitle.split(/\s+/)[0]?.[0]?.toUpperCase() ?? "L"}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-[var(--ds-ink)] text-[13px] truncate">
-            {briefTitleFor(draft)}
-          </span>
-          {hasUnresolvedComments && (
-            <span className="text-[10px] text-[var(--ds-amber-fg)]">
-              ●  comments
-            </span>
-          )}
-        </div>
-        <div className="text-[11px] text-[var(--ds-muted)] mt-0.5">
-          {draft.sections.length} sections · {wordCount} words · {timeAgoShort(draft.updatedAt)}
-        </div>
-      </div>
-      <Pill
-        tone={
-          isExported
-            ? "green"
-            : draft.sections.some((s) => s.status === "ready")
-            ? "blue"
-            : "amber"
-        }
-        label={isExported ? "Sent" : draft.sections.some((s) => s.status === "ready") ? "Ready" : "Draft"}
-      />
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="text-[10px] text-[var(--ds-muted)] hover:text-[var(--ds-red-fg)] hover:underline shrink-0"
-        title="Remove this letter from the matter (keeps the draft)"
-      >
-        Remove
-      </button>
-      <ArrowRight className="size-3.5 text-[var(--ds-muted)] shrink-0" />
-    </div>
-  );
+function EmptyBox({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-[14px] bg-[var(--ds-surface-2)] px-6 py-8 text-center text-[13.5px] text-[var(--ds-muted)]">{children}</div>;
 }
 
-function AddLetterPicker({
-  mode,
-  onPick,
-  onCancel,
-}: {
-  mode: Draft["mode"];
-  onPick: (letterType: LetterTypeId) => void;
-  onCancel: () => void;
-}) {
-  const prefix = mode === "employer" ? "/hr" : "/me";
+function MatterNotes({ matterId, value }: { matterId: string; value: string }) {
+  const updateMatter = useDraftStore((s) => s.updateMatter);
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
+  const changed = text !== value;
   return (
-    <div className="mb-5 rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0">
-          Add a letter to this matter
-        </h3>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        >
-          Cancel
-        </button>
-      </div>
-      <p className="text-[12px] text-[var(--ds-muted)] m-0 mt-1">
-        Pick a letter type to create — it'll be created and linked to this matter automatically.
-        <br />
-        Or browse the full template library:{" "}
-        <Link
-          to={`${prefix}/new`}
-          className="text-[var(--ds-ink)] underline"
-          onClick={onCancel}
-        >
-          Open template library →
-        </Link>
-      </p>
-      <div className="flex flex-wrap gap-2 mt-3">
-        {[
-          { id: "grievance", label: "Grievance" },
-          { id: "appeal", label: "Appeal" },
-          { id: "warning", label: "Disciplinary warning" },
-          { id: "termination", label: "Termination" },
-          { id: "pip_response", label: "PIP response" },
-          { id: "offer", label: "Offer letter" },
-        ]
-          .filter((opt) => {
-            // Filter to letter types valid for this mode (employer mode
-            // wants HR-side templates, employee mode wants employee-side).
-            try {
-              const meta = getLetterMeta(opt.id as LetterTypeId);
-              return meta.mode === mode;
-            } catch {
-              return false;
-            }
-          })
-          .map((opt) => (
-            <Button
-              key={opt.id}
-              variant="outline"
-              size="sm"
-              onClick={() => onPick(opt.id as LetterTypeId)}
-            >
-              <Plus className="size-3" />
-              {opt.label}
-            </Button>
-          ))}
-      </div>
-    </div>
-  );
-}
-
-function MatterTimeline({ drafts }: { drafts: Draft[] }) {
-  const events = useMemo(() => {
-    const all: Array<{
-      ts: number;
-      kind: string;
-      title: string;
-      sectionTitle?: string;
-      detail?: string;
-      draftId: string;
-      draftName: string;
-    }> = [];
-    for (const d of drafts) {
-      const draftName = briefTitleFor(d);
-      for (const ev of d.timeline ?? []) {
-        all.push({
-          ts: ev.createdAt,
-          kind: ev.kind,
-          title: ev.title,
-          sectionTitle: ev.sectionTitle,
-          detail: ev.detail,
-          draftId: d.id,
-          draftName,
-        });
-      }
-    }
-    return all.sort((a, b) => b.ts - a.ts).slice(0, 20);
-  }, [drafts]);
-
-  if (events.length === 0) return null;
-
-  return (
-    <section>
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 mb-2">
-        Matter timeline
-      </h2>
-      <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-        {events.map((ev, i) => (
-          <div
-            key={i}
-            className={cn(
-              "px-4 py-2 text-[12px] text-[var(--ds-body)]",
-              i > 0 && "border-t border-[var(--ds-line-2)]"
-            )}
+    <div className="max-w-[760px]">
+      <SectionCard title="Notes">
+        <p className="m-0 mb-3 text-[13.5px] text-[var(--ds-muted)]">Context, decisions and anything worth remembering about this matter.</p>
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={10}
+          aria-label="Matter notes"
+          placeholder="What happened, what was agreed, what to watch for."
+          className="min-h-[200px] text-[14.5px]"
+        />
+        <div className="mb-3.5 mt-3 flex justify-end">
+          <Button
+            disabled={!changed}
+            onClick={() => {
+              updateMatter(matterId, { description: text.trim() || undefined });
+              toast("Notes saved");
+            }}
           >
-            <div className="flex items-baseline gap-2">
-              <span className="text-[10px] font-mono text-[var(--ds-muted)] tabular-nums shrink-0 w-[80px]">
-                {timeAgoShort(ev.ts)}
-              </span>
-              <span className="font-medium text-[var(--ds-ink)]">{ev.title}</span>
-              <span className="text-[var(--ds-muted)]">— {ev.draftName}</span>
-            </div>
-            {(ev.sectionTitle || ev.detail) && (
-              <div className="text-[11px] text-[var(--ds-muted)] mt-0.5 ml-[88px]">
-                {ev.sectionTitle ? `${ev.sectionTitle}: ` : ""}
-                {ev.detail}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
+            Save notes
+          </Button>
+        </div>
+      </SectionCard>
+    </div>
   );
-}
-
-const MATTER_TYPE_LABEL: Record<MatterType, string> = {
-  investigation: "Investigation",
-  grievance: "Grievance",
-  disciplinary: "Disciplinary",
-  performance: "Performance",
-  absence: "Absence",
-  redundancy: "Redundancy",
-  restructure: "Restructure",
-  settlement: "Settlement",
-  tribunal: "Tribunal",
-  onboarding: "Onboarding",
-  offboarding: "Offboarding",
-  other: "Other",
-};
-
-function matterTypeLabel(type: MatterType): string {
-  return MATTER_TYPE_LABEL[type] ?? type;
-}
-
-function timeAgoShort(ts: number): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d`;
-  const months = Math.floor(days / 30);
-  return `${months}mo`;
 }

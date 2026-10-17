@@ -2,6 +2,40 @@ import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Loader2, ShieldAlert, XCircle } from "lucide-react";
 import { getAdminQueue, adminReviewProfile, type AdminProfileDTO } from "@/lib/consultantApi";
+import { UnderlineTabs, type PageTab, type PillTone } from "@/components/ds";
+import { ExpertsHeader } from "@/components/consultants/ExpertsHeader";
+import { Pill } from "@/components/consultants/StatusBadge";
+import {
+  BTN_GHOST,
+  BTN_OUTLINE,
+  BTN_PRIMARY,
+  Chip,
+  ExpertAvatar,
+  Row,
+  RowList,
+} from "@/components/consultants/ui";
+
+const PAGE = "w-full px-4 pb-24 pt-7 sm:px-8 md:px-12";
+
+type AdminTab = "pending" | "published" | "rejected" | "paused" | "suspended" | "all";
+
+/** 2A tabs. "pending" is the server's pending queue; the rest filter the
+ *  full list. The tab ids match AdminProfileDTO statuses where they can. */
+const ADMIN_TABS: { id: AdminTab; label: string }[] = [
+  { id: "pending", label: "Pending" },
+  { id: "published", label: "Published" },
+  { id: "rejected", label: "Rejected" },
+  { id: "paused", label: "Paused" },
+  { id: "suspended", label: "Suspended" },
+  { id: "all", label: "All" },
+];
+
+/** The tab a profile status belongs to: the Pending tab holds the
+ *  "pending_review" profiles; every other status has a tab of its own name. */
+function tabOf(status: string | undefined): AdminTab | null {
+  if (status === "pending_review") return "pending";
+  return ADMIN_TABS.some((t) => t.id === status && t.id !== "all") ? (status as AdminTab) : null;
+}
 
 /**
  * /admin/consultants — consultant vetting queue.
@@ -23,7 +57,9 @@ export function ConsultantAdminReview() {
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  // Pending reads the pending-only queue; any other tab reads every profile.
+  const [tab, setTab] = useState<AdminTab>("pending");
+  const showAll = tab !== "pending";
   // Until the FIRST admin-queue response resolves we don't know whether the
   // caller is an admin, so we render a neutral skeleton rather than the admin
   // header — a non-admin who deep-links here must never see the admin surface
@@ -78,172 +114,197 @@ export function ConsultantAdminReview() {
   // non-admin during the round-trip that ends in a 403 redirect.
   if (!authChecked) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12" aria-busy="true">
-        <div className="h-4 w-24 animate-pulse rounded bg-[var(--ds-surface-2)]" />
-        <div className="mt-4 h-9 w-64 animate-pulse rounded bg-[var(--ds-surface-2)]" />
+      <div className="w-full px-4 pb-24 pt-8 sm:px-8 md:px-12 md:pt-[34px]" aria-busy="true">
+        <div className="h-4 w-24 animate-pulse rounded bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
+        <div className="mt-4 h-9 w-64 animate-pulse rounded bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
         <div className="mt-8 space-y-3">
-          <div className="h-20 animate-pulse rounded-[10px] bg-[var(--ds-surface-2)]" />
-          <div className="h-20 animate-pulse rounded-[10px] bg-[var(--ds-surface-2)]" />
+          <div className="h-20 animate-pulse rounded-[14px] bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
+          <div className="h-20 animate-pulse rounded-[14px] bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
         </div>
       </div>
     );
   }
 
+  // The Pending tab is the server's pending queue; every other tab reads the
+  // full list (status=all) and filters it here.
+  const visible =
+    profiles === null || tab === "pending" || tab === "all"
+      ? profiles
+      : profiles.filter((p) => tabOf(p.status) === tab);
+  const counts = showAll && profiles
+    ? Object.fromEntries(
+        ADMIN_TABS.map((t) => [
+          t.id,
+          t.id === "all" ? profiles.length : profiles.filter((p) => tabOf(p.status) === t.id).length,
+        ]),
+      )
+    : null;
+  const tabs: PageTab[] = ADMIN_TABS.map((t) => ({
+    id: t.id,
+    label: t.label,
+    count: counts ? counts[t.id] : t.id === "pending" && profiles ? profiles.length : undefined,
+  }));
+
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
-      <header className="mb-8">
-        <button
-          type="button"
-          onClick={() => nav(-1)}
-          className="mb-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Back
-        </button>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-          Admin · Consultant vetting
-        </p>
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-          <h1 className="text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-            {showAll ? "All consultant profiles" : "Review queue"}
-          </h1>
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className="inline-flex h-9 items-center rounded-[8px] border border-[var(--ds-line)] bg-white px-3.5 text-[12.5px] font-semibold text-[var(--ds-ink)] transition hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)]"
-          >
-            {showAll ? "Show pending only" : "Show all profiles"}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ExpertsHeader
+        crumbs={[{ label: "Admin" }, { label: "Consultant vetting" }]}
+        title={showAll ? "All consultant profiles" : "Review queue"}
+        lede="Approve to publish to the public marketplace; reject to hide until the consultant revises. Actions take effect immediately and apply cross-tenant."
+        actions={
+          <button type="button" onClick={() => nav(-1)} className={`${BTN_GHOST} h-[38px] px-3 text-[14px]`}>
+            <ArrowLeft className="size-3.5" aria-hidden />
+            Back
           </button>
-        </div>
-        <p className="mt-2 max-w-[60ch] text-[14px] leading-relaxed text-[var(--ds-body)]">
-          Approve to publish to the public marketplace; reject to hide until
-          the consultant revises. Actions take effect immediately and apply
-          cross-tenant.
-        </p>
-      </header>
+        }
+        bottom={
+          <UnderlineTabs
+            tabs={tabs}
+            activeTab={tab}
+            onTabChange={(id) => setTab(id as AdminTab)}
+            label="Profile status"
+            className="-mb-px mt-[26px]"
+          />
+        }
+      />
+
+      <div className={PAGE}>
 
       {error && (
         <div
           role="alert"
-          className="mb-4 rounded-[8px] border border-[var(--ds-red-fg)]/30 bg-[var(--ds-red-bg)] px-4 py-3 text-[13px] text-[var(--ds-red-fg)]"
+          className="mb-4 rounded-[12px] bg-[var(--ds-red-bg)] px-4 py-3 text-[13px] text-[var(--ds-red-fg)]"
         >
           {error}
         </div>
       )}
 
-      {profiles === null ? (
-        <div className="grid place-items-center rounded-[14px] border border-[var(--ds-line)] py-16 text-[var(--ds-muted)]">
+      {visible === null ? (
+        <div className="grid place-items-center rounded-[16px] bg-[var(--ds-surface-2)] py-16 text-[var(--ds-muted)]">
           <Loader2 className="size-5 animate-spin" aria-hidden />
-          <p className="mt-2 text-[13px]">Loading queue…</p>
+          <p className="m-0 mt-2 text-[13px]">Loading queue…</p>
         </div>
-      ) : profiles.length === 0 ? (
-        <div className="rounded-[14px] border border-dashed border-[var(--ds-line)] p-10 text-center">
-          <ShieldAlert className="mx-auto size-6 text-[var(--ds-muted)]" aria-hidden />
-          <p className="mt-2 text-[14px] text-[var(--ds-body)]">
-            {showAll ? "No consultant profiles yet." : "No profiles awaiting review."}
+      ) : visible.length === 0 ? (
+        <div className="flex flex-col items-center rounded-[16px] bg-[var(--ds-surface-2)] px-6 py-14 text-center">
+          <span className="mb-3 grid size-10 place-items-center rounded-full bg-[var(--ds-surface)] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)]">
+            <ShieldAlert className="size-5" aria-hidden />
+          </span>
+          <p className="m-0 text-[14px] text-[var(--ds-body)]">
+            {tab === "pending"
+              ? "No profiles awaiting review."
+              : tab === "all"
+                ? "No consultant profiles yet."
+                : `No ${ADMIN_TABS.find((t) => t.id === tab)?.label.toLowerCase()} profiles.`}
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {profiles.map((p) => (
-            <article
-              key={p.id}
-              className="rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5"
-            >
-              <div className="flex items-start gap-4">
-                {p.photoUrl ? (
-                  <img
-                    src={p.photoUrl}
-                    alt=""
-                    className="size-14 shrink-0 rounded-full object-cover border border-[var(--ds-line)]"
+        <>
+          <RowList>
+            {visible.map((p) => (
+              <Row key={p.id} attention={p.status === "pending_review"}>
+                <div className="flex items-start gap-3.5 sm:gap-4">
+                  <ExpertAvatar
+                    photoUrl={p.photoUrl}
+                    name={p.fullName}
+                    initials={p.initials}
+                    seed={p.id}
+                    size={44}
                   />
-                ) : (
-                  <div className="grid size-14 shrink-0 place-items-center rounded-full bg-[var(--ds-surface-2)] border border-[var(--ds-line)] text-[16px] font-semibold text-[var(--ds-muted)]">
-                    {p.initials}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-[16px] font-semibold text-[var(--ds-ink)]">{p.fullName}</h2>
-                    <StatusPill status={p.status} />
-                  </div>
-                  <p className="text-[12.5px] text-[var(--ds-muted)]">{p.role}</p>
-                  {p.email && (
-                    <p className="mt-0.5 text-[11.5px] text-[var(--ds-muted)]">{p.email}</p>
-                  )}
-                  <p className="mt-1 text-[12px] text-[var(--ds-muted)]">
-                    {p.currency === "GBP" ? "£" : p.currency === "USD" ? "$" : "€"}
-                    {p.price}/hr · SLA {p.sla}
-                  </p>
-                  {p.specialty && (
-                    <p className="mt-2 text-[13px] italic text-[var(--ds-body)]">"{p.specialty}"</p>
-                  )}
-                  <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--ds-body)]">
-                    {p.bio}
-                  </p>
-                  {(p.specialties?.length ?? 0) > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {(p.specialties ?? []).map((s) => (
-                        <span
-                          key={s}
-                          className="rounded-full border border-[var(--ds-line)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--ds-body)]"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+                  <div className="min-w-0 flex-1">
+                    <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                      <div className="min-w-0 flex-1 basis-[220px]">
+                        <h2 className="m-0 truncate text-[14px] font-medium text-[var(--ds-ink)]">{p.fullName}</h2>
+                        <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">{p.role}</p>
+                        <p className="m-0 mt-1 flex flex-wrap items-center gap-x-2 text-[12.5px] text-[var(--ds-muted)]">
+                          {p.email && <span className="min-w-0 truncate">{p.email}</span>}
+                          {p.email && <span aria-hidden className="text-[var(--ds-faint)]">·</span>}
+                          <span className="ds-mono text-[var(--ds-body)]">
+                            {p.currency === "GBP" ? "£" : p.currency === "USD" ? "$" : "€"}
+                            {p.price} per review
+                            {p.priorityPrice
+                              ? `, ${p.currency === "GBP" ? "£" : p.currency === "USD" ? "$" : "€"}${p.priorityPrice} priority`
+                              : ""}
+                          </span>
+                          <span aria-hidden className="text-[var(--ds-faint)]">·</span>
+                          <span>SLA {p.sla}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <StatusPill status={p.status} />
+                        {/* Only the moves that change something: the pill
+                            already says where the profile is, so a published
+                            profile offers Reject and a rejected one offers
+                            Approve and publish, never a greyed-out repeat. */}
+                        {p.status !== "published" || showAll ? (
+                          <>
+                            {p.status !== "published" && (
+                              <button
+                                type="button"
+                                disabled={acting === p.id}
+                                onClick={() => review(p.id, "approve")}
+                                className={`${BTN_PRIMARY} ml-1`}
+                              >
+                                {acting === p.id ? (
+                                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                                ) : (
+                                  <CheckCircle2 className="size-3.5" aria-hidden />
+                                )}
+                                Approve and publish
+                              </button>
+                            )}
+                            {p.status !== "rejected" && (
+                              <button
+                                type="button"
+                                disabled={acting === p.id}
+                                onClick={() => review(p.id, "reject")}
+                                className={`${BTN_OUTLINE} ${p.status === "published" ? "ml-1 " : ""}text-[var(--ds-red-fg)] hover:border-[var(--ds-red-fg)]/40 hover:bg-[var(--ds-red-bg)]`}
+                              >
+                                {acting === p.id && p.status === "published" ? (
+                                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                                ) : (
+                                  <XCircle className="size-3.5" aria-hidden />
+                                )}
+                                Reject
+                              </button>
+                            )}
+                          </>
+                        ) : null}
+                      </div>
+                    </header>
 
-              {p.status !== "published" || showAll ? (
-                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--ds-line)] pt-4">
-                  <button
-                    type="button"
-                    disabled={acting === p.id || p.status === "published"}
-                    onClick={() => review(p.id, "approve")}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[var(--ds-ink)] px-3.5 text-[12.5px] font-semibold text-white transition hover:-translate-y-px hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0"
-                  >
-                    {acting === p.id ? (
-                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                    ) : (
-                      <CheckCircle2 className="size-3.5" aria-hidden />
+                    {p.specialty && (
+                      <p className="m-0 mt-2.5 text-[13px] font-medium text-[var(--ds-ink)]">{p.specialty}</p>
                     )}
-                    {p.status === "published" ? "Published" : "Approve & publish"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={acting === p.id || p.status === "rejected"}
-                    onClick={() => review(p.id, "reject")}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-[var(--ds-line)] bg-white px-3.5 text-[12.5px] font-semibold text-[var(--ds-red-fg)] transition hover:border-[var(--ds-red-fg)] hover:bg-[var(--ds-red-bg)] disabled:opacity-50"
-                  >
-                    <XCircle className="size-3.5" aria-hidden />
-                    {p.status === "rejected" ? "Rejected" : "Reject"}
-                  </button>
+                    <p className="m-0 mt-1 max-w-[72ch] whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--ds-body)]">
+                      {p.bio}
+                    </p>
+                    {(p.specialties?.length ?? 0) > 0 && (
+                      <div className="mt-2.5 flex flex-wrap gap-1">
+                        {(p.specialties ?? []).map((s) => (
+                          <Chip key={s}>{s}</Chip>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : null}
-            </article>
-          ))}
-        </div>
+              </Row>
+            ))}
+          </RowList>
+        </>
       )}
+      </div>
     </div>
   );
 }
 
 function StatusPill({ status }: { status: AdminProfileDTO["status"] }) {
-  const map: Record<AdminProfileDTO["status"], { bg: string; fg: string; label: string }> = {
-    pending_review: { bg: "bg-[var(--ds-amber-bg)]", fg: "text-[var(--ds-amber-fg)]", label: "Pending" },
-    published: { bg: "bg-[var(--ds-green-bg)]", fg: "text-[var(--ds-green-fg)]", label: "Published" },
-    rejected: { bg: "bg-[var(--ds-red-bg)]", fg: "text-[var(--ds-red-fg)]", label: "Rejected" },
-    paused: { bg: "bg-[var(--ds-surface-2)]", fg: "text-[var(--ds-muted)]", label: "Paused" },
-    suspended: { bg: "bg-[var(--ds-red-bg)]", fg: "text-[var(--ds-red-fg)]", label: "Suspended" },
+  const map: Record<AdminProfileDTO["status"], { tone: PillTone; label: string }> = {
+    pending_review: { tone: "amber", label: "Pending" },
+    published: { tone: "green", label: "Published" },
+    rejected: { tone: "red", label: "Rejected" },
+    paused: { tone: "grey", label: "Paused" },
+    suspended: { tone: "red", label: "Suspended" },
   };
   const s = map[status] ?? map.pending_review;
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] ${s.bg} ${s.fg}`}
-    >
-      {s.label}
-    </span>
-  );
+  return <Pill tone={s.tone} label={s.label} />;
 }

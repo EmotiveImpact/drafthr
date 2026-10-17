@@ -169,7 +169,7 @@ const SECTION_INSTRUCTIONS: Record<string, string> = {
     "Render the reservation paragraph. Open with 'I reserve all my rights…' Include statutory, contractual, and common-law remedies. For tribunal-bound letters, reference the right to bring an Employment Tribunal / EEOC / state-agency claim.",
 
   deadline:
-    "Render a short paragraph noting the limitation deadline by which the employee must lodge proceedings (3 months less one day for UK ERA s.111; 180/300 days for EEOC). Reference the statutory basis. Do not invent figures — use [TBD] if uncertain.",
+    "Render a short paragraph noting the limitation deadline by which the employee must lodge proceedings (UK: 6 months less one day for acts on or after 1 October 2026 under the Employment Rights Act 2025, 3 months less one day for earlier acts, and 3 months less one day in Northern Ireland; EEOC: 180/300 days). Where a LIMITATION DEADLINE is supplied, use that date and basis. Reference the statutory basis. Do not invent figures: use [TBD] if uncertain.",
 
   header:
     "If this is a Without-Prejudice draft, render exactly one <p><strong>Without Prejudice and Subject to Contract</strong></p> as the header. Otherwise render an empty string.",
@@ -225,8 +225,8 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
 - Confirm final pay date, accrued holiday pay, and treatment of any outstanding bonuses.
 - Use British English spelling.`,
     US: `- At-will: no statutory reason needed but document a legitimate business reason to defeat discrimination claims.
-- Reference COBRA continuation (29 USC §1166) — separate notice within 14 days.
-- State-specific final pay timing: CA (immediate, Lab. Code §201), NY (next regular payday), TX (next regular payday §61.014), most others (next regular payday).
+- Reference COBRA continuation (29 USC §1166): the employer must notify the plan administrator within 30 days, and the administrator sends the election notice within 14 days of that (44 days in total where the employer is the administrator).
+- State-specific final pay timing: CA (immediate, Lab. Code §201), NY (next regular payday), TX (within six calendar days of discharge, §61.014(a)(1); next regular payday only for resignations), most others (next regular payday).
 - Include accrued unused PTO in CA, CO, MA, IL where vested under policy.
 - For mass layoffs (100+ employee employers, 50+ affected at single site): WARN Act 60-day notice (29 USC §2101).
 - Use American English spelling.`,
@@ -289,12 +289,12 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- OWBPA (29 USC §626(f)) for 40+: 21 days consider (45 group), 7 days revoke; written; advise to consult lawyer; identify ADEA claim. CA: cannot waive unwaivable rights; SB 331 limits NDAs in harassment/discrimination matters. §409A timing.",
   },
   right_to_work: {
-    UK: "- Sponsor Licence under Skilled Worker route. CoS — defined or undefined. Salary at or above going rate (April 2024: £38,700 general). Right to Work check evidence (List A / List B / share code).",
+    UK: "- Sponsor Licence under Skilled Worker route. CoS — defined or undefined. Salary at or above going rate (general threshold £41,700 from 22 July 2025; confirm the current figure and the going rate for the SOC code). Right to Work check evidence (List A / List B / share code).",
     US: "- H-1B specialty occupation: bachelor's minimum, prevailing wage (LCA). L-1A/B intra-company transferee: qualifying relationship + 1-of-3y prior employment. O-1: evidence of acclaim. I-140 EB-2/EB-3: PERM labor certification. E-Verify states with mandatory enrolment.",
   },
   probation_outcome: {
-    UK: "- Sub-2-years service: no ordinary unfair dismissal claim (exceptions: discrimination, whistleblowing, automatic unfair under s.103A–105 ERA). ACAS Code best practice for capability. s.10 ERelA 1999 right to be accompanied. s.86 ERA notice once 1 month service reached.",
-    US: "- At-will throughout probation. Document reasons for discrimination defence. CA: final wages immediately if employer-initiated (Lab. Code §201, §203 penalty). NY: next regular payday. TX: next regular payday §61.014.",
+    UK: "- Unfair dismissal qualifying service, counted to the effective date of termination including statutory notice (s.97(2) ERA): two years where that date is before 1 January 2027; six months where it is on or after 1 January 2027 (Employment Rights Act 2025). No service needed for discrimination, whistleblowing or automatically unfair reasons (ss.99–105 ERA). Never tell the employee they cannot claim unfair dismissal. ACAS Code best practice for capability. s.10 ERelA 1999 right to be accompanied. s.86 ERA notice once 1 month service reached.",
+    US: "- At-will throughout probation. Document reasons for discrimination defence. CA: final wages immediately if employer-initiated (Lab. Code §201, §203 penalty). NY: next regular payday. TX: within six calendar days of discharge (§61.014(a)(1)).",
   },
 
   // ===== EMPLOYEE-MODE LETTERS =====
@@ -320,15 +320,15 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- State-by-state right-to-request statutes (CA, VT, NH). Otherwise discretionary. If disability-linked, frame as ADA accommodation — see accommodation_request letter.",
   },
   subject_access_request: {
-    UK: "- Article 15 UK GDPR + s.45 Data Protection Act 2018. 1-month statutory window (extendable to 3 months for complex). No fee. Specific scope (categories, timeframe, format). Identity verification offer. Do NOT volunteer reasons for the request. Neutral, procedural tone.",
+    UK: "- Article 15 UK GDPR (Data Protection Act 2018 Part 2 and Schedule 2 supply the exemptions; do NOT cite s.45, which covers law-enforcement processing). 1-month statutory window (extendable to 3 months for complex). No fee. Specific scope (categories, timeframe, format). Identity verification offer. Do NOT volunteer reasons for the request. Neutral, procedural tone.",
     US: "- CA: Lab. Code §1198.5 (HR file, 30 days), §226 (payroll, 21 days), CCPA/CPRA. CT, IL, MA, NH, PA have HR file access statutes. Cite the specific statute(s).",
   },
   appeal: {
-    UK: "- Reference ACAS Code Step 4. Use the four canonical grounds: procedural unfairness, factual error, severity disproportionate, new evidence. Request the right to be accompanied (s.10 ERelA 1999). State outcome sought (overturn / reduce / rehear). Reserve all rights including unfair-dismissal claim. Polkey deduction risk if appeal not used.",
+    UK: "- Reference ACAS Code Step 4. Use the four canonical grounds: procedural unfairness, factual error, severity disproportionate, new evidence. Request the right to be accompanied (s.10 ERelA 1999). State outcome sought (overturn / reduce / rehear). Reserve all rights including unfair-dismissal claim. An internal appeal is not a condition of bringing a tribunal claim, but an unreasonable failure to appeal can reduce any award by up to 25% (s.207A TULRCA 1992).",
     US: "- No federal procedural appeal right; document the absence as evidence for any subsequent EEOC charge. Frame around procedural unfairness, factual error, severity, new evidence.",
   },
   whistleblowing: {
-    UK: "- s.43A–L ERA 1996 / PIDA 1998. Disclosure must be: (i) of information, (ii) tending to show one of six categories (criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, environmental damage, deliberate concealment), (iii) in the public interest, (iv) reasonable belief substantially true. Cite the statute. State reasonable belief and public interest in terms. Recipient must be correct under the prescribed-person regime. Do NOT dress up a personal grievance as whistleblowing (Chesterton v Nurmohamed [2017]).",
+    UK: "- s.43A–L ERA 1996 / PIDA 1998. Disclosure must be: (i) of information, (ii) tending to show one of the s.43B(1) categories (criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, sexual harassment (s.43B(1)(da), from 6 April 2026), environmental damage, deliberate concealment), (iii) in the public interest, (iv) made with a reasonable belief that it tends to show the failure and is in the public interest (s.43B). The stricter reasonably-believes-it-is-substantially-true test applies only to disclosures to a prescribed person (s.43F) or wider disclosures (s.43G/43H), not to the employer (s.43C). Cite the statute. State reasonable belief and public interest in terms. Recipient must be correct under the prescribed-person regime. Do NOT dress up a personal grievance as whistleblowing (Chesterton v Nurmohamed [2017]).",
     US: "- SOX §806 (180-day OSHA window), Cal. Lab. Code §1102.5, NLRA §7, OSHA whistleblower (often 30-day windows). Cite the specific statute. Defend Trade Secrets Act 2016 immunity for confidential disclosure to lawyer/government.",
   },
   accommodation_request: {
@@ -336,7 +336,7 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- ADA interactive process — the employee triggers it; employer must engage in good-faith dialogue. Request the meeting. Cite the ADA / PWFA / state law. Do NOT admit inability to perform the role.",
   },
   pay_dispute: {
-    UK: "- s.13 ERA 1996 unauthorised deduction from wages. Limitation 3 months less one day per deduction (Bear Scotland v Fulton series cap). Itemise underpayment, calculation, contractual / statutory basis. Demand payment by reasonable deadline. Reserve rights including ACAS / tribunal.",
+    UK: "- s.13 ERA 1996 unauthorised deduction from wages. Limitation (s.23(2)): 6 months less one day where the deduction was made on or after 1 October 2026 (Employment Rights Act 2025), otherwise 3 months less one day, running from the last deduction in a series (s.23(3)); a gap of three months or more does not by itself break a series (Chief Constable of the PSNI v Agnew [2023] UKSC 33). In Great Britain, claims are capped at two years before presentation (Deduction from Wages (Limitation) Regulations 2014). Itemise underpayment, calculation, contractual / statutory basis. Demand payment by reasonable deadline. Reserve rights including ACAS / tribunal.",
     US: "- FLSA + state wage payment laws (Cal. Lab. Code §201–204; NY Labor Law §198). Itemise. Demand payment. Reserve rights including DOL complaint and state wage claim.",
   },
   settlement_counter_offer: {
@@ -352,7 +352,7 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- Document the PIP engagement. ADA: if disability is implicated, document the interactive process. Reserve rights.",
   },
   acas_ec_notification: {
-    UK: "- Procedural cover for ACAS Early Conciliation. State intended claim type (unfair dismissal, discrimination, etc.), brief basis. Reference s.111 ERA limitation period (3 months less one day). Counsel review strongly recommended.",
+    UK: "- Procedural cover for ACAS Early Conciliation. State intended claim type (unfair dismissal, discrimination, etc.), brief basis. Reference the s.111 ERA / s.123 EqA limitation period: 6 months less one day where the act or effective date of termination is on or after 1 October 2026 (Employment Rights Act 2025), otherwise 3 months less one day, extended by early conciliation (s.207B). Counsel review strongly recommended.",
     US: "- EEOC charge cover. State protected characteristic, date(s) of act, brief factual basis. Reference 180/300-day filing window.",
   },
   tribunal_cover: {

@@ -6,7 +6,7 @@ export const ACAS_EC_NOTIFICATION_UK: LetterTemplate = {
   evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK ACAS Early Conciliation Cover — EMPLOYEE MODE):
 - ACAS Early Conciliation is mandatory before presenting an ET1 in most tribunal claims (Employment Tribunals Act 1996 s.18A; Employment Tribunals (Early Conciliation: Exemptions and Rules of Procedure) Regulations 2014 (as amended)).
-- Limitation: s.111 ERA 1996 — an unfair dismissal claim must be presented within 3 months less one day from the effective date of termination (subject to the EC stop-the-clock under s.207B). Discrimination claims under EqA 2010 — 3 months less one day from the act complained of (s.123 EqA).
+- Limitation: under s.111 ERA 1996 an unfair dismissal claim must be presented within 6 months less one day from the effective date of termination where that date is on or after 1 October 2026 (Employment Rights Act 2025, Sch.12), or 3 months less one day where it was before that date. Discrimination claims under s.123 EqA 2010 follow the same rule, running from the act complained of (or the end of a continuing course of conduct). Both are subject to the EC stop-the-clock (s.207B ERA 1996; s.140B EqA 2010). Where a LIMITATION DEADLINE is supplied, state the period that matches it.
 - This letter is the cover note to ACAS or the prospective respondent (where notifying the respondent in parallel) confirming the Early Conciliation notification has been made.
 - Strictly procedural — do NOT set out the full claim. The substance belongs in the ET1.
 - Tribunal-bound. British English.
@@ -65,14 +65,14 @@ export const ACAS_EC_NOTIFICATION_UK: LetterTemplate = {
       sectionId: "deadline",
       title: "Limitation deadline reference",
       instruction:
-        "Reference the s.111 ERA / s.123 EqA limitation, the s.207B stop-the-clock, and that the writer reserves the right to present an ET1 within the limitation period as extended by EC.",
-      scaffold: `<p>The Company will be aware of the statutory limitation periods under section 111 of the Employment Rights Act 1996 and section 123 of the Equality Act 2010 (3 months less one day from the relevant act), as extended by the ACAS Early Conciliation provisions in section 207B of the 1996 Act. I reserve the right to present a Form ET1 to the Employment Tribunal within the relevant limitation period.</p>`,
+        "Reference the s.111 ERA / s.123 EqA limitation (6 months less one day where the act or effective date of termination is on or after 1 October 2026, 3 months less one day where it is earlier), the s.207B stop-the-clock, and that the writer reserves the right to present an ET1 within the limitation period as extended by EC.",
+      scaffold: `<p>The Company will be aware of the statutory limitation periods under section 111 of the Employment Rights Act 1996 and section 123 of the Equality Act 2010 (6 months less one day from the relevant act where it occurred on or after 1 October 2026, or 3 months less one day where it occurred before that date), as extended by the ACAS Early Conciliation provisions in section 207B of the 1996 Act. I reserve the right to present a Form ET1 to the Employment Tribunal within the relevant limitation period.</p>`,
       constraints: [
         "MUST cite s.111 ERA 1996 and s.123 EqA 2010 (where relevant).",
         "MUST cite s.207B ERA 1996 (EC stop-the-clock).",
         "MUST reserve the right to present the ET1.",
       ],
-      example: `<p>The Company will be aware of the statutory limitation periods under section 111 of the Employment Rights Act 1996 and section 123 of the Equality Act 2010 (3 months less one day from the relevant act), as extended by the ACAS Early Conciliation provisions in section 207B of the 1996 Act. I reserve the right to present a Form ET1 to the Employment Tribunal within the relevant limitation period.</p>`,
+      example: `<p>The Company will be aware of the statutory limitation periods under section 111 of the Employment Rights Act 1996 and section 123 of the Equality Act 2010 (3 months less one day from the relevant act, which occurred before 1 October 2026), as extended by the ACAS Early Conciliation provisions in section 207B of the 1996 Act. I reserve the right to present a Form ET1 to the Employment Tribunal within the relevant limitation period.</p>`,
     },
     {
       sectionId: "closing",

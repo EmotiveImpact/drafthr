@@ -15,7 +15,8 @@ Authoritative source for every letter type's:
 src/lib/letters/templates/
 ├── README.md                   (this file)
 ├── types.ts                    LetterTemplate + SectionTemplate + ExpectedEvidence types
-├── index.ts                    Registry; getTemplate(letterType, jurisdiction)
+├── index.ts                    Registry; loadTemplate() lazy-loads one letter type, getTemplate() reads the cache
+├── metadata.ts                 GENERATED eager index (exists? + expected evidence); npx tsx scripts/gen-template-metadata.ts
 │
 ├── employer/                   HR / management-authored letters
 │   ├── offer.ts                — OFFER_UK + OFFER_US in one file

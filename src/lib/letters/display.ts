@@ -81,3 +81,43 @@ export function letterTypeLabelFor(draft: Draft): string {
 export function hasCustomTitle(draft: Draft): boolean {
   return Boolean(draft.title?.trim());
 }
+
+/**
+ * A section title as people read it. Letters started before the catalogue
+ * dropped em dashes and ampersands keep the old titles on their sections
+ * ("Subject — Formal Grievance", "Date & recipient"); this shows them the
+ * new way ("Subject: formal grievance", "Date and recipient").
+ */
+export function sectionTitleText(title: string | undefined): string {
+  let t = (title ?? "").trim();
+  const dash = t.indexOf(" — ");
+  if (dash > 0) {
+    const left = t.slice(0, dash);
+    const right = t
+      .slice(dash + 3)
+      .split(" ")
+      .map((w) => (w.length > 1 && (w === w.toUpperCase() || /\d/.test(w)) ? w : w.toLowerCase()))
+      .join(" ")
+      .replace(/\s+—\s+/g, ", ");
+    t = `${left}: ${right}`;
+  }
+  return t.replace(/\s+—\s+/g, ", ").replace(/\s&\s/g, " and ");
+}
+
+/**
+ * A catalogue name in sentence case, for running text and lists
+ * ("Offer of Employment" reads "Offer of employment"). Acronyms and words
+ * with digits keep their case (PIP, ACAS, SAR, UK).
+ */
+export function sentenceCaseTitle(title: string | undefined): string {
+  const t = (title ?? "").trim();
+  let first = true;
+  return t.replace(/[\p{L}][\p{L}'’]*/gu, (w) => {
+    if (first) {
+      first = false;
+      return w;
+    }
+    if (w.length > 1 && w === w.toUpperCase()) return w;
+    return w.toLowerCase();
+  });
+}

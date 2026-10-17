@@ -20,6 +20,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const createUser = vi.fn();
 const sendVerificationEmail = vi.fn();
 const listUsers = vi.fn();
+const updateUser = vi.fn();
 
 vi.mock("../../_utils/workos.js", () => ({
   getWorkos: () => ({
@@ -27,6 +28,7 @@ vi.mock("../../_utils/workos.js", () => ({
       createUser,
       sendVerificationEmail,
       listUsers,
+      updateUser,
     },
   }),
 }));
@@ -35,6 +37,8 @@ beforeEach(() => {
   createUser.mockReset();
   sendVerificationEmail.mockReset();
   listUsers.mockReset();
+  updateUser.mockReset();
+  vi.restoreAllMocks();
   // Reset the in-process rate-limit bucket between tests.
   vi.resetModules();
 });
@@ -118,6 +122,72 @@ describe("POST /api/auth/sign-up", () => {
     // Background: we DID silently resend so the rightful owner still gets
     // a usable email.
     expect(sendVerificationEmail).toHaveBeenCalledWith({ userId: "user_existing" });
+    // Pre-hijack defence: whoever registered the email first loses their
+    // password, so they can't keep a way in once the owner verifies.
+    expect(updateUser).toHaveBeenCalledTimes(1);
+    const reset = updateUser.mock.calls[0]![0] as Record<string, unknown>;
+    expect(reset.userId).toBe("user_existing");
+    expect(typeof reset.password).toBe("string");
+    expect((reset.password as string).length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("never gives an unverified account the password an anonymous duplicate sign-up submitted", async () => {
+    // The owner has just signed up and not yet verified. Anyone can POST a
+    // sign-up for the same address; if that set the account's password, the
+    // owner would verify an account the other party can sign into.
+    const conflict = Object.assign(new Error("user_creation_error"), {
+      status: 409,
+      name: "ConflictException",
+    });
+    createUser.mockRejectedValueOnce(conflict);
+    listUsers.mockResolvedValueOnce({
+      data: [{ id: "user_owner", email: "owner@example.com", emailVerified: false }],
+    });
+    sendVerificationEmail.mockResolvedValueOnce({ user: { id: "user_owner" } });
+
+    const { POST } = await import("./sign-up.js");
+    const res = await POST(
+      makeRequest({
+        email: "owner@example.com",
+        password: "attacker-chosen-pw",
+        firstName: "Mallory",
+        lastName: "M",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    for (const [args] of updateUser.mock.calls) {
+      const patch = args as Record<string, unknown>;
+      expect(patch.password).not.toBe("attacker-chosen-pw");
+      expect(patch.firstName).toBeUndefined();
+      expect(patch.lastName).toBeUndefined();
+    }
+  });
+
+  it("does not resend the verification email when the old password could not be cleared", async () => {
+    const conflict = Object.assign(new Error("user_creation_error"), {
+      status: 409,
+      name: "ConflictException",
+    });
+    createUser.mockRejectedValueOnce(conflict);
+    listUsers.mockResolvedValueOnce({
+      data: [{ id: "user_squatted", email: "sq@example.com", emailVerified: false }],
+    });
+    updateUser.mockRejectedValueOnce(new Error("workos down"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { POST } = await import("./sign-up.js");
+    const res = await POST(
+      makeRequest({
+        email: "sq@example.com",
+        password: "longenough123",
+        firstName: "Ada",
+        lastName: "Lovelace",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
   });
 
   it("does NOT resend to an already-verified user (would look like phishing)", async () => {
@@ -142,6 +212,8 @@ describe("POST /api/auth/sign-up", () => {
 
     expect(res.status).toBe(200);
     expect(sendVerificationEmail).not.toHaveBeenCalled();
+    // A verified account's password is never touched by a sign-up attempt.
+    expect(updateUser).not.toHaveBeenCalled();
   });
 
   it("surfaces a 422 validation error verbatim (password too weak etc)", async () => {

@@ -193,7 +193,7 @@ Three sub-variants — pass, extension, fail.
 - At-will throughout probation; document reasons for discrimination defence
 - CA: final wages within 72h if employee resigns, immediately if employer-initiated (Labor Code §201, §203 penalty up to 30 days)
 - NY: next regular payday
-- TX: next regular payday (§61.014)
+- TX: within six calendar days of discharge (§61.014(a)(1)); next regular payday only if the employee resigns
 - FL: federal default
 
 **Tone:** Pass — warm. Extension — supportive but firm. Fail — neutral, factual, dignified.
@@ -243,7 +243,7 @@ Two variants — for cause / without cause.
 
 **UK legal fences:**
 - Five potentially fair reasons under s.98 ERA 1996: capability, conduct, redundancy, statutory illegality, SOSR — name one
-- 2 years' service required for ordinary unfair dismissal (s.108 ERA) — Employment Rights Bill 2024 reducing to day one (commencement 2026)
+- 2 years' service required for ordinary unfair dismissal (s.108 ERA); the Employment Rights Act 2025 reduces this to 6 months for dismissals from 1 January 2027
 - ACAS Code applies — non-compliance increases compensation
 - s.86 ERA statutory minimum notice + contractual (whichever greater)
 - Right of appeal mandatory in writing
@@ -257,8 +257,8 @@ Two variants — for cause / without cause.
 - NY-WARN: 50 employees, 25+ affected (or 250+), 90 days
 - CA: final wages immediately for employer-initiated termination (Labor Code §201); §203 penalty up to 30 days' wages
 - NY: by next regular payday + Labor Law §195(6) written notice of termination
-- TX: by next regular payday (§61.014)
-- COBRA notice within 14 days
+- TX: within six calendar days of discharge (§61.014(a)(1)); next regular payday applies only to resignations
+- COBRA: employer notifies the plan administrator within 30 days; administrator sends the election notice within 14 days of that (44 days where the employer is the administrator)
 - EEOC: avoid pretextual reasons; document legitimate business reason
 - Final paycheck must include accrued PTO in CA, CO, MA, IL
 
@@ -341,7 +341,7 @@ Two variants — for cause / without cause.
 - Statutory Maternity Leave 52 weeks; SMP 39 weeks (90% earnings 6 weeks, then £184.03/week or 90% if lower — 2024–25)
 - Statutory Paternity Leave 1–2 weeks (extended under 2024 reforms)
 - Shared Parental Leave up to 50 weeks shared
-- SSP £116.75/week up to 28 weeks (2024–25)
+- SSP up to 28 weeks. From 6 April 2026 (Employment Rights Act 2025) it is paid from day 1 at the standard weekly rate or 80% of average weekly earnings if lower, with no lower earnings limit (standard rate £123.25/week for 2026–27; check the current rate each April)
 - KIT days: 10 maternity / 20 SPLIT
 - Unpaid Parental Leave: 18 weeks per child up to age 18
 - Carer's Leave Act 2023: 1 week/year unpaid (Apr 2024)
@@ -444,7 +444,7 @@ Two variants — for cause / without cause.
 - Sponsor Licence under Skilled Worker route — Home Office compliance
 - CoS — defined or undefined
 - Right to Work checks (List A / List B) — share code for non-British/Irish
-- Going-rate salary thresholds (April 2024 — £38,700 general)
+- Going-rate salary thresholds (general threshold £41,700 from 22 July 2025; check current Home Office figures)
 
 **US legal fences:**
 - H-1B specialty occupation — bachelor's minimum, prevailing wage (LCA)

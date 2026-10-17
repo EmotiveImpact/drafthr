@@ -1,21 +1,27 @@
 /**
- * Tiny CSV helpers for the Bulk Operations skeleton.
+ * CSV helpers for Bulk Operations.
  *
- * Limitations (intentional — real pipeline will use PapaParse):
- *  - Quoted fields with embedded commas: supported.
- *  - Quoted fields with embedded newlines: NOT supported (we split rows
- *    on raw newlines first).
- *  - Escaped double-quotes inside quoted fields (`""`): supported.
- *  - BOM stripped from start of file.
- *  - Trailing whitespace per cell trimmed.
- *  - Empty rows skipped.
+ * The parser follows RFC 4180:
+ *  - fields may be wrapped in double quotes, and a quoted field may contain
+ *    commas, line breaks (LF or CRLF) and escaped quotes (`""`);
+ *  - records end at an unquoted LF or CRLF;
+ *  - a BOM at the start of the file is stripped;
+ *  - surrounding whitespace on each cell is trimmed (line breaks inside a
+ *    quoted cell are kept);
+ *  - blank records are skipped.
  */
 
 import { letterStepsFor, type Question } from "@/lib/letters/questions";
+import { foldKey } from "@/lib/bulk/keys";
 
 export type CsvParseResult = {
   headers: string[];
   rows: Record<string, string>[];
+  /**
+   * Spreadsheet row number (header = row 1) for each entry in `rows`, so
+   * warnings can point at the record the user sees in Excel or Sheets.
+   */
+  rowNumbers?: number[];
   /** Row-level warnings, e.g. missing required field. */
   warnings: { rowIndex: number; message: string }[];
   /** Hard error — parse couldn't continue. */
@@ -24,49 +30,92 @@ export type CsvParseResult = {
 
 const BOM = "﻿";
 
-function splitCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = "";
+/**
+ * Split CSV text into records of raw cells. Returns an error message for an
+ * unterminated quoted field, which would otherwise swallow the rest of the
+ * file into one cell.
+ */
+export function parseCsvRecords(text: string): { records: string[][]; error?: string } {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let cell = "";
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  let quotedStartRecord = 0;
+
+  const endCell = () => {
+    record.push(cell);
+    cell = "";
+  };
+  const endRecord = () => {
+    endCell();
+    records.push(record);
+    record = [];
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     if (inQuotes) {
       if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
+        if (text[i + 1] === '"') {
+          cell += '"';
           i++;
         } else {
           inQuotes = false;
         }
       } else {
-        cur += ch;
+        cell += ch;
       }
-    } else if (ch === '"') {
+      continue;
+    }
+    if (ch === '"' && cell.trim() === "") {
+      // Only a quote that opens a field starts a quoted value. A stray quote
+      // inside an unquoted value (12" monitor) is kept as a character, as
+      // Excel does, instead of swallowing the rest of the file.
+      cell = "";
       inQuotes = true;
+      quotedStartRecord = records.length + 1;
     } else if (ch === ",") {
-      out.push(cur);
-      cur = "";
+      endCell();
+    } else if (ch === "\n") {
+      endRecord();
+    } else if (ch === "\r") {
+      if (text[i + 1] === "\n") i++;
+      endRecord();
     } else {
-      cur += ch;
+      cell += ch;
     }
   }
-  out.push(cur);
-  return out.map((c) => c.trim());
+  if (inQuotes) {
+    return {
+      records: [],
+      error: `Row ${quotedStartRecord} has a quoted value with no closing quote.`,
+    };
+  }
+  if (cell.length > 0 || record.length > 0) endRecord();
+  return { records };
+}
+
+function isBlankRecord(cells: string[]): boolean {
+  return cells.every((c) => c.trim() === "");
 }
 
 /** Parse a raw CSV string. Validates header row + that at least one
  *  data row has a non-empty `employee_name` field. */
 export function parseCsv(raw: string): CsvParseResult {
   const cleaned = raw.startsWith(BOM) ? raw.slice(1) : raw;
-  const lines = cleaned
-    .split(/\r?\n/)
-    .map((l) => l.trimEnd())
-    .filter((l) => l.length > 0);
-
-  if (lines.length === 0) {
-    return { headers: [], rows: [], warnings: [], error: "CSV is empty." };
+  const { records: allRecords, error: syntaxError } = parseCsvRecords(cleaned);
+  if (syntaxError) {
+    return { headers: [], rows: [], warnings: [], error: syntaxError };
   }
-  if (lines.length < 2) {
+  // Keep each record's spreadsheet row number (1-based) before dropping blanks.
+  const records = allRecords
+    .map((cells, idx) => ({ cells: cells.map((c) => c.trim()), fileRow: idx + 1 }))
+    .filter((r) => !isBlankRecord(r.cells));
+
+  if (records.length === 0) {
+    return { headers: [], rows: [], warnings: [], error: "This file is empty. It needs a header row and at least one row of data." };
+  }
+  if (records.length < 2) {
     return {
       headers: [],
       rows: [],
@@ -75,7 +124,10 @@ export function parseCsv(raw: string): CsvParseResult {
     };
   }
 
-  const headers = splitCsvLine(lines[0]).map((h) => h.toLowerCase());
+  const columns = records[0].cells.map((h) => h.toLowerCase());
+  // Spreadsheets often export trailing columns with no name; ignore them
+  // rather than reporting them as duplicate '' columns.
+  const headers = columns.filter((h) => h !== "");
   if (!headers.includes("employee_name")) {
     return {
       headers,
@@ -96,35 +148,73 @@ export function parseCsv(raw: string): CsvParseResult {
       headers,
       rows: [],
       warnings: [],
-      error: `Duplicate column '${duplicate}' — column names must be unique.`,
+      error: `Duplicate column '${duplicate}'. Column names must be unique.`,
     };
   }
 
   const rows: Record<string, string>[] = [];
+  const rowNumbers: number[] = [];
   const warnings: { rowIndex: number; message: string }[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const cells = splitCsvLine(lines[i]);
+  for (const { cells, fileRow } of records.slice(1)) {
     const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      row[h] = cells[idx] ?? "";
+    columns.forEach((h, idx) => {
+      if (h) row[h] = cells[idx] ?? "";
     });
     if (!row.employee_name) {
-      // `i` is the 0-based index into `lines`, where lines[0] is the header.
-      // The physical file/spreadsheet row the user sees is therefore i + 1
-      // (header = row 1, first data record = row 2). Reporting bare `i` sent
-      // the user to the header row instead of the offending record.
-      const fileRow = i + 1;
+      // fileRow is the record's spreadsheet row (header = row 1), so the user
+      // is sent to the offending record rather than the header.
       warnings.push({
         rowIndex: fileRow,
-        message: `Row ${fileRow} missing 'employee_name' — will skip.`,
+        // Plain words, not the column key (LISTS-X28).
+        message: `Row ${fileRow} has no name, so it will be skipped.`,
       });
       continue;
     }
     rows.push(row);
+    rowNumbers.push(fileRow);
   }
 
-  return { headers, rows, warnings };
+  return { headers, rows, rowNumbers, warnings };
+}
+
+export type MissingMergeValues = {
+  /** Spreadsheet row number (header = row 1). */
+  rowNumber: number;
+  employeeName: string;
+  /** Placeholder names (snake_case) with no value in this row. */
+  fields: string[];
+};
+
+/**
+ * Rows that have no value for one or more placeholders, so the generated
+ * letter would read "[field not set]". Run before generation, against the
+ * CSV columns (every column is offered to the generator as a placeholder)
+ * and again against the placeholders the template actually uses.
+ */
+export function findMissingMergeValues(
+  rows: Record<string, string | number | undefined>[],
+  placeholders: string[],
+  rowNumbers?: number[],
+): MissingMergeValues[] {
+  const wanted = Array.from(new Set(placeholders.map(foldKey))).filter(Boolean);
+  if (wanted.length === 0) return [];
+  const out: MissingMergeValues[] = [];
+  rows.forEach((row, i) => {
+    const present = new Set<string>();
+    for (const [k, v] of Object.entries(row)) {
+      if (v !== undefined && v !== null && String(v).trim() !== "") present.add(foldKey(k));
+    }
+    const fields = wanted.filter((key) => !present.has(key));
+    if (fields.length > 0) {
+      out.push({
+        rowNumber: rowNumbers?.[i] ?? i + 2,
+        employeeName: String(row.employee_name ?? "").trim(),
+        fields,
+      });
+    }
+  });
+  return out;
 }
 
 /** Walk every question step for a letter type and return the scalar-type
@@ -157,7 +247,10 @@ function scalarQuestionsFor(letterType: string): Question[] {
  *  specific scalar questions. */
 export function sampleHeadersFor(letterType: string): string[] {
   const base = ["employee_name", "employee_job_title", "employee_start_date", "employee_email"];
-  const extras = scalarQuestionsFor(letterType).map((q) => q.id);
+  // snake_case, exactly the {{placeholder}} names the generator emits
+  // (placeholderKeysFor folds wizard ids the same way), so a column header
+  // reads the same as the token in the template.
+  const extras = scalarQuestionsFor(letterType).map((q) => foldKey(q.id));
   const seen = new Set<string>();
   const merged: string[] = [];
   for (const h of [...base, ...extras]) {
@@ -187,7 +280,12 @@ export function sampleCsvFor(letterType: string): string {
     if (h.toLowerCase().includes("date")) return "2025-09-01";
     return "";
   });
-  return [headers.join(","), exampleRow.join(","), exampleRow2.join(",")].join("\n");
+  return [headers, exampleRow, exampleRow2].map((r) => r.map(csvCell).join(",")).join("\n");
+}
+
+/** Quote a cell when it holds a comma, quote or line break (RFC 4180). */
+function csvCell(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 /** Map a CSV row's columns onto a wizard-shaped answers object. Header
@@ -200,11 +298,14 @@ export function rowToAnswers(
 ): Record<string, string | number | boolean> {
   const answers: Record<string, string | number | boolean> = {};
   const scalars = scalarQuestionsFor(letterType);
-  const scalarIds = new Set(scalars.map((q) => q.id.toLowerCase()));
+  // Match on the folded key so both the snake_case sample headers and the
+  // older camelCase headers (reviewMeetingDate) map onto the question.
+  const scalarByKey = new Map(scalars.map((q) => [foldKey(q.id), q]));
+  const scalarByLower = new Map(scalars.map((q) => [q.id.toLowerCase(), q]));
 
   for (const [rawKey, value] of Object.entries(row)) {
     if (!value) continue;
-    const key = rawKey.toLowerCase();
+    const key = foldKey(rawKey);
 
     // Common aliases first — these are *the* fields the bulk skeleton
     // expects every CSV to carry.
@@ -225,21 +326,78 @@ export function rowToAnswers(
       continue;
     }
 
-    // Exact-id match against the template's scalar questions.
-    if (scalarIds.has(key)) {
+    // Folded-id match against the template's scalar questions (headers are
+    // lowercased on parse, so also accept a lowercased camelCase id).
+    const q = scalarByKey.get(key) ?? scalarByLower.get(rawKey.toLowerCase());
+    if (q) {
       // Preserve the original camelCase id from the schema.
-      const orig = scalars.find((q) => q.id.toLowerCase() === key);
-      if (orig) {
-        const q = orig;
-        if (q.type === "number") {
-          const n = Number(value);
-          if (!Number.isNaN(n)) answers[q.id] = n;
-        } else {
-          answers[q.id] = value;
-        }
+      if (q.type === "number") {
+        const n = Number(value);
+        if (!Number.isNaN(n)) answers[q.id] = n;
+      } else {
+        answers[q.id] = value;
       }
     }
   }
 
   return answers;
+}
+
+/** "employee_job_title" → "job title", for plain-words copy. */
+export function humaniseField(key: string): string {
+  return foldKey(key).replace(/^employee_/, "").replace(/_/g, " ").trim();
+}
+
+/**
+ * What a row is missing, in the words the preview's row lines use:
+ * ["employee_job_title", "department"] → "no job title, no department".
+ * The column keys never reach the screen (LISTS-X28).
+ */
+export function missingFieldsLabel(fields: string[]): string {
+  return fields.map((f) => `no ${humaniseField(f)}`).join(", ");
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * A CSV date as the app writes dates ("2026-11-02" → "2 Nov 2026"). Only a
+ * real ISO calendar date (optionally with a time) is rewritten; anything
+ * else (other formats, free text, impossible dates) is shown as typed.
+ */
+export function displayCsvValue(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(value);
+  if (!m) return value;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return value;
+  return `${d} ${MONTHS[mo - 1]} ${y}`;
+}
+
+/**
+ * The preview's sub line for one CSV row: the job title first, then the row's
+ * other filled values in column order (never the name, which is the title),
+ * then what is missing ("no job title"). Empty when the row only has a name.
+ * Dates read as everywhere else in the app ("2 Nov 2026", LISTS-X23).
+ */
+export function rowSummary(
+  row: Record<string, string | number | undefined>,
+  headers: string[],
+  missingFields: string[] = [],
+  limit = 3,
+): string {
+  const values: string[] = [];
+  const seen = new Set<string>();
+  const ordered = [...headers].sort(
+    (a, b) => Number(foldKey(b) === "employee_job_title") - Number(foldKey(a) === "employee_job_title"),
+  );
+  for (const h of ordered) {
+    const key = foldKey(h);
+    if (key === "employee_name" || seen.has(key)) continue;
+    seen.add(key);
+    const v = String(row[h] ?? "").trim();
+    if (v) values.push(displayCsvValue(v));
+  }
+  const parts = values.slice(0, limit);
+  for (const f of missingFields) parts.push(`no ${humaniseField(f)}`);
+  return parts.join(" · ");
 }

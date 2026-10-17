@@ -21,7 +21,7 @@ import { ContentInfo, id_signedData } from "@peculiar/asn1-cms";
 
 import { buildPadesCms, parsePadesCms, extractTimeStampTokenDer } from "./pades.ts";
 import { createLocalSigner } from "./local-signer.ts";
-import { buildTestTsr } from "./__fixtures__/test-tsr.ts";
+import { buildTestTsr, createTestTimestamper } from "./__fixtures__/test-tsr.ts";
 
 const ED25519_SPKI_PREFIX = Uint8Array.from([
   0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70,
@@ -43,13 +43,12 @@ const SAMPLE_MANIFEST = new TextEncoder().encode(
 describe("buildPadesCms → parsePadesCms round-trip", () => {
   it("round-trips content, signature, and message-digest attr", async () => {
     const signer = createLocalSigner();
-    const sha256 = createHash("sha256").update(SAMPLE_MANIFEST).digest("hex");
-    const { tsr } = buildTestTsr({ sha256Hex: sha256, genTime: SIGNING_TIME });
+    const { timestamp } = createTestTimestamper(SIGNING_TIME);
 
     const built = await buildPadesCms({
       content: SAMPLE_MANIFEST,
       signer,
-      tsr,
+      timestamp,
       signingTime: SIGNING_TIME,
     });
 
@@ -70,13 +69,12 @@ describe("buildPadesCms → parsePadesCms round-trip", () => {
 
   it("produces an Ed25519 signature that verifies against the signer's public key", async () => {
     const signer = createLocalSigner();
-    const sha256 = createHash("sha256").update(SAMPLE_MANIFEST).digest("hex");
-    const { tsr } = buildTestTsr({ sha256Hex: sha256, genTime: SIGNING_TIME });
+    const { timestamp } = createTestTimestamper(SIGNING_TIME);
 
     const built = await buildPadesCms({
       content: SAMPLE_MANIFEST,
       signer,
-      tsr,
+      timestamp,
       signingTime: SIGNING_TIME,
     });
     const parsed = parsePadesCms(built.cmsDer);
@@ -94,13 +92,12 @@ describe("buildPadesCms → parsePadesCms round-trip", () => {
   it("rejects verification with the wrong public key", async () => {
     const signer = createLocalSigner();
     const otherSigner = createLocalSigner();
-    const sha256 = createHash("sha256").update(SAMPLE_MANIFEST).digest("hex");
-    const { tsr } = buildTestTsr({ sha256Hex: sha256, genTime: SIGNING_TIME });
+    const { timestamp } = createTestTimestamper(SIGNING_TIME);
 
     const built = await buildPadesCms({
       content: SAMPLE_MANIFEST,
       signer,
-      tsr,
+      timestamp,
       signingTime: SIGNING_TIME,
     });
     const parsed = parsePadesCms(built.cmsDer);
@@ -117,13 +114,12 @@ describe("buildPadesCms → parsePadesCms round-trip", () => {
 
   it("embeds the TimeStampToken (not the wrapping TimeStampResp) as the unsigned attribute", async () => {
     const signer = createLocalSigner();
-    const sha256 = createHash("sha256").update(SAMPLE_MANIFEST).digest("hex");
-    const { tsr } = buildTestTsr({ sha256Hex: sha256, genTime: SIGNING_TIME });
+    const { timestamp } = createTestTimestamper(SIGNING_TIME);
 
     const built = await buildPadesCms({
       content: SAMPLE_MANIFEST,
       signer,
-      tsr,
+      timestamp,
       signingTime: SIGNING_TIME,
     });
     const parsed = parsePadesCms(built.cmsDer);

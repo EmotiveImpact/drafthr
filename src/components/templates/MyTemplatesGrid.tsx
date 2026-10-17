@@ -1,91 +1,105 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookmarkPlus, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useDraftStore } from "@/lib/store";
 import type { CustomTemplate, Mode } from "@/lib/letters/types";
-import { CustomTemplateCard } from "./CustomTemplateCard";
+import { ConfirmDialog } from "@/components/wizard/kit";
+import { CustomTemplateCard, NewTemplateTile } from "./CustomTemplateCard";
 import { RenameCustomTemplateModal } from "./RenameCustomTemplateModal";
 import { NewTemplateModal } from "./NewTemplateModal";
+import { PaperArt } from "./PaperArt";
 
 /**
- * Grid of the user's workspace-saved custom templates, scoped to a
- * single mode. Empty-state nudges the user toward saving from an open
- * draft.
+ * The firm's own templates for one mode, newest first. `variant="all"` is
+ * the section on the All tab (no Start drafting button; the name starts a
+ * letter), `variant="mine"` is the Your templates tab. Rename and Delete sit
+ * in each card's "..." menu; Delete asks first in a kit dialog.
+ *
+ * `onCreate` lets the page own the Create a template dialog.
  */
-export function MyTemplatesGrid({ mode }: { mode: Mode }) {
+export function MyTemplatesGrid({
+  mode,
+  onCreate,
+  variant = "mine",
+  limit,
+}: {
+  mode: Mode;
+  onCreate?: () => void;
+  variant?: "all" | "mine";
+  /** Cap the cards shown (the All tab shows a few). */
+  limit?: number;
+}) {
   const nav = useNavigate();
   const customTemplates = useDraftStore((s) => s.customTemplates);
-  const createDraftFromCustomTemplate = useDraftStore(
-    (s) => s.createDraftFromCustomTemplate
-  );
+  const createDraftFromCustomTemplate = useDraftStore((s) => s.createDraftFromCustomTemplate);
   const deleteCustomTemplate = useDraftStore((s) => s.deleteCustomTemplate);
 
   const [renaming, setRenaming] = useState<CustomTemplate | null>(null);
+  const [deleting, setDeleting] = useState<CustomTemplate | null>(null);
   const [creating, setCreating] = useState(false);
+  const create = onCreate ?? (() => setCreating(true));
 
-  // Sort by most-recently-updated within the active mode.
-  const templates = useMemo(() => {
-    return Object.values(customTemplates)
-      .filter((t) => t.mode === mode)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [customTemplates, mode]);
+  const templates = useMemo(
+    () =>
+      Object.values(customTemplates)
+        .filter((t) => t.mode === mode)
+        .sort((a, b) => b.updatedAt - a.updatedAt),
+    [customTemplates, mode]
+  );
 
   const handleStart = (id: string) => {
     const newId = createDraftFromCustomTemplate(id, mode);
     if (newId) nav(`/editor/${newId}`);
   };
 
-  const handleDelete = (tpl: CustomTemplate) => {
-    const ok = window.confirm(`Delete "${tpl.name}"? This can't be undone.`);
-    if (!ok) return;
-    deleteCustomTemplate(tpl.id);
-    toast.success(`Deleted "${tpl.name}"`);
+  const confirmDelete = () => {
+    if (!deleting) return;
+    deleteCustomTemplate(deleting.id);
+    toast.success(`Deleted "${deleting.name}"`, {
+      description: "Letters already made from it are not affected.",
+    });
+    setDeleting(null);
   };
 
-  if (templates.length === 0) {
+  const ownModal = !onCreate && <NewTemplateModal open={creating} onOpenChange={setCreating} mode={mode} />;
+
+  if (templates.length === 0 && variant === "mine") {
     return (
       <>
-        <div className="rounded-lg border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface)] p-10 text-center">
-          <div className="mx-auto mb-3 grid size-12 place-items-center rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)]">
-            <BookmarkPlus className="size-5" />
-          </div>
-          <h3 className="text-[14px] font-semibold text-[var(--ds-ink)] m-0">
-            No custom templates yet
-          </h3>
-          <p className="text-[12.5px] text-[var(--ds-muted)] mt-1 mb-4 m-0">
-            Build one from scratch with <span className="font-medium">New template</span>,
-            or save from an open draft (File → Save as template).
+        <div className="flex flex-col items-center rounded-[16px] border border-dashed border-[var(--ds-line-strong)] px-6 py-9 text-center">
+          <PaperArt tint="sky" height={120} className="w-[220px]" />
+          <h3 className="ds-heading m-0 mt-5 text-[22px]">No firm templates yet</h3>
+          <p className="m-0 mt-1.5 max-w-[46ch] text-[14px] leading-relaxed text-[var(--ds-muted)]">
+            Create one from scratch, or use Save as template on any letter.
           </p>
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="size-3.5" />
-            New template
+          <Button className="mt-5" onClick={create}>
+            <Plus className="size-4" />
+            Create a template
           </Button>
         </div>
-        <NewTemplateModal open={creating} onOpenChange={setCreating} mode={mode} />
+        {ownModal}
       </>
     );
   }
 
+  const shown = limit ? templates.slice(0, limit) : templates;
+
   return (
     <>
-      <div className="flex items-center justify-end mb-3">
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="size-3.5" />
-          New template
-        </Button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {templates.map((t) => (
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+        {shown.map((t) => (
           <CustomTemplateCard
             key={t.id}
             template={t}
+            showStart={variant === "mine"}
             onStart={() => handleStart(t.id)}
             onRename={() => setRenaming(t)}
-            onDelete={() => handleDelete(t)}
+            onDelete={() => setDeleting(t)}
           />
         ))}
+        <NewTemplateTile onClick={create} />
       </div>
       <RenameCustomTemplateModal
         template={renaming}
@@ -94,7 +108,18 @@ export function MyTemplatesGrid({ mode }: { mode: Mode }) {
           if (!o) setRenaming(null);
         }}
       />
-      <NewTemplateModal open={creating} onOpenChange={setCreating} mode={mode} />
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleting(null);
+        }}
+        title={deleting ? `Delete "${deleting.name}"?` : "Delete template?"}
+        description="This can't be undone. Letters already started from it are not changed."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+      />
+      {ownModal}
     </>
   );
 }

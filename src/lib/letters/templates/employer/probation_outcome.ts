@@ -5,7 +5,7 @@ export const PROBATION_OUTCOME_UK: LetterTemplate = {
   jurisdiction: "UK",
   evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Probation Outcome):
-- An employee with under two years' continuous service generally has no ordinary unfair-dismissal claim under s.108 ERA 1996, but exceptions apply: discrimination (Equality Act 2010), whistleblowing (s.103A ERA 1996), and other automatic-unfair categories (ss.99–105 ERA 1996).
+- Unfair dismissal qualifying service (Great Britain), counted to the effective date of termination, which statutory minimum notice can extend (s.97(2) ERA 1996): where that date is before 1 January 2027, an employee with under two years' continuous service generally has no ordinary unfair dismissal claim (s.108 ERA 1996); where it is on or after 1 January 2027, the qualifying period is six months (Employment Rights Act 2025), so most probationers dismissed at or after six months can claim. Exceptions with no service requirement apply either way: discrimination (Equality Act 2010), whistleblowing (s.103A ERA 1996), and the other automatically unfair reasons (ss.99–105 ERA 1996). Never state in the letter that the employee has no right to claim unfair dismissal.
 - The ACAS Code of Practice on Disciplinary and Grievance Procedures applies to capability dismissals as best practice; non-compliance may attract a 25% uplift on tribunal awards under s.207A TULRCA 1992.
 - Once the employee has more than one month's service, statutory minimum notice under s.86 ERA 1996 applies (1 week minimum); contractual notice may be longer.
 - For pass / extension / fail outcomes, this template branches on outcome — be precise about which is being communicated.
@@ -129,9 +129,9 @@ export const PROBATION_OUTCOME_US: LetterTemplate = {
   evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Probation Outcome):
 - US employment is at-will throughout any introductory or probationary period; the employer may terminate at any time without cause. Document the legitimate business reason for any Fail outcome to defeat discrimination claims (Title VII, ADA, ADEA, FEHA, state analogs).
-- On Fail / termination at end of probation: California requires immediate payment of all final wages on the last day for employer-initiated terminations (Lab. Code 201; Lab. Code 203 waiting-time penalty for non-compliance). NY: next regular payday. TX: next regular payday under Lab. Code 61.014. Verify state rule.
+- On Fail / termination at end of probation: California requires immediate payment of all final wages on the last day for employer-initiated terminations (Lab. Code 201; Lab. Code 203 waiting-time penalty for non-compliance). NY: next regular payday. TX: within six calendar days of discharge under Lab. Code 61.014(a)(1). Verify state rule.
 - Accrued unused PTO must be paid out in CA, CO, MA, IL, NE, ND under state final-pay rules where it has vested under policy.
-- COBRA continuation notice (29 USC 1166) must follow within 14 days for terminating employees enrolled in employer health plans.
+- For terminating employees enrolled in employer health plans: COBRA continuation election notice (29 USC 1166; 29 CFR 2590.606-4): the employer notifies the plan administrator within 30 days of the qualifying event, and the administrator sends the election notice within 14 days of that (44 days in total where the employer is the administrator). Do not promise the employee a 14-day timescale.
 - ADA: if disability is implicated in performance, separate the performance issue from accommodation discussion and document the interactive process.
 - Register: factual, professional, no character commentary. American English throughout.`,
   sections: [

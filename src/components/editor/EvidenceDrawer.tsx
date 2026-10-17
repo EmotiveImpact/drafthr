@@ -17,6 +17,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import * as Dialog from "@radix-ui/react-dialog";
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
@@ -93,6 +94,8 @@ export function EvidenceDrawer({
   onOpenChange,
   pinned = false,
   onPinnedChange,
+  canAdd = true,
+  canManage = true,
 }: {
   draft: Draft;
   editor: Editor | null;
@@ -103,6 +106,12 @@ export function EvidenceDrawer({
   pinned?: boolean;
   /** Toggle pinned mode. When omitted, the Pin button is hidden. */
   onPinnedChange?: (next: boolean) => void;
+  /** Upload new evidence: off while the letter is locked and for anyone
+   *  who cannot edit it (a reviewer, a viewer). */
+  canAdd?: boolean;
+  /** The Manage evidence link to the Evidence page: off for a teammate
+   *  reviewer, who sees only what was shared with them. */
+  canManage?: boolean;
 }) {
   const allItems = draft.evidence ?? [];
   const [query, setQuery] = useState("");
@@ -117,7 +126,7 @@ export function EvidenceDrawer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const handleUploadFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!canAdd || !files || files.length === 0) return;
     setUploadStatus(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}…`);
     try {
       const items: EvidenceItem[] = [];
@@ -135,7 +144,10 @@ export function EvidenceDrawer({
           includeVerbatim: false,
         });
       }
-      setEvidence(draft.id, [...allItems, ...items]);
+      // Append to the letter's own list: the drawer may be showing only what
+      // a reviewer was given, and the rest must not be lost.
+      const live = useDraftStore.getState().drafts[draft.id]?.evidence ?? allItems;
+      setEvidence(draft.id, [...live, ...items]);
       setUploadStatus(`Added ${items.length} item${items.length > 1 ? "s" : ""}`);
       // Clear the status banner after a moment.
       window.setTimeout(() => setUploadStatus(null), 2400);
@@ -235,6 +247,11 @@ export function EvidenceDrawer({
     return draft.sections.find((s) => s.id === id)?.title ?? "";
   }, [editor, draft.sections, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // After an insert the floating dialog closes and focus belongs in the
+  // editor at the new reference, not back on the button that opened it.
+  const focusEditorOnClose = useRef(false);
+  const returnFocusTo = useRef<HTMLElement | null>(null);
+
   const insert = (item: EvidenceItem) => {
     if (!editor) return;
     const mode = displayModeOf(item);
@@ -261,7 +278,10 @@ export function EvidenceDrawer({
     // When floating, the user expects the drawer to dismiss after insert
     // (the canvas is what they want to see next). When pinned, leave it open
     // — they're doing batched insertions and will dismiss themselves.
-    if (!pinned) onOpenChange(false);
+    if (!pinned) {
+      focusEditorOnClose.current = true;
+      onOpenChange(false);
+    }
   };
 
   // ----------------- Shared body (used by both render modes) -----------------
@@ -274,9 +294,16 @@ export function EvidenceDrawer({
         <Paperclip className="size-[18px]" />
       </div>
       <div className="min-w-0 flex-1">
-        <h2 className="text-[15px] font-bold tracking-tight text-[var(--ds-ink)]">
-          Insert evidence
-        </h2>
+        {pinned ? (
+          <h2 className="text-[15px] font-bold tracking-tight text-[var(--ds-ink)]">
+            Insert evidence
+          </h2>
+        ) : (
+          // Dialog.Title gives the floating dialog its accessible name.
+          <Dialog.Title className="text-[15px] font-bold tracking-tight text-[var(--ds-ink)]">
+            Insert evidence
+          </Dialog.Title>
+        )}
         {cursorSectionTitle && (
           <p className="text-[11.5px] text-[var(--ds-muted)] mt-0.5 truncate">
             At cursor in §{cursorSectionTitle}
@@ -287,8 +314,8 @@ export function EvidenceDrawer({
         <button
           type="button"
           onClick={() => onPinnedChange(true)}
-          aria-label="Pin evidence as a permanent right rail"
-          title="Pin → make this a permanent right rail (replaces AI agent panel)"
+          aria-label="Pin evidence beside the letter"
+          title="Keep evidence open beside the letter, in place of the side panel"
           className="h-7 px-2 inline-flex items-center gap-1 rounded-md text-[11.5px] font-semibold text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
         >
           <PinIcon className="size-3.5" />
@@ -297,14 +324,12 @@ export function EvidenceDrawer({
         </button>
       )}
       {!pinned && (
-        <button
-          type="button"
-          onClick={() => onOpenChange(false)}
+        <Dialog.Close
           aria-label="Close evidence drawer"
           className="size-7 rounded-md grid place-items-center text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
         >
           <X className="size-4" />
-        </button>
+        </Dialog.Close>
       )}
     </div>
   );
@@ -314,15 +339,15 @@ export function EvidenceDrawer({
       <button
         type="button"
         onClick={() => onPinnedChange(false)}
-        aria-label="Unpin evidence — return AI agent rail"
-        title="Unpin — return both Evidence and Ask AI to pills"
+        aria-label="Unpin evidence and return the side panel"
+        title="Unpin evidence and return the side panel"
         className="h-6 px-2 inline-flex items-center gap-1 rounded-md text-[11px] font-semibold text-[var(--ds-amber-fg)] hover:bg-[var(--ds-amber-bg)] transition"
       >
         <Undo2 className="size-3" />
         Unpin
       </button>
       <span className="text-[11px] text-[var(--ds-muted)]">
-        Evidence pinned · Ask AI is a pill at bottom-right
+        Evidence pinned here. Unpin to bring back Progress and Ask DraftHR.
       </span>
     </div>
   ) : null;
@@ -346,7 +371,7 @@ export function EvidenceDrawer({
 
         {/* Tabs — min-w-0 on the flex container is required for overflow-x-auto
          * to actually kick in when the inner buttons exceed the slot width. */}
-        <div className="flex border-b border-[var(--ds-line)] px-3 gap-0.5 overflow-x-auto min-w-0">
+        <div className="flex min-w-0 justify-between border-b border-[var(--ds-line)] px-2">
           {FILTER_TABS.map((tab) => {
             const isActive = activeTab === tab.id;
             const count = counts[tab.id];
@@ -356,7 +381,7 @@ export function EvidenceDrawer({
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "py-2.5 px-2 text-[12px] font-semibold border-b-2 -mb-px transition whitespace-nowrap shrink-0",
+                  "py-2.5 px-1 text-[12px] font-semibold border-b-2 -mb-px transition whitespace-nowrap shrink-0",
                   isActive
                     ? "text-[var(--ds-ink)] border-[var(--ds-ink)]"
                     : "text-[var(--ds-muted)] border-transparent hover:text-[var(--ds-ink)]"
@@ -365,7 +390,7 @@ export function EvidenceDrawer({
                 {tab.label}
                 <span
                   className={cn(
-                    "ml-1.5 inline-block min-w-[18px] text-center text-[10.5px] font-semibold px-1.5 py-px rounded-full",
+                    "ml-1 inline-block min-w-[16px] text-center text-[10.5px] font-semibold px-1 py-px rounded-full",
                     isActive
                       ? "bg-[var(--ds-ink)] text-white"
                       : "bg-[var(--ds-surface-2)] text-[var(--ds-muted)]"
@@ -382,6 +407,7 @@ export function EvidenceDrawer({
         <div className="flex-1 overflow-y-auto px-5 py-3.5">
           {filtered.length === 0 ? (
             <EmptyState
+              canAdd={canAdd}
               hasAnyEvidence={allItems.length > 0}
               onUploadClick={() => fileInputRef.current?.click()}
             />
@@ -447,7 +473,7 @@ export function EvidenceDrawer({
                           ) : mode === "attached" ? (
                             <>Will reference Attachments</>
                           ) : (
-                            <>Pack-only — not inserted in prose</>
+                            <>Pack only, not inserted in the letter</>
                           )}
                         </p>
                       </div>
@@ -499,14 +525,16 @@ export function EvidenceDrawer({
          * Manage evidence link returned per UX request — affordance for
          * discoverability even though the route redirects back to the drawer. */}
         <div className="px-5 py-3 border-t border-[var(--ds-line)] bg-[var(--ds-surface-2)] flex items-center gap-3">
-          <Link
-            to={`/editor/${draft.id}/evidence`}
-            onClick={() => { if (!pinned) onOpenChange(false); }}
-            className="text-[12px] font-semibold text-[var(--ds-ink)] underline decoration-[var(--ds-line)] underline-offset-[3px] hover:decoration-[var(--ds-ink)] flex items-center gap-1 shrink-0"
-          >
-            Manage evidence
-            <ExternalLink className="size-3" />
-          </Link>
+          {canManage && (
+            <Link
+              to={`/editor/${draft.id}/evidence`}
+              onClick={() => { if (!pinned) onOpenChange(false); }}
+              className="text-[12px] font-semibold text-[var(--ds-ink)] underline decoration-[var(--ds-line)] underline-offset-[3px] hover:decoration-[var(--ds-ink)] flex items-center gap-1 shrink-0"
+            >
+              Manage evidence
+              <ExternalLink className="size-3" />
+            </Link>
+          )}
           <span className="text-[11.5px] text-[var(--ds-muted)] tabular-nums">
             {allItems.length} {allItems.length === 1 ? "item" : "items"}
             {totalBytes > 0 && <> · {formatBytes(totalBytes)}</>}
@@ -516,24 +544,28 @@ export function EvidenceDrawer({
               {uploadStatus}
             </span>
           )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              void handleUploadFiles(e.target.files);
-              e.target.value = ""; // allow re-picking the same file
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="ml-auto h-[30px] px-3 bg-white border border-[var(--ds-line)] rounded-md text-[12px] font-semibold text-[var(--ds-ink)] flex items-center gap-1.5 hover:bg-[var(--ds-line-2)] transition"
-          >
-            <Upload className="size-3" />
-            Upload new
-          </button>
+          {canAdd && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  void handleUploadFiles(e.target.files);
+                  e.target.value = ""; // allow re-picking the same file
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="ml-auto h-[30px] px-3 bg-white border border-[var(--ds-line)] rounded-md text-[12px] font-semibold text-[var(--ds-ink)] flex items-center gap-1.5 hover:bg-[var(--ds-line-2)] transition"
+              >
+                <Upload className="size-3" />
+                Upload new
+              </button>
+            </>
+          )}
         </div>
     </>
   );
@@ -543,46 +575,77 @@ export function EvidenceDrawer({
   // slot so we just fill the slot.
   if (pinned) {
     return (
-      <div className="flex flex-col h-full min-h-0 bg-white text-[var(--ds-ink)]">
+      <aside
+        aria-label="Evidence"
+        className="flex flex-col h-full min-h-0 bg-white text-[var(--ds-ink)]"
+      >
         {innerBody}
-      </div>
+      </aside>
     );
   }
 
-  // Floating mode — Framer Motion overlay matching the AI drawer animation.
+  // Floating mode — a modal dialog on the Radix primitive, animated with
+  // Framer Motion like the AI drawer. Radix supplies the accessibility:
+  // role="dialog" + aria-modal, the label from Dialog.Title, focus moved in on
+  // open and trapped while open, Escape and scrim click to close, the rest of
+  // the page hidden from assistive tech, and focus returned to the element
+  // that opened it on close.
   return (
-    <>
-      {/* Scrim — same styling as the AI drawer scrim in Editor.tsx */}
-      <button
-        type="button"
-        className={cn(
-          "fixed inset-0 z-30 bg-black/30 transition-opacity duration-200 motion-reduce:transition-none",
-          open ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
-        aria-label="Close evidence drawer"
-        aria-hidden={!open || undefined}
-        tabIndex={open ? undefined : -1}
-        onClick={() => onOpenChange(false)}
-      />
-      {/* Overlay — spring constants identical to the AI drawer */}
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <AnimatePresence>
         {open && (
-          <motion.aside
-            key="evidence-drawer-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Insert evidence"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", stiffness: 340, damping: 42, mass: 0.9 }}
-            className="fixed inset-y-0 right-0 z-40 w-full max-w-[420px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden"
-          >
-            {innerBody}
-          </motion.aside>
+          <Dialog.Portal forceMount>
+            <Dialog.Overlay forceMount asChild>
+              <motion.div
+                key="evidence-drawer-scrim"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-30 bg-black/30"
+              />
+            </Dialog.Overlay>
+            <Dialog.Content
+              forceMount
+              asChild
+              aria-modal="true"
+              aria-describedby={undefined}
+              onOpenAutoFocus={() => {
+                // Remember what opened the dialog. Radix only restores focus
+                // to its own Dialog.Trigger, and this drawer is opened from
+                // several places (toolbar, section header, keyboard shortcut).
+                const active = document.activeElement;
+                returnFocusTo.current =
+                  active instanceof HTMLElement && active !== document.body ? active : null;
+              }}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                if (focusEditorOnClose.current && editor) {
+                  editor.commands.focus();
+                } else if (returnFocusTo.current?.isConnected) {
+                  returnFocusTo.current.focus();
+                }
+                focusEditorOnClose.current = false;
+                returnFocusTo.current = null;
+              }}
+            >
+              <motion.aside
+                key="evidence-drawer-overlay"
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ duration: 0.22, ease: [0.2, 0.7, 0.2, 1] }}
+                // The side panel's own width: it opens over the Edits /
+                // Progress / Chat tabs, never over the document bar.
+                className="fixed inset-y-0 right-0 z-40 w-full max-w-[380px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-[var(--ds-shadow-l)] flex flex-col min-h-0 overflow-hidden focus:outline-none"
+              >
+                {innerBody}
+              </motion.aside>
+            </Dialog.Content>
+          </Dialog.Portal>
         )}
       </AnimatePresence>
-    </>
+    </Dialog.Root>
   );
 }
 
@@ -592,9 +655,11 @@ export function EvidenceDrawer({
 function EmptyState({
   hasAnyEvidence,
   onUploadClick,
+  canAdd = true,
 }: {
   hasAnyEvidence: boolean;
   onUploadClick: () => void;
+  canAdd?: boolean;
 }) {
   if (!hasAnyEvidence) {
     return (
@@ -609,14 +674,14 @@ function EmptyState({
           Drop in emails, screenshots, documents or notes. They'll appear here
           and you can insert <strong>[See Fig N]</strong> references into the letter.
         </p>
-        <button
+        {canAdd && <button
           type="button"
           onClick={onUploadClick}
           className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-[var(--ds-ink)] text-white text-[12px] font-semibold rounded-md hover:bg-[var(--ds-ink)]/90 transition"
         >
           <Upload className="size-3" />
           Upload first item
-        </button>
+        </button>}
       </div>
     );
   }
@@ -660,7 +725,7 @@ function buildInlineHtml(item: EvidenceItem): string {
         : item.kind === "calendar"
         ? "Calendar entry"
         : "Note";
-    return `<blockquote>${escHtml(text)}<br/><em>— ${kindLabel}${caption}</em></blockquote>`;
+    return `<blockquote>${escHtml(text)}<br/><em>${kindLabel}${caption}</em></blockquote>`;
   }
   // Documents
   return `<p>I refer to the document <em>${escHtml(item.filename || "(unnamed)")}</em>${

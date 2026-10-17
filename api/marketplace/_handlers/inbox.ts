@@ -11,10 +11,12 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import {
+  bookingPayments,
   consultantBookings,
   consultantProfiles,
   users,
 } from "../../../src/db/schema.js";
+import { priorityFields } from "../../_utils/priority-reviews.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -40,14 +42,16 @@ export async function GET(req: Request): Promise<Response> {
       booking: consultantBookings,
       requesterEmail: users.email,
       requesterName: users.legalName,
+      paymentStatus: bookingPayments.status,
     })
     .from(consultantBookings)
     .leftJoin(users, eq(users.id, consultantBookings.requesterUserId))
+    .leftJoin(bookingPayments, eq(bookingPayments.bookingId, consultantBookings.id))
     .where(eq(consultantBookings.consultantUserId, auth.userRow.id))
     .orderBy(desc(consultantBookings.bookedAt));
 
   const bookings = rows.map((r) => ({
-    ...toClient(r.booking),
+    ...toClient(r.booking, r.paymentStatus),
     requesterEmail: r.requesterEmail,
     requesterName: r.requesterName,
   }));
@@ -58,7 +62,7 @@ export async function GET(req: Request): Promise<Response> {
   });
 }
 
-function toClient(row: typeof consultantBookings.$inferSelect) {
+function toClient(row: typeof consultantBookings.$inferSelect, paymentStatus: string | null) {
   return {
     id: row.id,
     consultantProfileId: row.consultantProfileId,
@@ -69,6 +73,10 @@ function toClient(row: typeof consultantBookings.$inferSelect) {
     responseNote: row.responseNote,
     deliveryNote: row.deliveryNote,
     rating: row.rating,
+    priceAmount: row.priceAmount,
+    priceCurrency: row.priceCurrency,
+    // The consultant waits for "paid" before starting work.
+    paymentStatus: paymentStatus ?? "unpaid",
     shareToken: row.shareToken,
     messages: row.messages,
     shareTokenExpiresAt: row.shareTokenExpiresAt?.getTime() ?? null,
@@ -77,5 +85,7 @@ function toClient(row: typeof consultantBookings.$inferSelect) {
     acceptedAt: row.acceptedAt?.getTime() ?? null,
     deliveredAt: row.deliveredAt?.getTime() ?? null,
     completedAt: row.completedAt?.getTime() ?? null,
+    declinedAt: row.declinedAt?.getTime() ?? null,
+    ...priorityFields(row),
   };
 }
