@@ -4,7 +4,8 @@ import { Icon } from "./icons";
 
 /**
  * The answer field for one fact, by its type. Choices are outlined rows with
- * a black tick (never a filled row); dates, numbers and text are plain fields.
+ * a letter key that turns into a black tick (never a filled row); dates,
+ * numbers and text are plain fields.
  */
 export function emptyValueFor(_spec: FactSpec): FactValue {
   return null;
@@ -17,26 +18,31 @@ export function isAnswered(spec: FactSpec, value: FactValue): boolean {
   return true;
 }
 
-function Option({
+const KEYS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+export function Option({
   label,
   hint,
   on,
+  index,
   multi,
   onClick,
 }: {
   label: string;
   hint?: string;
   on: boolean;
+  index: number;
   multi?: boolean;
   onClick: () => void;
 }) {
   return (
     <button type="button" role={multi ? "checkbox" : "radio"} className="ci-opt" aria-checked={on} onClick={onClick}>
-      <span>
+      <span className="ci-opt-l">
         {label}
         {hint ? <small>{hint}</small> : null}
       </span>
-      <span className="ci-tick">
+      <span className="ci-key" aria-hidden="true">
+        <span>{KEYS[index] ?? ""}</span>
         <Icon name="check" />
       </span>
     </button>
@@ -65,15 +71,15 @@ export function QuestionInput({
     case "boolean":
       return (
         <div className="ci-opts" role="radiogroup" aria-label={spec.label}>
-          <Option label="Yes" on={value === true} onClick={() => onChange(true)} />
-          <Option label="No" on={value === false} onClick={() => onChange(false)} />
+          <Option index={0} label="Yes" on={value === true} onClick={() => onChange(true)} />
+          <Option index={1} label="No" on={value === false} onClick={() => onChange(false)} />
         </div>
       );
     case "choice":
       return (
         <div className="ci-opts" role="radiogroup" aria-label={spec.label}>
-          {(spec.choices ?? []).map((c) => (
-            <Option key={c} label={choiceLabel(c)} on={value === c} onClick={() => onChange(c)} />
+          {(spec.choices ?? []).map((c, i) => (
+            <Option key={c} index={i} label={choiceLabel(c)} on={value === c} onClick={() => onChange(c)} />
           ))}
         </div>
       );
@@ -93,19 +99,17 @@ export function QuestionInput({
       }
       return (
         <div className="ci-opts" role="group" aria-label={spec.label}>
-          <p className="ci-src" style={{ margin: "0 0 2px" }}>
-            Choose all that apply
-          </p>
-          {spec.choices.map((c) => (
+          {spec.choices.map((c, i) => (
             <Option
               key={c}
+              index={i}
               multi
               label={choiceLabel(c)}
               on={picked.includes(c)}
               onClick={() => onChange(picked.includes(c) ? picked.filter((x) => x !== c) : [...picked, c])}
             />
           ))}
-          <Option multi label="None of these" on={Array.isArray(value) && value.length === 0} onClick={() => onChange([])} />
+          <Option index={spec.choices.length} multi label="None of these" on={Array.isArray(value) && value.length === 0} onClick={() => onChange([])} />
         </div>
       );
     }

@@ -1,7 +1,8 @@
 import "@fontsource-variable/manrope";
-import "@fontsource-variable/newsreader";
+import "@fontsource-variable/newsreader/opsz.css";
 import "@fontsource-variable/geist-mono";
 import "./case-interview.css";
+import markUrl from "./drafthr-mark.png";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -20,13 +21,16 @@ import {
   formatValue,
   longDate,
   questionQueue,
+  readiness,
+  shortDate,
+  timelineRows,
   todayIso,
   type ChapterId,
 } from "@/lib/case-engine/interview";
 import type { Reading } from "@/lib/case-engine/reader";
 import type { CaseEvent, CaseFile, FactValue, Jurisdiction, MissingFact, Playbook, RunResult, SituationId } from "@/lib/case-engine/types";
 import { CaseFilePanel } from "./CaseFilePanel";
-import { QuestionInput, emptyValueFor, isAnswered } from "./QuestionInput";
+import { Option, QuestionInput, emptyValueFor, isAnswered } from "./QuestionInput";
 import { Icon } from "./icons";
 
 type Where = "england-wales" | "scotland" | "northern-ireland" | "us";
@@ -80,6 +84,8 @@ type ShellProps = {
   workspace: string;
   chapter: ChapterId;
   chapterSub?: string;
+  /** How far through the current chapter, 0 to 1, for the thin bar under it. */
+  chapterProgress?: number;
   file?: CaseFile;
   run?: RunResult;
   playbook?: Playbook;
@@ -91,6 +97,7 @@ type ShellProps = {
 
 function Shell(p: ShellProps) {
   const nav = useNavigate();
+  const { me, workspace } = useNames();
   const [fileOpen, setFileOpen] = useState(false);
   const active = CHAPTERS.findIndex((c) => c.id === p.chapter);
   const scroller = useRef<HTMLDivElement>(null);
@@ -98,8 +105,8 @@ function Shell(p: ShellProps) {
     <div className={`ci ${fileOpen ? "file-open" : ""}`}>
       <nav className="ci-side" aria-label="Interview">
         <a className="ci-logo" href="/hr" onClick={(e) => (e.preventDefault(), nav("/hr"))}>
-          <span className="ci-logo-mark">D</span>
-          DRAFTHR
+          <img src={markUrl} alt="" />
+          <b>DRAFTHR</b>
         </a>
         <div className="ci-side-case">
           <span className="ci-preview" title="Not yet checked by an employment lawyer">Preview</span>
@@ -108,7 +115,7 @@ function Shell(p: ShellProps) {
         </div>
         <div className="ci-segs" aria-hidden="true">
           {CHAPTERS.map((c, i) => (
-            <i key={c.id} className={i <= active ? "on" : ""} />
+            <i key={c.id} className={i < active ? "on" : i === active ? "cur" : ""} />
           ))}
         </div>
         <ol className="ci-chapters">
@@ -117,6 +124,11 @@ function Shell(p: ShellProps) {
               <span className="ci-ch-dot">{i < active ? <Icon name="check" /> : null}</span>
               <span className="ci-ch-label">{c.label}</span>
               {i === active && p.chapterSub ? <span className="ci-ch-sub">{p.chapterSub}</span> : null}
+              {i === active && p.chapterProgress !== undefined ? (
+                <span className="ci-ch-bar" aria-hidden="true">
+                  <i style={{ width: `${Math.round(Math.min(1, Math.max(0.06, p.chapterProgress)) * 100)}%` }} />
+                </span>
+              ) : null}
             </li>
           ))}
         </ol>
@@ -152,6 +164,8 @@ function Shell(p: ShellProps) {
           playbook={p.playbook}
           refLabel={p.refLabel ?? ""}
           openedLine={p.openedLine ?? ""}
+          me={me}
+          meRole={meRole(me, workspace)}
           onClose={fileOpen ? () => setFileOpen(false) : undefined}
         />
       ) : (
@@ -161,10 +175,43 @@ function Shell(p: ShellProps) {
             <h2>Your case file</h2>
             <p>It fills in as you tell me what happened.</p>
           </div>
+          <div className="ci-doc">
+            <section className="ci-sec">
+              <h3>
+                People<em>1</em>
+              </h3>
+              <div className="ci-it person">
+                <span className="ci-av me">{initialsOf(me)}</span>
+                <div className="tx">
+                  {me}
+                  <span className="sub">{meRole(me, workspace)}</span>
+                </div>
+              </div>
+            </section>
+          </div>
         </aside>
       )}
     </div>
   );
+}
+
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+}
+
+function meRole(me: string, workspace: string): string {
+  return workspace ? `You · ${workspace}` : me === "You" ? "HR team" : "You";
+}
+
+/** "17 Oct 2026", the case file's short date. */
+function mediumDate(iso: string): string {
+  const d = shortDate(iso);
+  return `${d.day} ${d.year}`;
 }
 
 function useNames() {
@@ -230,35 +277,20 @@ function NewCase() {
       <h1 className="ci-h1">What&rsquo;s going on?</h1>
       <p className="ci-hint">Tell it like you would to a colleague. Rough is fine. I&rsquo;ll add what I find to the case file.</p>
 
-      <p className="ci-field-label">What kind of case</p>
-      <div className="ci-chips">
-        {(Object.keys(SITUATION_NAMES) as SituationId[]).map((s) => (
-          <button key={s} type="button" className="ci-chip" aria-pressed={situation === s} onClick={() => setSituation(s)}>
-            {SITUATION_NAMES[s]}
-          </button>
-        ))}
-      </div>
-      <p className="ci-field-label">Where it happens</p>
-      <div className="ci-chips">
-        {(Object.keys(WHERE_LABEL) as Where[]).map((w) => (
-          <button key={w} type="button" className="ci-chip" aria-pressed={where === w} onClick={() => setWhere(w)}>
-            {WHERE_LABEL[w]}
-          </button>
-        ))}
-      </div>
-
       <div className="ci-statement">
         <div className="ci-statement-head">
-          <span>Statement · in your words</span>
           <span>
-            {me} · {longDate(todayIso())}
+            <Icon name="msg" /> Statement · in your words
+          </span>
+          <span className="who">
+            {me} · {mediumDate(todayIso())}
           </span>
         </div>
         <textarea
           className="ci-textarea"
           value={story}
           onChange={(e) => setStory(e.target.value)}
-          placeholder="What happened, who was involved, and roughly when."
+          placeholder="Start anywhere. Who it’s about, what happened, and roughly when."
           aria-label="Your story"
           autoFocus
           onKeyDown={(e) => {
@@ -266,8 +298,31 @@ function NewCase() {
           }}
         />
         <div className="ci-statement-foot">
-          <span>Only your HR team can see this.</span>
+          <span>
+            <Icon name="lock" /> {workspace ? `Only ${workspace} HR can see this` : "Only your HR team can see this"}
+          </span>
           <span>{words} words</span>
+        </div>
+      </div>
+
+      <div className="ci-pick">
+        <span className="ci-field-label">What kind of case</span>
+        <div className="ci-chips">
+          {(Object.keys(SITUATION_NAMES) as SituationId[]).map((s) => (
+            <button key={s} type="button" className="ci-chip" aria-pressed={situation === s} onClick={() => setSituation(s)}>
+              {SITUATION_NAMES[s]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="ci-pick">
+        <span className="ci-field-label">Where it happens</span>
+        <div className="ci-chips">
+          {(Object.keys(WHERE_LABEL) as Where[]).map((w) => (
+            <button key={w} type="button" className="ci-chip" aria-pressed={where === w} onClick={() => setWhere(w)}>
+              {WHERE_LABEL[w]}
+            </button>
+          ))}
         </div>
       </div>
     </Shell>
@@ -332,7 +387,7 @@ function Interview({ stored }: { stored: StoredCase }) {
   const queue = useMemo(() => questionQueue(run, playbook, stored.skipped), [run, playbook, stored.skipped]);
 
   const refLabel = stored.ref;
-  const openedLine = `Opened ${longDate(new Date(stored.createdAt).toISOString().slice(0, 10))} · ${stored.createdBy}`;
+  const openedLine = `Opened ${mediumDate(new Date(stored.createdAt).toISOString().slice(0, 10))} · ${stored.createdBy}`;
   const answered = file.asked.length;
 
   // The Reader runs once per story; a reload mid-read simply runs it again.
@@ -356,6 +411,8 @@ function Interview({ stored }: { stored: StoredCase }) {
   useEffect(() => {
     if (stored.stage === "reading") void runReader();
   }, [stored.stage, runReader]);
+
+  const [showAll, setShowAll] = useState(false);
 
   // Back goes to the question answered before, to change it.
   const [revisit, setRevisit] = useState<string | null>(null);
@@ -392,6 +449,7 @@ function Interview({ stored }: { stored: StoredCase }) {
     workspace,
     chapter,
     chapterSub: sub,
+    chapterProgress: stage === "questions" && total ? answered / total : stage === "plan" ? 1 : undefined,
     file,
     run,
     playbook,
@@ -432,7 +490,7 @@ function Interview({ stored }: { stored: StoredCase }) {
             <i style={{ width: "54%" }} />
           </div>
         )}
-        <p className="ci-story" style={{ color: "#8a8a85" }}>
+        <p className="ci-story" style={{ color: "#9a9a9f" }}>
           {file.story[file.story.length - 1]?.text}
         </p>
       </Shell>
@@ -440,44 +498,22 @@ function Interview({ stored }: { stored: StoredCase }) {
   }
 
   if (stage === "heard") {
-    const fromStory = Object.values(file.facts).filter((f) => f.sources.some((s) => s.kind === "story"));
-    const quotes = fromStory.flatMap((f) => f.sources.flatMap((s) => (s.kind === "story" ? [s.quote] : [])));
     return (
       <Shell
         {...shellBase}
         bar={
           <>
             <button type="button" className="ci-ok" onClick={() => setStage(stored.id, "questions")}>
-              OK <Icon name="check" />
+              Looks right <Icon name="arrowRight" />
             </button>
             <span className="ci-bar-sp" />
-            <span className="ci-src">Anything wrong? You can change it as we go.</span>
+            <button type="button" className="ci-link" onClick={() => setShowAll((v) => !v)}>
+              <Icon name="eye" /> {showAll ? "Hide the details" : "See every detail"}
+            </button>
           </>
         }
       >
-        <p className="ci-eyebrow">The story · what I picked up</p>
-        <h1 className="ci-h1">{fromStory.length ? "Here’s what I found." : "I couldn’t pick much out."}</h1>
-        <p className="ci-hint">
-          {fromStory.length
-            ? `${fromStory.length} things went into the case file. Next, a few questions to fill the gaps.`
-            : "No problem. I’ll ask the questions one at a time instead."}
-        </p>
-        <p className="ci-story">
-          <Underlined text={file.story[file.story.length - 1]?.text ?? ""} quotes={quotes} />
-        </p>
-        {fromStory.length ? (
-          <ul className="ci-found">
-            {fromStory.map((f) => {
-              const spec = playbook.facts.find((s) => s.key === f.key);
-              return (
-                <li key={f.key}>
-                  <span>{spec?.label ?? f.key}</span>
-                  <b>{formatValue(spec, f.value)}</b>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
+        <Heard file={file} playbook={playbook} showAll={showAll} />
       </Shell>
     );
   }
@@ -534,25 +570,110 @@ function Interview({ stored }: { stored: StoredCase }) {
   );
 }
 
-/** The story with every quoted phrase softly underlined. */
-function Underlined({ text, quotes }: { text: string; quotes: string[] }) {
-  const lower = text.toLowerCase();
-  const marks: [number, number][] = [];
-  for (const q of quotes) {
-    const i = lower.indexOf(q.toLowerCase());
-    if (i >= 0) marks.push([i, i + q.length]);
+const NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+const countWord = (n: number) => NUMBER_WORDS[n] ?? String(n);
+
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** "Here's what I picked up": the Reader's findings as four short rows, details on request. */
+function Heard({ file, playbook, showAll }: { file: CaseFile; playbook: Playbook; showAll: boolean }) {
+  const fromStory = Object.values(file.facts).filter((f) => f.sources.some((s) => s.kind === "story"));
+  if (!fromStory.length && !file.notes.people.length) {
+    return (
+      <>
+        <p className="ci-eyebrow">The story</p>
+        <h1 className="ci-h1">I couldn&rsquo;t pick much out.</h1>
+        <p className="ci-hint">No problem. I&rsquo;ll ask the questions one at a time instead.</p>
+      </>
+    );
   }
-  marks.sort((a, b) => a[0] - b[0]);
-  const parts: React.ReactNode[] = [];
-  let at = 0;
-  for (const [s, e] of marks) {
-    if (s < at) continue;
-    parts.push(text.slice(at, s));
-    parts.push(<mark key={s}>{text.slice(s, e)}</mark>);
-    at = e;
-  }
-  parts.push(text.slice(at));
-  return <>{parts}</>;
+  const spec = (key: string) => playbook.facts.find((f) => f.key === key);
+  const text = (key: string) => {
+    const v = file.facts[key]?.value;
+    return typeof v === "string" ? v : null;
+  };
+
+  const gross = file.facts.treatedAsGrossMisconduct?.value === "yes";
+  const kind =
+    file.situation === "disciplinary"
+      ? gross
+        ? "A conduct case: possible gross misconduct"
+        : "A conduct case"
+      : file.situation === "grievance"
+        ? "A grievance"
+        : "A redundancy";
+  const kindSub = text("allegationSummary") ?? file.notes.title ?? "From your story";
+
+  const people = file.notes.people;
+  const peopleSub = people
+    .slice(0, 3)
+    .map((p) => (p.role ? `${p.name.split(" ")[0]}: ${p.role}` : p.name))
+    .join(" · ");
+
+  const dated = timelineRows(file, playbook).filter((r) => r.date);
+  const clash = Object.values(file.facts).some((f) => f.conflict);
+  const datesSub = dated.map((r) => `${shortDate(r.date!).day}: ${r.what}`).join(" · ");
+
+  return (
+    <>
+      <p className="ci-eyebrow">The story</p>
+      <h1 className="ci-h1">Here&rsquo;s what I picked up.</h1>
+      <p className="ci-hint">Check it over. You&rsquo;ll confirm anything important in the next few questions.</p>
+      <div className="ci-finds">
+        <div className="ci-find">
+          <Icon name="brief" />
+          <div>
+            <b>{kind}</b>
+            <p>{kindSub}</p>
+          </div>
+        </div>
+        {people.length ? (
+          <div className="ci-find">
+            <Icon name="users" />
+            <div>
+              <b>{joinNames(people.map((p) => p.name))}</b>
+              <p>{peopleSub}</p>
+            </div>
+          </div>
+        ) : null}
+        {dated.length ? (
+          <div className="ci-find">
+            <Icon name="cal" />
+            <div>
+              <b>
+                {countWord(dated.length)} {dated.length === 1 ? "date" : "dates"}
+                {clash ? ", one to check" : ""}
+              </b>
+              <p>{datesSub}</p>
+            </div>
+            {clash ? <span className="ci-tag">Check</span> : null}
+          </div>
+        ) : null}
+        <div className="ci-find">
+          <Icon name="file" />
+          <div>
+            <b>
+              {countWord(fromStory.length)} {fromStory.length === 1 ? "detail" : "details"} in the case file
+            </b>
+            <p>Each one keeps the words it came from.</p>
+          </div>
+        </div>
+      </div>
+      {showAll ? (
+        <ul className="ci-found">
+          {fromStory.map((f) => (
+            <li key={f.key}>
+              <span>{spec(f.key)?.label ?? f.key}</span>
+              <b>{formatValue(spec(f.key), f.value)}</b>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -603,12 +724,12 @@ function QuestionStep({
           <button type="button" className="ci-ok" disabled={!ready} onClick={submit}>
             OK <Icon name="check" />
           </button>
-          <span className="ci-links" style={{ display: "contents" }}>
+          <span className="ci-bar-sp" />
+          <span className="ci-links">
             <button type="button" className="ci-link" onClick={onSkip}>
-              <Icon name="skip" /> I don&rsquo;t know yet
+              <Icon name="clock" /> I don&rsquo;t know yet
             </button>
           </span>
-          <span className="ci-bar-sp" />
           <div className="ci-arrows">
             <button type="button" className="ci-arrow" disabled={!canBack} onClick={onBack} aria-label="Previous question">
               <Icon name="up" />
@@ -621,34 +742,37 @@ function QuestionStep({
       }
     >
       <p className="ci-eyebrow">{conflict ? "Doesn’t add up" : CHAPTERS.find((c) => c.id === shell.chapter)?.label}</p>
-      <h1 className="ci-h1">{conflict ? `Which is right for “${spec.label.toLowerCase()}”?` : current.question}</h1>
+      <h1 className="ci-h1">
+        {conflict ? `Which is right for “${spec.label.toLowerCase()}”?` : current.question}
+        {!conflict && current.why ? (
+          <span className="ci-qq" tabIndex={0} aria-label={`Why I ask: ${current.why}`}>
+            ?
+            <span className="tip" aria-hidden="true">
+              <b>Why I ask</b>
+              {current.why}
+            </span>
+          </span>
+        ) : null}
+      </h1>
       {conflict ? (
         <p className="ci-hint">Two parts of the case disagree. Pick the one that&rsquo;s right and I&rsquo;ll use it everywhere.</p>
-      ) : current.why ? (
-        <p className="ci-why">{current.why}</p>
+      ) : spec.type === "list" && spec.choices ? (
+        <p className="ci-hint">Choose all that apply.</p>
       ) : null}
       <div className="ci-q">
         {conflict ? (
           <div className="ci-opts" role="radiogroup">
             {conflict
               .filter((c, i, all) => all.findIndex((x) => JSON.stringify(x.value) === JSON.stringify(c.value)) === i)
-              .map((c) => (
-                <button
+              .map((c, i) => (
+                <Option
                   key={JSON.stringify(c.value)}
-                  type="button"
-                  role="radio"
-                  className="ci-opt"
-                  aria-checked={JSON.stringify(value) === JSON.stringify(c.value)}
+                  index={i}
+                  label={formatValue(spec, c.value)}
+                  hint={c.source.kind === "story" ? `In your story: “${c.source.quote}”` : c.source.kind === "answer" ? "Your answer" : "From a document"}
+                  on={JSON.stringify(value) === JSON.stringify(c.value)}
                   onClick={() => setValue(c.value)}
-                >
-                  <span>
-                    {formatValue(spec, c.value)}
-                    <small>{c.source.kind === "story" ? `In your story: “${c.source.quote}”` : c.source.kind === "answer" ? "Your answer" : "From a document"}</small>
-                  </span>
-                  <span className="ci-tick">
-                    <Icon name="check" />
-                  </span>
-                </button>
+                />
               ))}
           </div>
         ) : (
@@ -687,6 +811,7 @@ function PlanStep({
   const first = typeof name === "string" ? name.split(" ")[0] : null;
   const headline = typeof name === "string" ? `${name}’s case is on file.` : "The case is on file.";
   const ready = run.missing.filter((m) => m.priority === "must").length;
+  const readyNow = readiness(file, run, PLAYBOOKS[file.situation]);
   const leftForLater = stored.skipped.length;
 
   return (
@@ -703,12 +828,14 @@ function PlanStep({
               Answer what&rsquo;s missing <Icon name="arrowRight" />
             </button>
           )}
-          {leftForLater && next ? (
-            <button type="button" className="ci-link" onClick={onMore}>
-              <Icon name="back" /> Answer the {leftForLater} left for later
-            </button>
-          ) : null}
           <span className="ci-bar-sp" />
+          {leftForLater && next ? (
+            <span className="ci-links">
+              <button type="button" className="ci-link" onClick={onMore}>
+                <Icon name="back" /> Answer the {leftForLater} left for later
+              </button>
+            </span>
+          ) : null}
           <div className="ci-arrows">
             <button type="button" className="ci-arrow" onClick={onBack} aria-label="Previous question">
               <Icon name="up" />
@@ -722,7 +849,7 @@ function PlanStep({
     >
       <p className="ci-eyebrow">Case file ready</p>
       <h1 className="ci-h1">{headline}</h1>
-      <p className="ci-why">
+      <p className="ci-note">
         Preview: the questions, checks and deadlines here have not been checked by an employment lawyer yet. Read the letter
         carefully before you send it.
       </p>
@@ -736,10 +863,12 @@ function PlanStep({
             </div>
             <h4>{next.title}</h4>
             <p>Dear {first ?? "colleague"},</p>
-            <i style={{ width: "92%" }} />
-            <i style={{ width: "84%" }} />
-            <i style={{ width: "88%" }} />
-            <i style={{ width: "62%" }} />
+            <i style={{ width: "100%" }} />
+            <i style={{ width: "93%" }} />
+            <i style={{ width: "98%" }} />
+            <i style={{ width: "66%" }} />
+            <i className="gap" style={{ width: "94%" }} />
+            <i style={{ width: "48%" }} />
             <div className="ci-sheet-foot">{letterType ? "First letter · ready to draft" : "First letter · coming soon to DraftHR"}</div>
           </div>
           <div className="ci-front">
@@ -748,8 +877,16 @@ function PlanStep({
             <h3>{caseTitle(file)}</h3>
             <p>{shell.openedLine}</p>
             <div className="ci-front-foot">
-              <b>{ready === 0 ? "Everything needed is in" : `${ready} still to find out`}</b>
-              {leftForLater ? <span>{leftForLater} left for later</span> : null}
+              <span>
+                {readyNow.known} of {Math.max(readyNow.total, readyNow.known)} ready to draft
+              </span>
+              {ready > 0 ? (
+                <span className="need">
+                  {ready} {ready === 1 ? "thing" : "things"} still needed
+                </span>
+              ) : leftForLater ? (
+                <span className="need">{leftForLater} left for later</span>
+              ) : null}
             </div>
           </div>
         </div>

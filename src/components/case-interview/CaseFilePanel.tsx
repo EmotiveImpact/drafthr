@@ -16,6 +16,8 @@ type Props = {
   playbook: Playbook;
   refLabel: string;
   openedLine: string;
+  me: string;
+  meRole: string;
   onClose?: () => void;
 };
 
@@ -32,7 +34,7 @@ function useNewKeys(keys: string[]): (key: string) => boolean {
   };
 }
 
-function initials(name: string): string {
+export function initials(name: string): string {
   return name
     .split(/\s+/)
     .filter(Boolean)
@@ -41,10 +43,19 @@ function initials(name: string): string {
     .join("");
 }
 
+/** A check's message as a first line and the rest underneath, with draft source tags taken out. */
+function splitMessage(message: string): { head: string; rest: string } {
+  const clean = message.replace(/\s*\[[^\]]*\]/g, "").trim();
+  const m = clean.match(/^(.+?[.?!])\s+(.+)$/s);
+  return m ? { head: m[1]!, rest: m[2]! } : { head: clean, rest: "" };
+}
+
 const PEOPLE_KEYS = new Set(["employeeName", "investigator", "decisionMaker", "appealManager", "personName"]);
 const SKIP_FACTS = new Set(["workLocation", "usState"]);
 
-export function CaseFilePanel({ file, run, playbook, refLabel, openedLine, onClose }: Props) {
+const New = ({ on }: { on: boolean }) => (on ? <em className="ci-new">New</em> : null);
+
+export function CaseFilePanel({ file, run, playbook, refLabel, openedLine, me, meRole, onClose }: Props) {
   const ready = readiness(file, run, playbook);
   const specs = new Map(playbook.facts.map((f) => [f.key, f]));
 
@@ -71,6 +82,7 @@ export function CaseFilePanel({ file, run, playbook, refLabel, openedLine, onClo
     ...facts.map((f) => `f:${f.key}`),
     ...checks.map((c) => `c:${c.id}`),
   ]);
+  const total = Math.max(ready.total, ready.known);
 
   return (
     <aside className="ci-file" aria-label="Case file">
@@ -87,93 +99,114 @@ export function CaseFilePanel({ file, run, playbook, refLabel, openedLine, onClo
           <span>Ready to draft</span>
           <span>
             <b>{ready.known}</b>
-            <small>/{Math.max(ready.total, ready.known)}</small>
+            <small>/ {total}</small>
           </span>
         </div>
         <div className="ci-bar-track">
-          <i style={{ width: `${ready.total ? Math.round((ready.known / ready.total) * 100) : 0}%` }} />
+          <i style={{ width: `${total ? Math.round((ready.known / total) * 100) : 0}%` }} />
         </div>
       </div>
 
-      {checks.length ? (
+      <div className="ci-doc">
+        {checks.length ? (
+          <section className="ci-sec">
+            <h3>
+              Checks<em>{checks.length}</em>
+            </h3>
+            {checks.map((c) => {
+              const { head, rest } = splitMessage(c.message);
+              const act = c.level === "act_now";
+              return (
+                <div key={c.id} className={`ci-it ${isNew(`c:${c.id}`) ? "ci-pop" : ""}`}>
+                  <span className="ti">
+                    <Icon name={act ? "alert" : "shield"} />
+                  </span>
+                  <div className="tx">
+                    <span className="st">
+                      <span className={`ci-stamp-t ${act ? "r" : ""}`}>{act ? "Act now" : "Worth checking"}</span>
+                      <New on={isNew(`c:${c.id}`)} />
+                    </span>
+                    {head}
+                    {rest ? <span className="sub">{rest}</span> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        ) : null}
+
         <section className="ci-sec">
           <h3>
-            Checks<span>{checks.length}</span>
+            People<em>{people.length + 1}</em>
           </h3>
-          {checks.map((c) => (
-            <div key={c.id} className={`ci-check ${c.level === "act_now" ? "act" : "worth"} ${isNew(`c:${c.id}`) ? "ci-pop" : ""}`}>
-              <Icon name={c.level === "act_now" ? "alert" : "eye"} />
-              <div>
-                <em>{c.level === "act_now" ? "Act now" : "Worth checking"}</em>
-                <p>{c.message.replace(/\s*\[[^\]]*\]/g, "")}</p>
-              </div>
+          <div className="ci-it person">
+            <span className="ci-av me">{initials(me)}</span>
+            <div className="tx">
+              {me}
+              <span className="sub">{meRole}</span>
             </div>
-          ))}
-        </section>
-      ) : null}
-
-      <section className="ci-sec">
-        <h3>
-          People<span>{people.length}</span>
-        </h3>
-        {people.length ? (
-          people.map((p) => (
-            <div key={p.name} className={`ci-person ${isNew(`p:${p.name}`) ? "ci-pop" : ""}`}>
+          </div>
+          {people.map((p) => (
+            <div key={p.name} className={`ci-it person ${isNew(`p:${p.name}`) ? "ci-pop" : ""}`}>
               <span className="ci-av">{initials(p.name)}</span>
-              <div>
-                <b>
-                  {p.name}
-                  {isNew(`p:${p.name}`) ? <em className="ci-new">New</em> : null}
-                </b>
-                {p.role ? <span>{p.role}</span> : null}
+              <div className="tx">
+                {p.name}
+                <New on={isNew(`p:${p.name}`)} />
+                {p.role ? <span className="sub">{p.role}</span> : null}
               </div>
             </div>
-          ))
-        ) : (
-          <p className="ci-none">Names appear here as you mention them.</p>
-        )}
-      </section>
-
-      <section className="ci-sec">
-        <h3>
-          Timeline<span>{rows.length}</span>
-        </h3>
-        {rows.length ? <Timeline rows={rows} isNew={(k) => isNew(`t:${k}`)} /> : <p className="ci-none">Dates appear here as they come up.</p>}
-      </section>
-
-      {facts.length ? (
-        <section className="ci-sec">
-          <h3>
-            Facts<span>{facts.length}</span>
-          </h3>
-          {facts.map((f) => (
-            <div key={f.key} className={`ci-fact ${isNew(`f:${f.key}`) ? "ci-pop" : ""}`}>
-              <span>
-                {specs.get(f.key)?.label}
-                {isNew(`f:${f.key}`) ? <em className="ci-new">New</em> : null}
-              </span>
-              <b>{formatValue(specs.get(f.key), f.value)}</b>
-            </div>
           ))}
         </section>
-      ) : null}
 
-      {deadlines.length ? (
         <section className="ci-sec">
           <h3>
-            Deadlines<span>{deadlines.length}</span>
+            Timeline<em>{rows.length}</em>
           </h3>
-          {deadlines.map((d) => (
-            <div key={d.ruleUseId} className="ci-dl">
-              <b>{d.label}</b>
-              <span>
-                {formatValue({ type: "date" }, d.date)}
-                {d.daysLeft !== null && d.daysLeft >= 0 ? ` · ${d.daysLeft} days` : ""}
-              </span>
-            </div>
-          ))}
+          {rows.length ? <Timeline rows={rows} isNew={(k) => isNew(`t:${k}`)} /> : <p className="ci-none">Dates appear here as they come up.</p>}
         </section>
-      ) : null}
+
+        {facts.length ? (
+          <section className="ci-sec">
+            <h3>
+              Facts<em>{facts.length}</em>
+            </h3>
+            {facts.map((f) => (
+              <div key={f.key} className={`ci-it ${isNew(`f:${f.key}`) ? "ci-pop" : ""}`}>
+                <span className="ti">
+                  <Icon name="note" />
+                </span>
+                <div className="tx">
+                  {formatValue(specs.get(f.key), f.value)}
+                  <New on={isNew(`f:${f.key}`)} />
+                  <span className="sub">{specs.get(f.key)?.label}</span>
+                </div>
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {deadlines.length ? (
+          <section className="ci-sec">
+            <h3>
+              Deadlines<em>{deadlines.length}</em>
+            </h3>
+            {deadlines.map((d) => (
+              <div key={d.ruleUseId} className="ci-it">
+                <span className="ti">
+                  <Icon name="clock" />
+                </span>
+                <div className="tx">
+                  {d.label}
+                  <span className="sub">
+                    {formatValue({ type: "date" }, d.date)}
+                    {d.daysLeft !== null && d.daysLeft >= 0 ? ` · ${d.daysLeft} days left` : ""}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </section>
+        ) : null}
+      </div>
     </aside>
   );
 }
@@ -210,13 +243,14 @@ function Timeline({ rows, isNew }: { rows: TimelineRow[]; isNew: (key: string) =
                 r.when
               )}
             </div>
-            <div className="ci-tl-node">
-              {i > 0 && h > 0 ? <span className="ci-tl-ln" style={{ top: 8 - h, height: h }} /> : null}
-              <i />
-            </div>
             <div className="ci-tl-text">
+              {i > 0 && h > 0 ? <span className="ci-tl-ln" style={{ top: 13 - h, height: h }} /> : null}
+              <i />
               <b>{r.what}</b>
-              <span>{r.from}</span>
+              <span className="src">
+                <Icon name={r.from === "you" ? "user" : "msg"} />
+                {r.from}
+              </span>
             </div>
           </div>
         );
