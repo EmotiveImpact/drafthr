@@ -112,7 +112,7 @@ export function AuthCallback() {
     <div data-page-main className="grid min-h-screen place-items-center bg-[var(--ds-canvas)] px-4 py-10">
       <div className="flex w-full max-w-[440px] flex-col items-center gap-6">
         <span className="inline-flex items-center" aria-hidden>
-          <Wordmark size={36} />
+          <Wordmark size={32} />
         </span>
         {error ? (
           <section

@@ -34,7 +34,7 @@ export function PublicLegalShell({
             aria-label="DraftHR home"
             className="inline-flex items-center gap-2.5 hover:opacity-80 transition-opacity"
           >
-            <Wordmark size={28} />
+            <Wordmark size={25} />
           </Link>
           {/* Proper button (outlined, padded) rather than a text link.
            * Sign-in is the secondary action on this page (visitors came
@@ -74,7 +74,7 @@ export function PublicLegalShell({
                 aria-label="DraftHR home"
                 className="inline-flex items-center gap-2.5 self-start hover:opacity-80 transition-opacity"
               >
-                <Wordmark size={24} />
+                <Wordmark size={21} />
               </Link>
               <p className="text-[12px] leading-relaxed text-[var(--ds-muted)] max-w-[260px]">
                 AI-assisted HR letter drafting for the UK and US.

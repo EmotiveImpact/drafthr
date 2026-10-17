@@ -36,7 +36,7 @@ export function ModePicker() {
     <div className="min-h-screen bg-[var(--ds-canvas)] text-[var(--ds-ink)]">
       <div className="mx-auto w-full max-w-[1080px] px-4 py-8 sm:px-8 sm:py-12">
         <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
-          <Wordmark size={28} />
+          <Wordmark size={25} />
         </Link>
 
         {/* 2A title */}

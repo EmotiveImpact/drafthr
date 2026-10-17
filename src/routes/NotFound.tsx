@@ -19,7 +19,7 @@ export function NotFound() {
           aria-label="DraftHR home"
           className="mb-10 inline-flex items-center gap-2.5"
         >
-          <Wordmark size={30} />
+          <Wordmark size={26} />
         </Link>
         <p className="m-0 text-[13px] text-[var(--ds-muted)]">Error 404</p>
         <h1 className="ds-title m-0 mt-2 text-[clamp(32px,4.4vw,42px)] leading-[1.1]">

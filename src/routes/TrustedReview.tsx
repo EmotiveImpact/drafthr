@@ -167,7 +167,7 @@ export function LinkPage({ icon, title, children, action }: { icon: ReactNode; t
   return (
     <div className="flex min-h-dvh w-full flex-col bg-[var(--ds-canvas)]" data-testid="link-page">
       <header className="flex h-[60px] items-center gap-2.5 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 sm:px-[18px]">
-        <Wordmark size={22} />
+        <Wordmark size={20} />
       </header>
       <div data-page-main className="mx-auto flex w-full max-w-[520px] flex-1 flex-col justify-center px-4 py-12">
         <div className="rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-6 py-7 shadow-[var(--ds-shadow-s)]">

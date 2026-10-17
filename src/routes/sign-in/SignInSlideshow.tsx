@@ -184,7 +184,7 @@ export function SignInSlideshow() {
         aria-label="DraftHR home"
         className="absolute left-10 top-9 z-20 inline-flex items-center gap-2.5 transition-opacity hover:opacity-80"
       >
-        <Wordmark size={30} tone={photos ? "inherit" : "ink"} />
+        <Wordmark size={26} tone={photos ? "inherit" : "ink"} />
       </Link>
 
       {/* Pagination: bottom-left, aligned with the footer line on the right. */}

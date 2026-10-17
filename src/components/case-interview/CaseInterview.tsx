@@ -105,7 +105,7 @@ function Shell(p: ShellProps) {
     <div className={`ci ${fileOpen ? "file-open" : ""}`}>
       <nav className="ci-side" aria-label="Interview">
         <a className="ci-logo" href="/hr" onClick={(e) => (e.preventDefault(), nav("/hr"))}>
-          <Wordmark size={24} tone="inherit" />
+          <Wordmark size={21} tone="inherit" />
         </a>
         <div className="ci-side-case">
           <span className="ci-preview" title="Not yet checked by an employment lawyer">Preview</span>

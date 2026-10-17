@@ -61,7 +61,7 @@ export function AuthShell({
             aria-label="DraftHR home"
             className={`inline-flex items-center gap-2.5 ${withSlideshow ? "lg:hidden" : ""}`}
           >
-            <Wordmark size={40} />
+            <Wordmark size={36} />
           </Link>
           <section
             aria-labelledby="auth-heading"

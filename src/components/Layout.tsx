@@ -150,7 +150,7 @@ function MobileTopbar() {
   return (
     <header className="relative z-10 flex h-[52px] shrink-0 items-center gap-1 pt-1.5 pr-3 pl-4 md:hidden">
       <Link to="/" aria-label="DraftHR home" className="flex h-9 shrink-0 items-center rounded-[6px]">
-        <Wordmark size={24} />
+        <Wordmark size={21} />
       </Link>
       <span className="flex-1" />
       <button

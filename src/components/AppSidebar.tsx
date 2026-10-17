@@ -301,10 +301,10 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
           onClick={toggleSidebar}
           aria-label="Expand sidebar"
           title="Expand sidebar (Ctrl B)"
-          className="group/brand relative shrink-0 rounded-[7px] text-[var(--ds-ink)]"
+          className="group/brand relative grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-ink)]"
         >
           <BrandMark
-            size={28}
+            size={25}
             bare
             className="transition-opacity duration-150 group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0"
           />
@@ -324,12 +324,12 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
               name={shortOrgName}
               leading={
                 <Link to="/" aria-label="DraftHR home" title="DraftHR" className="shrink-0 rounded-[6px] text-[var(--ds-ink)]">
-                  <BrandMark size={24} bare />
+                  <BrandMark size={22} bare />
                 </Link>
               }
               fallback={
                 <Link to="/" aria-label="DraftHR home" title="DraftHR" className="flex h-8 shrink-0 items-center rounded-[6px] px-0.5">
-                  <Wordmark size={24} />
+                  <Wordmark size={21} />
                 </Link>
               }
             />

@@ -221,7 +221,7 @@ export function SignIn() {
            * same screen is visual noise. Mobile/tablet (slideshow off)
            * still shows it above the card. */}
           <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5 lg:hidden">
-            <Wordmark size={40} />
+            <Wordmark size={36} />
           </Link>
           <section
             aria-labelledby="signin-heading"
