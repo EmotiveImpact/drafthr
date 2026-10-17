@@ -149,8 +149,41 @@ export function timelineRows(file: CaseFile, playbook: Playbook): TimelineRow[] 
   });
 }
 
-export const EXAMPLE_STORY =
-  "Our stock count on 5 October showed about £2,400 of frozen stock missing from the Leith warehouse. CCTV shows Jordan Hale loading boxes into his own car after his shift on 2 October. His manager Sam Ortiz spoke to him and he said they were damaged goods he was told he could take. We suspended him on full pay on the 6th, just verbally so far. I think this is gross misconduct but I want to do it properly.";
+/** Made-up stories to try the interview with, one or two per kind of case. */
+export const EXAMPLE_STORIES: { situation: SituationId; where: "england-wales" | "scotland" | "northern-ireland"; label: string; text: string }[] = [
+  {
+    situation: "disciplinary",
+    where: "scotland",
+    label: "Missing stock",
+    text: "Our stock count on 5 October showed about £2,400 of frozen stock missing from the Leith warehouse. CCTV shows Jordan Hale loading boxes into his own car after his shift on 2 October. His manager Sam Ortiz spoke to him and he said they were damaged goods he was told he could take. We suspended him on full pay on the 6th, just verbally so far. I think this is gross misconduct but I want to do it properly.",
+  },
+  {
+    situation: "disciplinary",
+    where: "england-wales",
+    label: "Lateness",
+    text: "Priya Mehta is a customer service adviser at our Bristol call centre and has been late nine times since August, usually by 20 to 40 minutes. Her team leader Tom Reed had an informal chat with her in July and she was given a first written warning for lateness on 12 September. She was late again on 3 October and 10 October. She says it is childcare but has never asked to change her hours. We want to hold a disciplinary hearing.",
+  },
+  {
+    situation: "disciplinary",
+    where: "england-wales",
+    label: "Social media post",
+    text: "On 9 October a customer sent us a screenshot of a public Facebook post by Marcus Bell, one of our delivery drivers in Manchester, calling her a name and mentioning her street. Marcus has worked here three years with a clean record. His manager Leanne Clarke has not spoken to him yet. Our social media policy says staff must not post about customers. We want to investigate before deciding anything.",
+  },
+  {
+    situation: "grievance",
+    where: "england-wales",
+    label: "Complaint about a manager",
+    text: "Aisha Khan, a nurse at our Leeds clinic, emailed on 8 October to raise a formal grievance against her line manager Gary Owens. She says he shouts at her in front of patients, most recently on 1 October, and that he gave her every weekend shift for four weeks running while others had none. Two colleagues, Beth Ward and Femi Adeyemi, saw what happened on 1 October. She wants someone other than Gary to deal with it.",
+  },
+  {
+    situation: "redundancy",
+    where: "scotland",
+    label: "Closing a team",
+    text: "We are closing our Glasgow print room at the end of December because our main client's contract ended on 30 September. Four people work there: Ellen Murray, the supervisor, and three operators, Craig Duncan, Lisa Grant and Omar Haddad. Craig has been off sick since August. There may be a job in our Edinburgh office for one of them. We want to start consulting with them next week.",
+  },
+];
+
+export const EXAMPLE_STORY = EXAMPLE_STORIES[0]!.text;
 
 export function todayIso(now = new Date()): IsoDate {
   const y = now.getFullYear();

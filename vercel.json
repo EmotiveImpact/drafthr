@@ -44,6 +44,20 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/((?!site/|favicon\\.svg).+)",
+      "has": [{ "type": "host", "value": "drafthr.io" }],
+      "destination": "https://app.drafthr.io/$1",
+      "permanent": false
+    },
+    {
+      "source": "/((?!site/|favicon\\.svg).+)",
+      "has": [{ "type": "host", "value": "www.drafthr.io" }],
+      "destination": "https://app.drafthr.io/$1",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/" }
   ],
