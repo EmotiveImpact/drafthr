@@ -49,6 +49,9 @@ export const LETTER_TIER_BY_TYPE: Record<string, LetterTier> = {
   right_to_work: "standard",
   termination: "high",
   warning: "high",
+  suspension_confirmation: "high",
+  investigation_meeting_invite: "high",
+  disciplinary_hearing_invite: "high",
   redundancy: "high",
   settlement_cover: "high",
 };

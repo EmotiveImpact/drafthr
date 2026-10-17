@@ -55,6 +55,7 @@ function lazyNamed<M, K extends keyof M & string>(load: () => Promise<M>, name: 
 }
 const Home = lazyNamed(() => import("@/routes/Home"), "Home");
 const Wizard = lazyNamed(() => import("@/routes/Wizard"), "Wizard");
+const CaseInterview = lazyNamed(() => import("@/components/case-interview/CaseInterview"), "CaseInterview");
 // ModePicker stays eager: RootRedirect (the landing route) renders it inline.
 import { ModePicker } from "@/routes/ModePicker";
 const Settings = lazyNamed(() => import("@/routes/Settings"), "Settings");
@@ -361,6 +362,9 @@ export function App() {
         <Route path="/hr" element={<Protected roles={["employer"]}><Home mode="employer" /></Protected>} />
         <Route path="/hr/new" element={<Protected roles={["employer"]}><BrowseLetters mode="employer" /></Protected>} />
         <Route path="/hr/new/:letterType" element={<Protected roles={["employer"]}><PaywallGate><Wizard mode="employer" /></PaywallGate></Protected>} />
+
+        <Route path="/hr/cases/new" element={<Protected roles={["employer"]}><CaseInterview /></Protected>} />
+        <Route path="/hr/cases/:caseId" element={<Protected roles={["employer"]}><CaseInterview /></Protected>} />
 
         <Route path="/me" element={<Protected roles={["employee"]}><Home mode="employee" /></Protected>} />
         <Route path="/me/new" element={<Protected roles={["employee"]}><BrowseLetters mode="employee" /></Protected>} />

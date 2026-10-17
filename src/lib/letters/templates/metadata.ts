@@ -135,6 +135,106 @@ export const TEMPLATE_METADATA: Readonly<Partial<Record<LetterTemplateKey, Templ
     "jurisdiction": "US",
     "evidenceTier": "light"
   },
+  "disciplinary_hearing_invite__UK": {
+    "letterType": "disciplinary_hearing_invite",
+    "jurisdiction": "UK",
+    "evidenceTier": "heavy",
+    "expectedEvidence": [
+      {
+        "key": "investigation_report",
+        "label": "Investigation report",
+        "required": true,
+        "description": "The investigator's report setting out the evidence and whether there is a case to answer.",
+        "expectedKinds": [
+          "document"
+        ]
+      },
+      {
+        "key": "allegation_evidence",
+        "label": "Evidence to enclose",
+        "required": true,
+        "description": "Witness statements, emails, logs or other documents the hearing will consider.",
+        "expectedKinds": [
+          "email",
+          "document",
+          "screenshot"
+        ]
+      },
+      {
+        "key": "investigation_meeting_notes",
+        "label": "Investigation meeting notes",
+        "required": false,
+        "description": "Notes of the employee's investigation meeting.",
+        "expectedKinds": [
+          "document",
+          "note"
+        ]
+      },
+      {
+        "key": "policy_excerpts",
+        "label": "Disciplinary policy",
+        "required": false,
+        "description": "The policy, including any examples of gross misconduct relied on.",
+        "expectedKinds": [
+          "document"
+        ]
+      },
+      {
+        "key": "prior_records",
+        "label": "Live warnings on file",
+        "required": false,
+        "description": "Any warning still live on the file, which affects the possible outcomes.",
+        "expectedKinds": [
+          "document"
+        ]
+      }
+    ]
+  },
+  "disciplinary_hearing_invite__US": {
+    "letterType": "disciplinary_hearing_invite",
+    "jurisdiction": "US",
+    "evidenceTier": "heavy",
+    "expectedEvidence": [
+      {
+        "key": "investigation_report",
+        "label": "Investigation summary",
+        "required": true,
+        "description": "The investigator's summary of what was found.",
+        "expectedKinds": [
+          "document"
+        ]
+      },
+      {
+        "key": "allegation_evidence",
+        "label": "Documents to enclose",
+        "required": true,
+        "description": "Emails, logs, statements or other documents the decision maker will consider.",
+        "expectedKinds": [
+          "email",
+          "document",
+          "screenshot"
+        ]
+      },
+      {
+        "key": "policy_excerpts",
+        "label": "Policy excerpts",
+        "required": false,
+        "description": "The conduct or discipline policy that applies.",
+        "expectedKinds": [
+          "document"
+        ]
+      },
+      {
+        "key": "prior_records",
+        "label": "Prior disciplinary records",
+        "required": false,
+        "description": "Any earlier warnings on the file that affect the possible outcomes.",
+        "expectedKinds": [
+          "document"
+        ]
+      }
+    ]
+  },
   "flexible_working_request__UK": {
     "letterType": "flexible_working_request",
     "jurisdiction": "UK",
@@ -215,6 +315,60 @@ export const TEMPLATE_METADATA: Readonly<Partial<Record<LetterTemplateKey, Templ
     "letterType": "holiday_request",
     "jurisdiction": "US",
     "evidenceTier": "medium"
+  },
+  "investigation_meeting_invite__UK": {
+    "letterType": "investigation_meeting_invite",
+    "jurisdiction": "UK",
+    "evidenceTier": "medium",
+    "expectedEvidence": [
+      {
+        "key": "allegation_record",
+        "label": "Record of the allegation",
+        "required": true,
+        "description": "The complaint, report or incident note the investigation is looking into.",
+        "expectedKinds": [
+          "email",
+          "document",
+          "note"
+        ]
+      },
+      {
+        "key": "policy_excerpts",
+        "label": "Disciplinary policy",
+        "required": false,
+        "description": "The investigation section of the policy, including what it says about companions.",
+        "expectedKinds": [
+          "document"
+        ]
+      }
+    ]
+  },
+  "investigation_meeting_invite__US": {
+    "letterType": "investigation_meeting_invite",
+    "jurisdiction": "US",
+    "evidenceTier": "medium",
+    "expectedEvidence": [
+      {
+        "key": "allegation_record",
+        "label": "Record of the concern",
+        "required": true,
+        "description": "The complaint, report or incident note the investigation is looking into.",
+        "expectedKinds": [
+          "email",
+          "document",
+          "note"
+        ]
+      },
+      {
+        "key": "policy_excerpts",
+        "label": "Investigation policy",
+        "required": false,
+        "description": "The handbook section on workplace investigations.",
+        "expectedKinds": [
+          "document"
+        ]
+      }
+    ]
   },
   "leave_approval__UK": {
     "letterType": "leave_approval",
@@ -529,6 +683,80 @@ export const TEMPLATE_METADATA: Readonly<Partial<Record<LetterTemplateKey, Templ
     "letterType": "subject_access_request",
     "jurisdiction": "US",
     "evidenceTier": "heavy"
+  },
+  "suspension_confirmation__UK": {
+    "letterType": "suspension_confirmation",
+    "jurisdiction": "UK",
+    "evidenceTier": "medium",
+    "expectedEvidence": [
+      {
+        "key": "allegation_record",
+        "label": "Record of the allegation",
+        "required": true,
+        "description": "The complaint, report or incident note that raised the allegation.",
+        "expectedKinds": [
+          "email",
+          "document",
+          "note"
+        ]
+      },
+      {
+        "key": "suspension_decision",
+        "label": "Suspension decision note",
+        "required": false,
+        "description": "Why suspension was needed, who decided, and the alternatives considered.",
+        "expectedKinds": [
+          "note",
+          "document"
+        ]
+      },
+      {
+        "key": "contract_suspension_clause",
+        "label": "Contract or policy on suspension",
+        "required": false,
+        "description": "The clause or policy that covers suspension and pay during it.",
+        "expectedKinds": [
+          "document"
+        ]
+      }
+    ]
+  },
+  "suspension_confirmation__US": {
+    "letterType": "suspension_confirmation",
+    "jurisdiction": "US",
+    "evidenceTier": "medium",
+    "expectedEvidence": [
+      {
+        "key": "allegation_record",
+        "label": "Record of the concern",
+        "required": true,
+        "description": "The complaint, report or incident note that raised the concern.",
+        "expectedKinds": [
+          "email",
+          "document",
+          "note"
+        ]
+      },
+      {
+        "key": "leave_decision",
+        "label": "Leave decision note",
+        "required": false,
+        "description": "Why leave was needed and who decided.",
+        "expectedKinds": [
+          "note",
+          "document"
+        ]
+      },
+      {
+        "key": "leave_policy",
+        "label": "Policy on administrative leave",
+        "required": false,
+        "description": "The handbook section that covers administrative leave and pay during it.",
+        "expectedKinds": [
+          "document"
+        ]
+      }
+    ]
   },
   "termination__UK": {
     "letterType": "termination",

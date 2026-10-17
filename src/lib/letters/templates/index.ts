@@ -9,7 +9,7 @@ import type { TemplateMetadata } from "./metadata-shape";
 
 /**
  * Central registry. Templates contributed by:
- *  - employer/*.ts  (14 employer letters x UK/US)
+ *  - employer/*.ts  (17 employer letters x UK/US)
  *  - employee/*.ts  (21 employee letters x UK/US)
  *
  * Full templates are heavy (scaffolds, constraints, worked examples) and are

@@ -59,6 +59,9 @@
     },
     "api/store/[action].ts": {
       "maxDuration": 60
+    },
+    "api/case/[action].ts": {
+      "maxDuration": 60
     }
   }
 }

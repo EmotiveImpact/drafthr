@@ -640,6 +640,127 @@ export const LETTER_QUESTIONS: Partial<Record<LetterTypeId, QuestionStep[]>> = {
     },
   ],
 
+  suspension_confirmation: [
+    {
+      id: "suspension_details",
+      title: "Suspension details",
+      questions: [
+        {
+          id: "allegationSummary",
+          type: "textarea",
+          label: "The allegation, in outline",
+          help: "A sentence or two on what the employee is alleged to have done. The letter describes it as an allegation, not a finding.",
+          required: true,
+        },
+        { id: "suspensionDate", type: "date", label: "Date the suspension started", required: true },
+        {
+          id: "suspensionPay",
+          type: "boolean",
+          label: "Is the employee suspended on full pay?",
+          help: "Suspension is normally on full pay. Reduced or no pay needs a clear right in the contract.",
+        },
+        {
+          id: "suspensionPayTerms",
+          type: "textarea",
+          label: "What pay applies, and where the contract allows it",
+          showIf: (a) => a.suspensionPay !== true,
+        },
+        {
+          id: "suspensionReason",
+          type: "select",
+          label: "Why suspension is needed",
+          required: true,
+          options: [
+            { value: "protect_evidence_or_witnesses", label: "To protect evidence or witnesses" },
+            { value: "risk_to_others", label: "A risk to colleagues, customers or others" },
+            { value: "risk_to_business", label: "A risk to the business or its property" },
+            { value: "protect_employee", label: "To protect the employee" },
+            { value: "other", label: "Another reason" },
+          ],
+        },
+        {
+          id: "suspensionReviewDate",
+          type: "date",
+          label: "First review date (optional)",
+          help: "Suspension should be as short as possible and reviewed regularly.",
+        },
+        {
+          id: "contactName",
+          type: "text",
+          label: "Named contact during the suspension",
+          placeholder: "Name, job title and email or phone",
+          required: true,
+        },
+      ],
+    },
+  ],
+
+  investigation_meeting_invite: [
+    {
+      id: "investigation_meeting",
+      title: "Investigation meeting",
+      questions: [
+        {
+          id: "allegationSummary",
+          type: "textarea",
+          label: "The allegation being investigated",
+          help: "What is alleged, when and where, in enough detail for the employee to understand it.",
+          required: true,
+        },
+        { id: "meetingDate", type: "date", label: "Meeting date", required: true },
+        { id: "meetingTime", type: "text", label: "Meeting time", placeholder: "10:00am", required: true },
+        { id: "meetingPlace", type: "text", label: "Meeting place", placeholder: "Room, building and address, or video link", required: true },
+        { id: "investigator", type: "text", label: "Who will hold the meeting", placeholder: "Name and job title", required: true },
+        {
+          id: "companionAllowed",
+          type: "boolean",
+          label: "Does your policy let the employee bring someone?",
+          help: "There is no legal right to a companion at an investigation meeting in the UK. Say yes only if your policy allows it.",
+        },
+      ],
+    },
+  ],
+
+  disciplinary_hearing_invite: [
+    {
+      id: "hearing_details",
+      title: "Hearing details",
+      questions: [
+        {
+          id: "allegationSummary",
+          type: "textarea",
+          label: "The allegations",
+          help: "Each allegation with what, when and where, in enough detail for the employee to prepare an answer.",
+          required: true,
+        },
+        { id: "hearingDate", type: "date", label: "Hearing date", required: true },
+        { id: "hearingTime", type: "text", label: "Hearing time", placeholder: "2:00pm", required: true },
+        { id: "hearingPlace", type: "text", label: "Hearing place", placeholder: "Room, building and address, or video link", required: true },
+        {
+          id: "decisionMaker",
+          type: "text",
+          label: "Who will chair the hearing",
+          help: "Where possible, someone other than the investigator.",
+          placeholder: "Name and job title",
+          required: true,
+        },
+        {
+          id: "evidenceEnclosed",
+          type: "textarea",
+          label: "Evidence enclosed with the letter",
+          help: "List each document, for example the investigation report, witness statements and meeting notes.",
+          required: true,
+        },
+        {
+          id: "dismissalPossible",
+          type: "boolean",
+          label: "Could the outcome be dismissal?",
+          help: "Yes if gross misconduct is alleged, or if a final written warning is still live.",
+        },
+      ],
+    },
+  ],
+
   promotion: [
     {
       id: "promo",

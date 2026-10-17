@@ -63,6 +63,9 @@ const CATEGORY_OF: Partial<Record<LetterTypeId, LetterCategoryId>> = {
   // Performance & conduct
   probation_outcome: "performance_conduct",
   warning: "performance_conduct",
+  suspension_confirmation: "performance_conduct",
+  investigation_meeting_invite: "performance_conduct",
+  disciplinary_hearing_invite: "performance_conduct",
   termination: "performance_conduct",
   pip_response: "performance_conduct",
 

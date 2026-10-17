@@ -242,6 +242,39 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
 - If ADA disability or other protected status is implicated, separate the performance issue and document the interactive process separately.
 - Include support offered (training, EAP) where appropriate.`,
   },
+  suspension_confirmation: {
+    UK: `- Acas Code of Practice para 8: suspension should be as brief as possible, kept under review, and made clear it is not a disciplinary action.
+- State that suspension is not a sanction and no finding has been made. Describe the allegation in outline only, as an allegation.
+- State the start date, the pay that applies (full pay unless the contract expressly allows otherwise), the expected length and the next review date.
+- Set out proportionate conditions (no contact with witnesses about the allegation, stay available, no site attendance without permission) and a named contact.
+- Point to support such as the Employee Assistance Programme.
+- Use British English spelling.`,
+    US: `- Frame as paid administrative leave pending investigation, not discipline. Employment remains at-will; promise no particular process or outcome.
+- Unpaid suspension of an exempt employee risks the FLSA salary basis test (29 CFR 541.602(b)(5)); flag for counsel review if pay is not continued.
+- No admission language. Narrow instructions only: no blanket ban on discussing terms and conditions of employment (NLRA section 7).
+- Use American English spelling.`,
+  },
+  investigation_meeting_invite: {
+    UK: `- Acas Code paras 5 to 7: a fact-finding investigation meeting is not a disciplinary hearing and should not by itself result in disciplinary action.
+- There is no statutory right to be accompanied at an investigation meeting; state only what the employer's policy allows. Do not cite s.10 ERelA 1999 as applying.
+- Give the date, time, place and investigator, describe the allegation, offer reasonable adjustments, and ask for confidentiality while allowing contact with a companion, union representative or the EAP.
+- Use British English spelling.`,
+    US: `- A fact-finding meeting, not discipline. Employment remains at-will; promise no particular process or outcome.
+- No general right to a companion; state company policy. Union-represented employees may request a representative (Weingarten).
+- Offer ADA accommodation. No blanket confidentiality instruction (NLRA section 7).
+- Use American English spelling.`,
+  },
+  disciplinary_hearing_invite: {
+    UK: `- Acas Code paras 9 to 12: set out the allegations in enough detail to prepare, enclose copies of the evidence, state the possible outcomes, and give the date, time and place.
+- If dismissal is possible, say so; where gross misconduct is alleged, say dismissal may be without notice.
+- MANDATORY: the statutory right to be accompanied by a colleague or trade union representative (s.10 ERelA 1999) and the right to propose another time within five working days if the companion cannot attend.
+- Offer reasonable adjustments and explain what happens if the employee does not attend.
+- Use British English spelling.`,
+    US: `- At-will employment; the meeting follows company policy, not a legal requirement. Promise no particular process or outcome.
+- No statutory right to be accompanied; state company policy. Union-represented employees may request a representative (Weingarten).
+- Set out the concerns and documents, state possible outcomes up to and including termination where applicable, offer ADA accommodation.
+- Use American English spelling.`,
+  },
   redundancy: {
     UK: `- Reference the consultation history and outcome.
 - For 20+ dismissals in 90 days: s.188 TULRCA collective consultation (30 days, or 45 days if 100+).
