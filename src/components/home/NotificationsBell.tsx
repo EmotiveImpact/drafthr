@@ -84,7 +84,7 @@ export function NotificationsBell({
             "relative grid shrink-0 place-items-center transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] data-[state=open]:bg-[var(--ds-surface-2)] data-[state=open]:text-[var(--ds-ink)]",
             variant === "count"
               ? "size-[38px] rounded-[10px] text-[var(--ds-ink)]"
-              : "size-[30px] rounded-[8px] text-[var(--ds-subtle)]",
+              : "size-[30px] md:size-[28px] rounded-[8px] text-[var(--ds-subtle)]",
             className
           )}
         >

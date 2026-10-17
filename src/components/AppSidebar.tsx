@@ -80,7 +80,7 @@ import { useMe, viewerIsNamedApprover } from "@/components/letters/rows";
 import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceLoad } from "@/components/home/loadState";
-import { fitSubLists } from "@/components/sidebarFit";
+import { fitSubLists, SIDEBAR_SIZES, SIDEBAR_SIZES_PHONE } from "@/components/sidebarFit";
 import { recentLabelParts, type RecentLabel as RecentLabelParts } from "@/components/sidebarLabels";
 import { isLetterWizardPath, isTemplatesPage } from "@/components/sidebarCurrent";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
@@ -122,21 +122,23 @@ import { NotificationsBell } from "@/components/NotificationsBell";
  */
 export type SidebarMode = Mode | "consultant";
 
-/* Rows, as .nav in the mocks: 40px, 15px text, 18px quiet icons, a soft
- * filled pill for the current page. In the rail each row is a 40px square. */
+/* Rows, as .nav in the mocks: 36px, 14px text, 17px quiet icons, a soft
+ * filled pill for the current page. The phone menu keeps its roomier 40px
+ * rows with 15px text and 18px icons. In the rail each row is a 40px square. */
 const NAV_BUTTON =
-  "h-10 gap-3 rounded-[9px] px-3 text-[15px] text-[var(--ds-body)] transition-colors duration-[120ms] " +
+  "h-10 gap-3 rounded-[9px] px-3 text-[15px] md:h-9 md:gap-2.5 md:text-[14px] text-[var(--ds-body)] transition-colors duration-[120ms] " +
   "hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] active:text-[var(--ds-ink)] " +
   "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--ds-ink)] " +
-  "[&_svg]:size-[18px] [&>svg]:text-[var(--ds-subtle)] hover:[&>svg]:text-[var(--ds-ink)] data-[active=true]:[&>svg]:text-[var(--ds-ink)] " +
+  "[&_svg]:size-[18px] md:[&_svg]:size-[17px] [&>svg]:text-[var(--ds-subtle)] hover:[&>svg]:text-[var(--ds-ink)] data-[active=true]:[&>svg]:text-[var(--ds-ink)] " +
   "group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:rounded-[10px] group-data-[collapsible=icon]:p-[11px]!";
 
-/* Nested rows (.sub): 34px, 14px muted, 10px each side as in the mock. The
+/* Nested rows (.sub): 30px, 13px muted (34px and 14px in the phone menu),
+ * 10px each side as in the mock. The
  * menu button's own rule adds 32px on the right of every row inside an item
  * with an action, and the parent row's chevron counts, so nested names were
  * cut ("Jordan Hale, attend...") for room nothing used (FOUNDATION-X14). */
 const SUB_BUTTON =
-  "h-[34px] gap-2 rounded-[8px] px-2.5 group-has-data-[sidebar=menu-action]/menu-item:pr-2.5 text-[14px] text-[var(--ds-muted)] transition-colors duration-[120ms] " +
+  "h-[34px] gap-2 rounded-[8px] px-2.5 group-has-data-[sidebar=menu-action]/menu-item:pr-2.5 text-[14px] md:h-[30px] md:text-[13px] text-[var(--ds-muted)] transition-colors duration-[120ms] " +
   "hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] " +
   "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:font-normal data-[active=true]:text-[var(--ds-ink)]";
 
@@ -156,7 +158,7 @@ const CHEVRON_ACTION =
 const GROUP_LABEL = "h-7 px-3 text-[12px] font-medium text-[var(--ds-subtle)]";
 
 const TOOL_BUTTON =
-  "grid size-[30px] shrink-0 place-items-center rounded-[8px] text-[var(--ds-subtle)] transition-colors duration-[120ms] " +
+  "grid size-[30px] md:size-[28px] shrink-0 place-items-center rounded-[8px] text-[var(--ds-subtle)] transition-colors duration-[120ms] " +
   "hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)]";
 
 function useSidebarMode(): SidebarMode | null {
@@ -325,7 +327,7 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
               subtitle={team}
               name={shortOrgName}
               fallback={
-                <span className="truncate text-[14px] font-extrabold tracking-[0.12em] text-[var(--ds-ink)]">
+                <span className="truncate text-[14px] font-extrabold tracking-[0.12em] md:text-[13px] md:tracking-[0.1em] text-[var(--ds-ink)]">
                   DRAFTHR
                 </span>
               }
@@ -403,7 +405,7 @@ function NewLetterButton({ mode }: { mode: SidebarMode | null }) {
           tooltip="New letter"
           isActive={loc.pathname === href}
           className={cn(
-            "h-[42px] justify-center gap-2 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[15px] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms]",
+            "h-[42px] md:h-[38px] justify-center gap-2 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[15px] md:text-[14px] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms]",
             "hover:border-[var(--ds-line-hover)] hover:bg-[var(--ds-surface)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-2)] active:text-[var(--ds-ink)]",
             "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:text-[var(--ds-ink)] [&_svg]:size-[17px]",
             "group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:shadow-none"
@@ -502,6 +504,7 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const search = useSearchPaletteToggle();
   const groupRef = useRef<HTMLDivElement>(null);
   const available = useMiddleHeight(groupRef, mode);
+  const { isMobile } = useSidebar();
   const letterMode: Mode = mode === "employee" ? "employee" : "employer";
   const recent = useRecentLetters(letterMode);
   const matterList = useSidebarMatters(letterMode);
@@ -604,6 +607,7 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
     prefer: under(path, "/matters") ? "matters" : "letters",
     want: { letters: lettersChoice ?? true, matters: mattersChoice ?? true },
     keep: kept,
+    sizes: isMobile ? SIDEBAR_SIZES_PHONE : SIDEBAR_SIZES,
   });
   const lettersOpen = plan.letters;
   const mattersOpen = plan.matters;
