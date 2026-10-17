@@ -22,6 +22,11 @@ const SYSTEM_FONT_STACK =
 
 const SERIF_STACK = `'Playfair Display', Georgia, 'Times New Roman', serif`;
 
+// The DraftHR wordmark as a picture, drawn at over twice the size it shows on a
+// white ground so it stays readable when a mail app darkens the page. The alt
+// text keeps the name in the header when pictures are blocked.
+const LOGO_SRC = `${(process.env.APP_URL ?? "https://app.drafthr.io").replace(/\/+$/, "")}/brand/drafthr-wordmark-email.png`;
+
 export const COLORS = {
   ink: BRAND_INK,
   accent: BRAND_ACCENT,
@@ -71,7 +76,7 @@ export function renderLayout(opts: LayoutOpts): string {
           <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid ${BRAND_BORDER};border-radius:12px;overflow:hidden;">
             <tr>
               <td style="padding:28px 32px 8px 32px;">
-                <div style="font-family:${SERIF_STACK};font-weight:700;font-size:22px;line-height:1;letter-spacing:-0.01em;color:${BRAND_INK};">DraftHR</div>
+                <img src="${LOGO_SRC}" width="92" height="19" alt="DraftHR" style="display:block;border:0;outline:none;text-decoration:none;font-family:${SERIF_STACK};font-size:18px;line-height:19px;font-weight:600;color:${BRAND_INK};" />
               </td>
             </tr>
             <tr>

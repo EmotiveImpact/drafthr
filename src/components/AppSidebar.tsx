@@ -27,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar } from "@/components/ds/Avatar";
-import { BrandMark } from "@/components/ds";
+import { BrandMark, Wordmark } from "@/components/ds";
 import {
   Activity as ActivityIcon,
   ArrowUpRight,
@@ -89,7 +89,8 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 /**
  * The app sidebar (design/hifi shell.mjs `sidebar()`).
  *
- *   Top     logo and DRAFTHR (the workspace switcher when there are several),
+ *   Top     the DraftHR wordmark (the D and the workspace switcher when there
+ *           are several),
  *           then search, the notifications bell and collapse.
  *           A "New letter" button under it.
  *   Body    Home, Start a case (HR), Letters (the three most recent letters nested, each with a
@@ -293,43 +294,43 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
 
   return (
     <div className="flex h-[34px] w-full min-w-0 items-center gap-2 pl-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
-      <Link
-        to="/"
-        onClick={(e) => {
-          if (isCollapsed) {
-            e.preventDefault();
-            toggleSidebar();
-          }
-        }}
-        aria-label={isCollapsed ? "Expand sidebar" : "DraftHR home"}
-        title={isCollapsed ? "Expand sidebar (Ctrl B)" : "DraftHR"}
-        className="group/brand relative shrink-0 rounded-[7px]"
-      >
-        <BrandMark
-          size={28}
-          onDark={!isMobile}
-          className={cn(
-            "rounded-[7px] transition-opacity duration-150",
-            isCollapsed && "group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0"
-          )}
-        />
-        {isCollapsed && (
+      {/* The rail shows the logo's D; hovering it offers to expand. */}
+      {isCollapsed && (
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="Expand sidebar"
+          title="Expand sidebar (Ctrl B)"
+          className="group/brand relative grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-ink)]"
+        >
+          <BrandMark
+            size={25}
+            bare
+            className="transition-opacity duration-150 group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0"
+          />
           <span className="absolute inset-0 grid place-items-center rounded-[7px] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] opacity-0 transition-opacity duration-150 group-hover/brand:opacity-100 group-focus-visible/brand:opacity-100">
             <PanelLeftOpen className="size-4" />
           </span>
-        )}
-      </Link>
+        </button>
+      )}
 
       {!isCollapsed && (
         <>
-          <div data-tour="workspace-switcher" className="flex min-w-0 flex-1 items-center">
+          {/* The wordmark on its own; with several workspaces the switcher
+           * takes its place and the D leads it. */}
+          <div data-tour="workspace-switcher" className="flex min-w-0 flex-1 items-center gap-2">
             <WorkspaceSwitcher
               subtitle={team}
               name={shortOrgName}
+              leading={
+                <Link to="/" aria-label="DraftHR home" title="DraftHR" className="shrink-0 rounded-[6px] text-[var(--ds-ink)]">
+                  <BrandMark size={22} bare />
+                </Link>
+              }
               fallback={
-                <span className="truncate text-[14px] font-extrabold tracking-[0.12em] md:text-[13px] md:tracking-[0.1em] text-[var(--ds-ink)]">
-                  DRAFTHR
-                </span>
+                <Link to="/" aria-label="DraftHR home" title="DraftHR" className="flex h-8 shrink-0 items-center rounded-[6px] px-0.5">
+                  <Wordmark size={21} />
+                </Link>
               }
             />
           </div>

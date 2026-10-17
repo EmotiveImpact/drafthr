@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { Wordmark } from "@/components/ds";
 
 /**
  * Receives WorkOS's redirect at /auth/callback?code=...&state=...
@@ -111,9 +111,8 @@ export function AuthCallback() {
   return (
     <div data-page-main className="grid min-h-screen place-items-center bg-[var(--ds-canvas)] px-4 py-10">
       <div className="flex w-full max-w-[440px] flex-col items-center gap-6">
-        <span className="inline-flex items-center gap-2.5" aria-hidden>
-          <BrandMark size={40} />
-          <Wordmark size={24} />
+        <span className="inline-flex items-center" aria-hidden>
+          <Wordmark size={32} />
         </span>
         {error ? (
           <section

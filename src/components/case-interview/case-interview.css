@@ -56,9 +56,7 @@
   padding: 18px 14px 16px;
   min-height: 0;
 }
-.ci-logo { display: flex; align-items: center; gap: 9px; padding-left: 4px; color: #fff; text-decoration: none; }
-.ci-logo img { width: 28px; height: 28px; border-radius: 8px; display: block; }
-.ci-logo b { font-size: 16px; font-weight: 600; letter-spacing: 0.06em; line-height: 24px; }
+.ci-logo { display: flex; align-items: center; height: 28px; padding-left: 4px; color: #fff; text-decoration: none; }
 .ci-side-case { margin-top: 20px; padding: 0 4px 16px; border-bottom: 1px solid var(--ci-side-line); }
 .ci-preview { display: inline-block; margin: 0 0 7px; font-family: var(--ci-mono); font-size: 9.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ci-side-muted); border: 1px solid #3a3a37; border-radius: 4px; padding: 1px 6px; }
 .ci-side-case b { display: block; font-weight: 500; font-size: 19px; letter-spacing: -0.03em; color: #fff; line-height: 1.25; }

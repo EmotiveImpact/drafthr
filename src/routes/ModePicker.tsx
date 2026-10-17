@@ -4,7 +4,7 @@ import { ArrowRight, Briefcase, GraduationCap, UserRound } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { useConsultantStore } from "@/lib/consultantProfile";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { Wordmark } from "@/components/ds";
 import { letterCatalogByMode, LETTER_CATALOG } from "@/lib/letters/catalog";
 import { tintForLetter, tintStyle } from "@/components/templates/tints";
 import { plainLabel } from "@/components/wizard/kit";
@@ -36,8 +36,7 @@ export function ModePicker() {
     <div className="min-h-screen bg-[var(--ds-canvas)] text-[var(--ds-ink)]">
       <div className="mx-auto w-full max-w-[1080px] px-4 py-8 sm:px-8 sm:py-12">
         <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
-          <BrandMark size={30} />
-          <Wordmark size={20} />
+          <Wordmark size={25} />
         </Link>
 
         {/* 2A title */}

@@ -1,17 +1,16 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ChevronDown, Menu, Search } from "lucide-react";
-import { BrandMark } from "@/components/ds";
+import { Menu, Search } from "lucide-react";
+import { Wordmark } from "@/components/ds";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
-import { AppSidebar, shortOrgName } from "@/components/AppSidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchPalette, useSearchPalette } from "@/components/SearchPalette";
 import { SearchPaletteContext, useSearchPaletteToggle } from "@/components/SearchPaletteContext";
 import { Onboarding } from "@/components/Onboarding";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
-import { useProfileStore } from "@/lib/profile";
 
 /** Routes that render WITHOUT the authenticated app chrome (sidebar,
  * notifications, search palette). These show before the user has a session
@@ -139,32 +138,20 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 /**
- * The compact phone top bar (mock phone-home): the logo, the workspace name
- * (opens the menu, where the workspace switcher lives), then search, the
- * bell with its count, and the menu button that opens the sidebar sheet.
- * Hidden at md and up, where the sidebar is always on screen.
+ * The compact phone top bar (mock phone-home): the DraftHR wordmark, as at
+ * the top of the desktop sidebar, then search, the bell with its count, and
+ * the menu button that opens the sidebar sheet (where the workspace switcher
+ * lives). Hidden at md and up, where the sidebar is always on screen.
  */
 function MobileTopbar() {
   const { setOpenMobile } = useSidebar();
   const search = useSearchPaletteToggle();
-  const { activeTenant } = useAuth();
-  const orgName = useProfileStore((s) => s.profile.employer.legalName);
-  const name = shortOrgName(activeTenant?.name || orgName?.trim() || "DraftHR");
 
   return (
     <header className="relative z-10 flex h-[52px] shrink-0 items-center gap-1 pt-1.5 pr-3 pl-4 md:hidden">
-      <Link to="/" aria-label="DraftHR home" className="mr-1.5 shrink-0 rounded-[7px]">
-        <BrandMark size={26} className="rounded-[7px]" />
+      <Link to="/" aria-label="DraftHR home" className="flex h-9 shrink-0 items-center rounded-[6px]">
+        <Wordmark size={21} />
       </Link>
-      <button
-        type="button"
-        onClick={() => setOpenMobile(true)}
-        aria-label={`${name}, open menu`}
-        className="flex h-9 min-w-0 items-center gap-1 rounded-[8px] px-1 text-left transition-colors duration-[120ms] active:bg-[var(--ds-surface-3)]"
-      >
-        <span className="truncate text-[15px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)]">{name}</span>
-        <ChevronDown aria-hidden className="size-3.5 shrink-0 text-[var(--ds-subtle)]" />
-      </button>
       <span className="flex-1" />
       <button
         type="button"
