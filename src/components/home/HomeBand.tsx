@@ -519,6 +519,7 @@ export function HomeBand({
           <Link to="/hr/cases/new" className={BAND_BTN_GHOST}>
             <MessagesSquare className="size-4" aria-hidden />
             Start a case
+            <span className="text-[10px] uppercase tracking-[0.12em] opacity-60">Preview</span>
           </Link>
           <Link to="/hr/new" className={BAND_BTN_DARK} data-tour="new-letter-cta">
             <Plus className="size-4" aria-hidden />

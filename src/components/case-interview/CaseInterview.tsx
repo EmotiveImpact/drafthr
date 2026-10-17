@@ -102,6 +102,7 @@ function Shell(p: ShellProps) {
           DRAFTHR
         </a>
         <div className="ci-side-case">
+          <span className="ci-preview" title="Not yet checked by an employment lawyer">Preview</span>
           <b>{p.situationName}</b>
           <span>{p.workspace ? `${p.workspace} · HR team` : "HR team"}</span>
         </div>
@@ -721,6 +722,10 @@ function PlanStep({
     >
       <p className="ci-eyebrow">Case file ready</p>
       <h1 className="ci-h1">{headline}</h1>
+      <p className="ci-why">
+        Preview: the questions, checks and deadlines here have not been checked by an employment lawyer yet. Read the letter
+        carefully before you send it.
+      </p>
       {next ? (
         <div className="ci-folder">
           <div className="ci-back" aria-hidden="true" />

@@ -46,6 +46,7 @@
 .ci-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 13.5px; letter-spacing: 0.16em; color: #fff; text-decoration: none; }
 .ci-logo-mark { width: 26px; height: 26px; border-radius: 6px; background: #fff; color: var(--ci-side); display: grid; place-items: center; font-weight: 800; font-size: 15px; letter-spacing: 0; }
 .ci-side-case { margin-top: 30px; padding-bottom: 18px; border-bottom: 1px solid var(--ci-side-line); }
+.ci-preview { display: inline-block !important; margin: 0 0 8px !important; font-family: var(--ci-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #fff !important; border: 1px solid #55554f; border-radius: 4px; padding: 2px 6px; }
 .ci-side-case b { display: block; font-weight: 500; font-size: 19px; letter-spacing: -0.01em; }
 .ci-side-case span { display: block; margin-top: 4px; font-size: 12px; color: var(--ci-side-muted); }
 .ci-chapters { list-style: none; margin: 22px 0 0; padding: 0; position: relative; }
