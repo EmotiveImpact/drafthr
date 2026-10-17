@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Building2, Mail } from "lucide-react";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { Wordmark } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, Spinner } from "@/components/wizard/kit";
@@ -144,8 +144,7 @@ export function SignupWorkspace() {
         {/* Logo centred above the title, the same lockup as the sign-in pages. */}
         <div className="mb-7 flex flex-col items-center text-center">
           <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
-            <BrandMark size={44} />
-            <Wordmark size={26} />
+            <Wordmark size={36} />
           </Link>
           <h1 className="ds-title m-0 mt-8 text-[clamp(32px,4.4vw,42px)] leading-[1.08] tracking-[-0.02em]">
             {`Set up your workspace${user.firstName ? `, ${user.firstName}` : ""}`}
