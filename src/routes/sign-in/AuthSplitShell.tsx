@@ -17,7 +17,7 @@ import { SignInSlideshow } from "./SignInSlideshow";
 export function AuthSplitShell({ children }: { children: ReactNode }) {
   return (
     <div data-page-main className="min-h-screen lg:grid lg:grid-cols-2 text-[var(--ds-ink)]">
-      {/* Left column: pastel letter slideshow on the warm off-white ground.
+      {/* Left column: the photo slideshow (or the letter cards, see SignInSlideshow).
        * Hidden below lg:. Sticky to the viewport height so the form column
        * can scroll independently on tall content. */}
       <div className="hidden lg:block lg:sticky lg:top-0 lg:h-screen">
