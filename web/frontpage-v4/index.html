@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DraftHR Front Page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Novera's form, Asset's skin: near-black canvas, graphite panels, white type in Host Grotesk,
+   painted landscapes behind real product, one coloured capsule per section label. */
+:root{
+  --bg:#080A09; --panel:#131517; --panel-2:#1B1D20; --raise:#232326; --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+  --white:#FFFFFF; --text:rgba(255,255,255,.92); --soft:rgba(255,255,255,.74); --mute:rgba(255,255,255,.56);
+  --gold:#D4B144; --green:#68CC58; --cyan:#9EFAFF; --violet:#B59AFF;
+  --font:"Host Grotesk",system-ui,sans-serif;
+  --wrap:1200px; --gut:clamp(16px,4vw,40px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font:400 16px/1.55 var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden;
+  background-image:radial-gradient(rgba(255,255,255,.045) 1px,transparent 1.2px);background-size:22px 22px}
+a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--gut)}
+:focus-visible{outline:2px solid var(--white);outline-offset:3px;border-radius:4px}
+
+/* Type */
+h1,h2,h3{font-weight:400;color:var(--white)}
+h1{font-weight:400;font-size:clamp(42px,5.2vw,66px);line-height:1.04;letter-spacing:-.045em}
+h1 em,h2 em{font-style:normal}
+h2{font-weight:400;font-size:clamp(32px,3.4vw,48px);line-height:1.1;letter-spacing:-.04em}
+h3{font-size:20px;line-height:1.25;letter-spacing:-.02em}
+.sub{color:var(--soft);font-size:16px;max-width:46ch}
+.tag{display:inline-flex;align-items:center;gap:9px;font-size:13px;color:var(--soft)}
+.tag::before{content:"";width:14px;height:7px;border-radius:99px;background:var(--c,var(--gold))}
+.tag.g{--c:var(--green)}.tag.c{--c:var(--cyan)}.tag.v{--c:var(--violet)}
+.head{max-width:660px;margin-bottom:64px}
+.head .tag{margin-bottom:22px}
+.head h2{margin-bottom:18px}
+.center{text-align:center;margin-left:auto;margin-right:auto}.center .sub{margin:0 auto}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 18px;border-radius:8px;font:500 14.5px/1 var(--font);white-space:nowrap;transition:background .2s,border-color .2s}
+.btn-white{background:var(--white);color:#08090A}.btn-white:hover{background:#E9E9E9}.btn-white:active{background:#D9D9D9}
+.btn-dark{background:var(--raise);color:var(--white)}.btn-dark:hover{background:#2E2E32}
+.btn-line{background:rgba(255,255,255,.08);color:var(--white)}.btn-line:hover{background:rgba(255,255,255,.14)}
+
+section{padding:clamp(96px,11vw,150px) 0}
+
+/* Nav */
+.nav{position:absolute;inset:0 0 auto;z-index:5}
+.nav .wrap{max-width:none;height:76px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:0 clamp(16px,4vw,56px)}
+.logo{display:flex;align-items:center;gap:10px;font:500 18px/1 var(--font);letter-spacing:-.02em;color:var(--white)}
+.logo img{width:30px;height:auto;display:block;border-radius:8px;box-shadow:0 0 0 1px rgba(255,255,255,.10)}
+.nav ul{display:flex;gap:30px;list-style:none;font-size:14px}
+.nav ul a{color:rgba(255,255,255,.8)}.nav ul a:hover{color:var(--white)}
+.nav .r{display:flex;align-items:center;gap:18px;font-size:14px}
+.nav .r>a:first-child{color:rgba(255,255,255,.8)}
+.nav .btn{height:36px;padding:0 14px;font-size:14px}
+
+/* 1. Hero: full-bleed photograph, headline bottom left */
+.hero{position:relative;height:min(940px,100svh);min-height:640px;background:#0b0b0b;display:flex;align-items:flex-end;overflow:hidden}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,10,9,.86) 0%,rgba(8,10,9,.5) 45%,rgba(8,10,9,.08) 80%),linear-gradient(0deg,rgba(8,10,9,1) 0%,rgba(8,10,9,.4) 26%,rgba(8,10,9,0) 52%),linear-gradient(180deg,rgba(8,10,9,.6),rgba(8,10,9,0) 18%)}
+.hero .wrap{position:relative;z-index:2;width:100%;padding-bottom:clamp(64px,10vh,120px)}
+.hero h1{max-width:12.5ch;margin:22px 0 22px}
+.hero .sub{font-size:17px;max-width:42ch;margin-bottom:34px}
+.hero .acts{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.hero .note{margin-top:22px;font-size:13px;color:var(--mute)}
+
+
+/* Hero sequence: six photographs tell one letter's journey, night to blue hour */
+.hero{background:#0b0b0b!important}
+.hero .bg{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transform:scale(1.05);transition:opacity 1.6s ease,transform 9s linear;z-index:0}
+.hero .bg.on{opacity:1;transform:scale(1)}
+.hero::after{z-index:1}
+.hero h1{transition:opacity .5s ease,transform .6s ease}
+.hero h1.out{opacity:0;transform:translateY(8px)}
+.seq{position:absolute;left:0;right:0;bottom:0;z-index:3}
+.seq .wrap{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding-bottom:28px}
+.seq button{text-align:left;padding-top:14px;position:relative;font-size:12.5px;color:var(--mute);transition:color .3s}
+.seq button::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:rgba(255,255,255,.18);border-radius:2px}
+.seq button i{position:absolute;left:0;top:0;height:2px;width:0;background:var(--white);border-radius:2px}
+.seq button.done i{width:100%}
+.seq button.on{color:var(--white)}
+.seq button.on i{animation:fill var(--dur,7s) linear forwards}
+.seq.paused button.on i{animation-play-state:paused}
+@keyframes fill{to{width:100%}}
+.seq b{display:block;font-weight:400;color:inherit;font-size:12px;opacity:.7;margin-bottom:2px}
+.hero > .wrap{padding-bottom:clamp(120px,16vh,170px)!important}
+@media (max-width:600px){.seq .wrap{gap:6px;padding-bottom:20px}.seq button span{display:none}.seq b{font-size:11px}.hero > .wrap{padding-bottom:96px!important}}
+@media (prefers-reduced-motion:reduce){.hero .bg{transform:none}.seq button.on i{animation:none;width:100%}}
+
+/* 2. Who it is for (where Novera puts its logo strip) */
+.for{padding:24px 0 0}
+.for p{text-align:center;color:var(--mute);font-size:14px;margin-bottom:28px}
+.for ul{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0}
+.for li:first-child{border-left:0}
+.for li{border-left:1px solid var(--line);height:56px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:17px;letter-spacing:-.01em;color:var(--white)}
+.for svg{width:20px;height:20px;stroke:var(--soft);fill:none;stroke-width:1.4}
+
+
+/* Who it is for: three people, one line each */
+.who{padding:clamp(72px,8vw,110px) 0 0}
+.who-lead{text-align:center;color:var(--mute);font-size:14px;margin-bottom:28px}
+.who-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.who-card{background:var(--panel);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;transition:background .2s}
+.who-card:hover{background:var(--panel-2)}
+.who-card .ph{aspect-ratio:4/3;background:#111 center/cover}
+.who-card .wb{padding:22px 24px 26px}
+.who-card h3{margin-bottom:8px}
+.who-card p{color:var(--soft);font-size:15px}
+@media (max-width:1000px){.who-grid{grid-template-columns:1fr}.who-card{display:grid;grid-template-columns:1fr 1.2fr}.who-card .ph{aspect-ratio:auto;min-height:180px}}
+@media (max-width:600px){.who-card{display:flex}.who-card .ph{aspect-ratio:16/10}}
+
+/* 3. Capabilities: painted canvas with real UI, dark caption panel */
+.caps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.cap{background:var(--panel);border-radius:4px;overflow:hidden;}
+.cap .canvas{position:relative;aspect-ratio:4/3;background:#1a1612 center/cover;overflow:hidden}
+.cap .canvas img{position:absolute;border-radius:6px;box-shadow:0 24px 50px -20px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.08)}
+.cap:nth-child(1) .canvas{background-image:url(img/bd-study.jpg)}
+.cap:nth-child(2) .canvas{background-image:url(img/bd-glass.jpg)}
+.cap:nth-child(3) .canvas{background-image:url(img/bd-dusk.jpg)}
+.cap:nth-child(1) .canvas img{left:12%;top:14%;width:96%}
+.cap:nth-child(2) .canvas img{left:20%;top:12%;width:70%}
+.cap:nth-child(3) .canvas img{left:20%;top:12%;width:70%}
+.cap .cap-body{padding:24px 24px 28px}
+.cap h3{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.cap h3::before{content:"";width:6px;height:14px;border-radius:99px;background:var(--c,var(--gold))}
+.cap:nth-child(2) h3{--c:var(--green)}.cap:nth-child(3) h3{--c:var(--cyan)}
+.cap p{color:var(--soft);font-size:15px}
+
+/* 4. How it works: big canvas left, tab list right (Novera), steps from the app */
+.how-grid{display:grid;grid-template-columns:1fr 340px;gap:40px;align-items:start}
+.stage{position:relative;aspect-ratio:16/11;border-radius:6px;overflow:hidden;background:#1a1612 url(img/bd-dusk-wide.jpg) center/cover;}
+.stage img{position:absolute;left:8%;top:9%;width:118%;max-width:none;border-radius:8px;box-shadow:0 40px 80px -30px rgba(0,0,0,.7),0 0 0 1px rgba(0,0,0,.1);opacity:0;transform:translateY(10px);transition:opacity .45s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+.stage img.on{opacity:1;transform:none}
+.tabs{display:flex;flex-direction:column;gap:8px}
+.tab{text-align:left;background:var(--panel);border-radius:4px;padding:18px 20px;transition:background .2s,border-color .2s}
+.tab b{display:flex;align-items:center;justify-content:space-between;font-weight:400;font-size:16px;color:var(--white)}
+.tab b small{font-size:12px;color:var(--mute)}
+.tab p{color:var(--soft);font-size:14.5px;max-height:0;overflow:hidden;opacity:0;transition:max-height .4s ease,opacity .3s,margin .3s}
+.tab[aria-selected=true]{background:var(--raise);box-shadow:inset 2px 0 0 var(--white)}
+.tab[aria-selected=true] p{max-height:120px;opacity:1;margin-top:10px}
+.tab:hover{background:var(--panel-2)}
+.tabs .btn{align-self:flex-start;margin-top:16px}
+
+/* 5. Letter types: painted tiles */
+.letters{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.letter{background:var(--panel);border-radius:4px;overflow:hidden;display:flex;flex-direction:column}
+.letter .art{aspect-ratio:1/1;background:center/cover;position:relative}
+.letter:nth-child(1) .art{background-image:url(img/paint-a.jpg);background-position:20% 40%}
+.letter:nth-child(2) .art{background-image:url(img/paint-b.jpg);background-position:70% 30%}
+.letter:nth-child(3) .art{background-image:url(img/paint-c.jpg);background-position:40% 70%}
+.letter:nth-child(4) .art{background-image:url(img/paint-wide.jpg);background-position:90% 60%}
+.letter .art span{position:absolute;left:16px;top:16px;background:rgba(255,255,255,.92);color:#08090A;font-size:12px;border-radius:99px;padding:5px 10px}
+.letter .lbody{padding:20px 20px 24px}
+.letter h3{font-size:19px;margin-bottom:8px}
+.letter p{color:var(--soft);font-size:14.5px}
+.more{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-top:28px;color:var(--soft);font-size:15px;flex-wrap:wrap}
+
+.letter{position:relative;padding:24px}
+.letter .ico{width:44px;height:44px;border-radius:50%;background:var(--raise);display:grid;place-items:center;margin-bottom:56px}
+.letter .ico svg{width:20px;height:20px;stroke:var(--white);fill:none;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round}
+.letter .jur{position:absolute;right:20px;top:24px;font-size:12px;color:var(--soft);background:var(--raise);border-radius:99px;padding:4px 10px}
+.letter .lbody{padding:0}
+.letter:hover{background:var(--panel-2)}
+#letters h2{max-width:16ch}
+
+/* 6. Records and numbers: Novera's trust band, as a graphite panel */
+.band{background:var(--panel);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.nums{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);margin-top:64px}
+.num{padding:32px 24px 0 0}
+.num+.num{padding-left:24px;border-left:1px solid var(--line)}
+.num b{display:block;font-weight:300;font-size:clamp(44px,4.6vw,64px);line-height:1;letter-spacing:-.05em;color:var(--white)}
+.num small{display:block;font-size:13px;color:var(--mute);margin:14px 0 6px}
+.num p{font-size:14.5px;color:var(--soft);max-width:24ch}
+.records{display:grid;grid-template-columns:repeat(4,1fr);gap:32px;margin-top:64px}
+.records div{display:flex;flex-direction:column;gap:8px}
+.records b{display:flex;align-items:center;gap:10px;font-weight:400;color:var(--white)}
+.records svg{width:18px;height:18px;stroke:var(--white);fill:none;stroke-width:1.4}
+.records p{font-size:14.5px;color:var(--soft)}
+
+/* 7. Pricing */
+.bill{display:inline-flex;align-items:center;gap:14px;margin:4px auto 48px;font-size:16px;color:var(--soft)}
+.sw{width:44px;height:24px;border-radius:99px;background:var(--raise);position:relative;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--white);transition:transform .25s}
+.sw[aria-checked=true]::after{transform:translateX(20px)}
+.bill .off{font-size:12px;background:var(--raise);color:var(--white);padding:5px 9px;border-radius:99px}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:left}
+.plan{background:var(--panel);border-radius:6px;padding:28px;display:flex;flex-direction:column}
+.plan.pro{background:var(--raise)}
+.plan .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.plan .top h3{font-size:20px}
+.plan .pop{font-size:12px;background:var(--white);color:#08090A;padding:4px 10px;border-radius:99px}
+.plan .price{display:flex;align-items:baseline;gap:6px}
+.plan .price b{font-weight:400;font-size:48px;letter-spacing:-.05em;color:var(--white)}
+.plan .price span{color:var(--mute);font-size:14px}
+.plan .fit{color:var(--soft);font-size:14.5px;margin:12px 0 22px;min-height:44px}
+.plan .btn{width:100%;margin-bottom:26px}
+.plan .feat{font-size:12.5px;color:var(--mute);display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.plan .feat::before,.plan .feat::after{content:"";flex:1;height:1px;background:var(--line)}
+.plan ul{list-style:none;display:flex;flex-direction:column;gap:11px;font-size:14.5px;color:var(--soft)}
+.plan li{display:flex;gap:10px;align-items:flex-start}
+.plan li svg{flex:0 0 16px;width:16px;height:16px;margin-top:3px;stroke:var(--white);fill:none;stroke-width:1.5}
+.single{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;background:var(--panel);border-radius:6px;padding:20px 24px;margin-top:16px;text-align:left}
+.single p{color:var(--soft)}.single p b{font-weight:500;color:var(--white)}
+
+/* 8. Questions: two columns, accordion cards */
+.faq{display:grid;grid-template-columns:.85fr 1.15fr;gap:64px;align-items:start}
+.faq .head{margin-bottom:0}
+details{background:var(--panel);border-radius:4px;margin-bottom:8px;transition:background .2s}
+details[open]{background:var(--raise)}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 22px;font-size:16px;color:var(--white)}
+summary::-webkit-details-marker{display:none}
+summary i{flex:0 0 14px;height:14px;position:relative}
+summary i::before,summary i::after{content:"";position:absolute;left:0;top:6.5px;width:14px;height:1.2px;background:var(--white);transition:transform .25s}
+summary i::after{transform:rotate(90deg)}
+details[open] summary i::after{transform:rotate(0)}
+details p{padding:0 22px 22px;color:var(--soft);font-size:15px;max-width:60ch}
+
+/* 9. Closing call to action: Novera's card */
+.cta{background:var(--panel);border-radius:6px;display:grid;grid-template-columns:1fr 1.05fr;overflow:hidden;min-height:400px}
+.cta .txt{padding:clamp(32px,5vw,64px);display:flex;flex-direction:column;justify-content:center}
+.cta h2{margin:20px 0 16px;max-width:13ch}
+.cta .sub{margin-bottom:30px}
+.cta .acts{display:flex;gap:10px;flex-wrap:wrap}
+.cta .pic{position:relative;background:#1a1612 url(img/bd-glass.jpg) center 30%/cover;margin:20px 20px 20px 0;border-radius:4px;overflow:hidden}
+.cta .pic img{position:absolute;left:12%;top:12%;width:150%;max-width:none;border-radius:8px;box-shadow:0 30px 60px -25px rgba(0,0,0,.7)}
+
+/* 10. Footer */
+footer{border-top:1px solid var(--line);padding:64px 0 40px;margin-top:clamp(96px,11vw,150px)}
+.fgrid{display:grid;grid-template-columns:1.5fr repeat(4,1fr);gap:32px}
+.fgrid p{color:var(--soft);font-size:14.5px;max-width:30ch;margin-top:16px}
+.fgrid h6{font-size:13px;font-weight:400;color:var(--mute);margin-bottom:14px}
+.fgrid ul{list-style:none;display:flex;flex-direction:column;gap:10px;font-size:14.5px;color:var(--soft)}
+.fgrid a:hover{color:var(--white)}
+.legal{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:56px;padding-top:24px;font-size:13px;color:var(--mute)}
+
+/* Reveal */
+.js .rv{opacity:0;transform:translateY(16px);transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
+.js .rv.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}.js .rv{opacity:1;transform:none}}
+
+/* Tablet */
+@media (max-width:1000px){
+  .nav ul{display:none}
+  .for ul{grid-template-columns:1fr 1fr}
+  .caps,.letters{grid-template-columns:1fr 1fr}
+  .caps .cap:last-child{grid-column:1/-1}
+  .how-grid{grid-template-columns:1fr}
+  .nums,.records{grid-template-columns:1fr 1fr}
+  .num:nth-child(3){padding-left:0;border-left:0}
+  .num:nth-child(n+3){border-top:1px solid var(--line);margin-top:32px}
+  .plans{grid-template-columns:1fr}
+  .faq{grid-template-columns:1fr;gap:32px}
+  .cta{grid-template-columns:1fr}.cta .pic{min-height:300px;margin:0 20px 20px}
+  .fgrid{grid-template-columns:1fr 1fr}.fgrid>div:first-child{grid-column:1/-1}
+}
+/* Phone */
+@media (max-width:600px){
+  .nav .r>a:first-child{display:none}
+  .hero{background-position:78% 40%}
+  .hero::after{background:linear-gradient(0deg,rgba(8,10,9,1) 0%,rgba(8,10,9,.75) 40%,rgba(8,10,9,.35) 75%,rgba(8,10,9,.55) 100%)}
+  .hero .sub{font-size:16px}
+  .for li{height:52px;font-size:15px}
+  .for li:nth-child(3){border-left:0}
+  .caps,.letters{grid-template-columns:1fr}
+  .caps .cap:last-child{grid-column:auto}
+  .stage{aspect-ratio:4/3.6}.stage img{width:170%}
+  .nums,.records{grid-template-columns:1fr}
+  .num,.num+.num{padding:24px 0 0;border-left:0}
+  .num+.num{border-top:1px solid var(--line);margin-top:24px}
+  .btn{height:44px}
+  .fgrid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<header class="nav"><div class="wrap">
+  <a class="logo" href="#top"><img src="img/logo-mark.png" alt="">DraftHR</a>
+  <ul><li><a href="#what">Product</a></li><li><a href="#how">How it works</a></li><li><a href="#letters">Letters</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#faq">Questions</a></li></ul>
+  <div class="r"><a href="#">Log in</a><a class="btn btn-white" href="#">Start a letter</a></div>
+</div></header>
+
+<main id="top">
+  <!-- 1. Top of page -->
+  <section class="hero" style="padding:0" data-hero="0">
+    <div class="wrap">
+      <span class="tag rv">AI drafting for UK and US HR letters</span>
+      <h1 class="rv" data-k="h">Some letters start late at night.</h1>
+      <p class="sub rv">For HR teams, and for employees raising a concern. DraftHR writes each letter in the right structure, and you approve every word before it is sent.</p>
+      <div class="acts rv"><a class="btn btn-white" href="#">Start a letter</a><a class="btn btn-line" href="#how">See how it works</a></div>
+      <p class="note rv">From £9.99 a letter. DraftHR drafts, you decide. Not legal advice.</p>
+    </div>
+    <div class="bgs"></div><div class="seq" aria-label="Story"><div class="wrap"></div></div>
+  </section>
+
+  <section class="who"><div class="wrap">
+    <p class="who-lead rv">Built for the people who put it in writing</p>
+    <div class="who-grid">
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/who-employee.jpg)"></div><div class="wb"><h3>Employees</h3><p>Raise a concern clearly, in the structure a fair process expects. From £9.99 a letter.</p></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/who-hr.jpg)"></div><div class="wb"><h3>HR teams</h3><p>Every manager starts from the same careful structure, reviewed and approved before it goes out.</p></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/who-consultant.jpg)"></div><div class="wb"><h3>HR consultants</h3><p>Draft for clients in the right structure for the UK or the US, with a record they can rely on.</p></div></a>
+    </div>
+  </div></section>
+
+  <!-- 2. What DraftHR is -->
+  <section id="what"><div class="wrap">
+    <div class="head">
+      <span class="tag rv">What DraftHR does</span>
+      <h2 class="rv">Careful tools for the letters that matter.</h2>
+      <p class="sub rv">Every letter is drafted in the right structure, checked as you go and kept with the matter it belongs to.</p>
+    </div>
+    <div class="caps">
+      <article class="cap rv"><div class="canvas"><img src="img/ui-letter.jpg" alt="A DraftHR letter being drafted"></div>
+        <div class="cap-body"><h3>Draft section by section</h3><p>Pick one of 35 templates and answer a few plain questions. DraftHR writes a first version in the right structure.</p></div></article>
+      <article class="cap rv"><div class="canvas"><img src="img/ui-approve.jpg" alt="The DraftHR approval panel"></div>
+        <div class="cap-body"><h3>Review, then approve</h3><p>A teammate, someone you trust or an expert from the marketplace checks it before anything goes out.</p></div></article>
+      <article class="cap rv"><div class="canvas"><img src="img/ui-next.jpg" alt="What happens next after a letter is sent"></div>
+        <div class="cap-body"><h3>Kept on record</h3><p>Sent letters, replies and deadlines stay with the matter, with evidence packs when you need them.</p></div></article>
+    </div>
+  </div></section>
+
+  <!-- 3. How it works -->
+  <section id="how" style="padding-top:0"><div class="wrap">
+    <div class="head">
+      <span class="tag g rv">How it works</span>
+      <h2 class="rv">From blank page to sent, in four steps.</h2>
+      <p class="sub rv">A deliberate process for letters that may be read again later, by a manager, a tribunal or a court.</p>
+    </div>
+    <div class="how-grid">
+      <div class="stage rv">
+        <img class="on" src="img/app-f1-draft.jpg" alt="Drafting a letter in DraftHR">
+        <img src="img/app-f5-back.jpg" alt="A letter back from review">
+        <img src="img/app-f6-approve.jpg" alt="Approving a letter">
+        <img src="img/app-sent-crop.jpg" alt="A sent letter with its record" style="width:96%">
+      </div>
+      <div class="tabs rv" role="tablist">
+        <button class="tab" role="tab" aria-selected="true"><b>Draft <small>01</small></b><p>Choose a template and answer a few plain questions. DraftHR writes the first version, section by section.</p></button>
+        <button class="tab" role="tab" aria-selected="false"><b>Review <small>02</small></b><p>Every AI edit is a proposal you accept or reject. Bring in a teammate, someone you trust or an expert.</p></button>
+        <button class="tab" role="tab" aria-selected="false"><b>Approve <small>03</small></b><p>Route the finished letter to the right person to sign off. Teams get an approval queue.</p></button>
+        <button class="tab" role="tab" aria-selected="false"><b>Send <small>04</small></b><p>Download it and send it yourself, or email it from DraftHR. Either way, it is kept on record.</p></button>
+        <a class="btn btn-white" href="#">Start a letter</a>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- 4. Letter types -->
+  <section id="letters" style="padding-top:0"><div class="wrap">
+    <div class="head">
+      <span class="tag c rv">What we draft</span>
+      <h2 class="rv">35 letters, for the UK and the US.</h2>
+      <p class="sub rv">Four families of HR correspondence, each shaped for the jurisdiction you choose and the tone the moment needs.</p>
+    </div>
+    <div class="letters">
+      <a class="letter rv" href="#"><div class="ico"><svg viewBox="0 0 20 20"><path d="M4 3.5h9l3 3V16.5H4z"/><path d="M7 9h6M7 12h4"/></svg></div><span class="jur">UK and US</span><div class="lbody"><h3>Grievances</h3><p>Formal complaints with the structure a fair process expects.</p></div></a>
+      <a class="letter rv" href="#"><div class="ico"><svg viewBox="0 0 20 20"><path d="M10 3v14M4 6h12M6 6l-2.5 6h5zM14 6l-2.5 6h5z"/><path d="M7 17h6"/></svg></div><span class="jur">UK</span><div class="lbody"><h3>Settlements</h3><p>Measured replies to offers, with the reasoning set out clearly.</p></div></a>
+      <a class="letter rv" href="#"><div class="ico"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/><path d="M10 6v4l3 2"/></svg></div><span class="jur">UK</span><div class="lbody"><h3>Flexible working</h3><p>Requests and responses that cover what the law asks for.</p></div></a>
+      <a class="letter rv" href="#"><div class="ico"><svg viewBox="0 0 20 20"><path d="M8 4H4.5v12H8M12 6.5L15.5 10 12 13.5M15.5 10H7.5"/></svg></div><span class="jur">UK and US</span><div class="lbody"><h3>Resignations</h3><p>Notice, final pay and next steps, put plainly.</p></div></a>
+    </div>
+    <div class="more rv"><span>Also warnings, appeals, references and more.</span><a class="btn btn-line" href="#">See all 35 letters</a></div>
+  </div></section>
+
+  <!-- 5. Records and numbers -->
+  <section class="band"><div class="wrap">
+    <div class="head center" style="margin-bottom:0">
+      <span class="tag v rv">Careful by design</span>
+      <h2 class="rv">Clear records for every letter you send.</h2>
+      <p class="sub rv">DraftHR drafts, you decide. Each step leaves a trail you can stand behind.</p>
+    </div>
+    <div class="records">
+      <div class="rv"><b><svg viewBox="0 0 18 18"><path d="M3 9.5l3.5 3.5L15 4.5"/></svg>You approve every edit</b><p>AI changes wait as proposals until you apply them.</p></div>
+      <div class="rv"><b><svg viewBox="0 0 18 18"><path d="M9 1.8l6 2.2v4.4c0 3.8-2.6 6.6-6 7.7-3.4-1.1-6-3.9-6-7.7V4z"/></svg>Evidence pack signing</b><p>Sign the record that goes with a letter.</p></div>
+      <div class="rv"><b><svg viewBox="0 0 18 18"><path d="M2.5 15.5h13M5 12V7M9 12V3.5M13 12V9"/></svg>Audit trail</b><p>Who drafted, reviewed and approved, and when.</p></div>
+      <div class="rv"><b><svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7"/><path d="M9 5.5v4l2.5 1.5"/></svg>Deadlines kept</b><p>Appeal windows and hearings go in your calendar.</p></div>
+    </div>
+    <div class="nums">
+      <div class="num rv"><b>35</b><small>Letter templates</small><p>Grievances to flexible working.</p></div>
+      <div class="num rv"><b>UK, US</b><small>Jurisdictions</small><p>The right structure and terms.</p></div>
+      <div class="num rv"><b>4</b><small>Steps to send</small><p>Draft, review, approve, send.</p></div>
+      <div class="num rv"><b>£9.99</b><small>For employees</small><p>A single letter, no subscription.</p></div>
+    </div>
+  </div></section>
+
+  <!-- 6. Pricing -->
+  <section id="pricing" class="center" style="text-align:center"><div class="wrap">
+    <div class="head center">
+      <span class="tag rv">Pricing</span>
+      <h2 class="rv">Simple, transparent pricing.</h2>
+      <p class="sub rv">Find the plan that fits how often you write. Marketplace access is included on every plan.</p>
+    </div>
+    <div class="bill rv"><span>Monthly</span><button class="sw" role="switch" aria-checked="false" aria-label="Yearly billing"></button><span>Yearly</span><span class="off">1 month free</span></div>
+    <div class="plans">
+      <div class="plan rv"><div class="top"><h3>Starter</h3></div>
+        <div class="price"><b data-m="£29" data-y="£319">£29</b><span data-m="/month" data-y="/year">/month</span></div>
+        <p class="fit">For small businesses writing a few letters each month.</p>
+        <a class="btn btn-dark" href="#">Choose Starter</a>
+        <div class="feat">Features</div>
+        <ul><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>5 letters a month</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>All 35 templates</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Full export</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Marketplace access</li></ul></div>
+      <div class="plan pro rv"><div class="top"><h3>Pro</h3><span class="pop">Popular</span></div>
+        <div class="price"><b data-m="£79" data-y="£869">£79</b><span data-m="/month" data-y="/year">/month</span></div>
+        <p class="fit">For HR teams and consultants drafting every week.</p>
+        <a class="btn btn-white" href="#">Choose Pro</a>
+        <div class="feat">Features</div>
+        <ul><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Unlimited letters</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>20 AI critique credits a month</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Evidence pack signing</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Marketplace access</li></ul></div>
+      <div class="plan rv"><div class="top"><h3>Business</h3></div>
+        <div class="price"><b data-m="£199" data-y="£2,189">£199</b><span data-m="/month" data-y="/year">/month</span></div>
+        <p class="fit">For organisations that review and approve as a team.</p>
+        <a class="btn btn-dark" href="#">Choose Business</a>
+        <div class="feat">Features</div>
+        <ul><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Everything in Pro</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>5 seats and team review</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Audit trail dashboard</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Bulk letters from a CSV</li><li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Approval queue</li></ul></div>
+    </div>
+    <div class="single rv"><p><b>Writing for yourself?</b> Employees can draft a single letter from £9.99.</p><a class="btn btn-line" href="#">Draft one letter</a></div>
+  </div></section>
+
+  <!-- 7. Questions -->
+  <section id="faq" style="padding-top:0"><div class="wrap faq">
+    <div class="head">
+      <span class="tag g rv">Questions</span>
+      <h2 class="rv">All you need to know about DraftHR.</h2>
+      <p class="sub rv" style="margin-bottom:24px">Still cannot find what you are looking for?</p>
+      <a class="btn btn-dark rv" href="#">Contact us</a>
+    </div>
+    <div class="rv">
+      <details open><summary>What is DraftHR?<i></i></summary><p>An AI drafting tool for HR letters in the UK and the US. It helps HR teams, employees and consultants write letters that are clear, well structured and ready to send.</p></details>
+      <details><summary>Is DraftHR legal advice?<i></i></summary><p>No. DraftHR drafts, you decide. For complex or high stakes matters, speak to a qualified employment adviser, or book one through the DraftHR marketplace.</p></details>
+      <details><summary>Does it cover the UK and the US?<i></i></summary><p>Yes. Choose the jurisdiction when you start and the letter follows the right structure and terms for it.</p></details>
+      <details><summary>Can I change what the AI writes?<i></i></summary><p>Always. Edit any section directly, or describe the change you want and apply it only if you are happy with it.</p></details>
+      <details><summary>Can someone check my letter before I send it?<i></i></summary><p>Yes. Send it to a teammate or someone you trust, or choose an HR expert from the marketplace. Go back and forth until it is right.</p></details>
+      <details><summary>I am an employee. Do I need a plan?<i></i></summary><p>No. Employees can draft a single letter from £9.99 without a subscription.</p></details>
+    </div>
+  </div></section>
+
+  <!-- 8. Closing call to action -->
+  <div class="wrap"><div class="cta rv">
+    <div class="txt">
+      <span class="tag">Start today</span>
+      <h2>Put it in writing, with clarity and care.</h2>
+      <p class="sub">Your first draft is a few questions away.</p>
+      <div class="acts"><a class="btn btn-white" href="#">Start a letter</a><a class="btn btn-dark" href="#pricing">See pricing</a></div>
+    </div>
+    <div class="pic"><img src="img/app-f9-letters.jpg" alt="The DraftHR letters list"></div>
+  </div></div>
+</main>
+
+<!-- 9. Footer -->
+<footer><div class="wrap">
+  <div class="fgrid">
+    <div><a class="logo" href="#top"><img src="img/logo-mark.png" alt="">DraftHR</a><p>AI drafting for UK and US HR letters, for HR teams, employees and consultants.</p></div>
+    <div><h6>Product</h6><ul><li><a href="#what">Capabilities</a></li><li><a href="#how">How it works</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#">Experts</a></li></ul></div>
+    <div><h6>Letters</h6><ul><li><a href="#letters">Grievances</a></li><li><a href="#letters">Settlements</a></li><li><a href="#letters">Flexible working</a></li><li><a href="#letters">Resignations</a></li></ul></div>
+    <div><h6>Company</h6><ul><li><a href="#">About</a></li><li><a href="#faq">Questions</a></li><li><a href="#">Contact</a></li></ul></div>
+    <div><h6>Legal</h6><ul><li><a href="#">Terms</a></li><li><a href="#">Privacy</a></li></ul></div>
+  </div>
+  <div class="legal"><span>DraftHR drafts, you decide. Not legal advice.</span><span>© 2026 DraftHR</span></div>
+</div></footer>
+
+<script>
+document.documentElement.classList.add('js');
+(function(){
+  var els=document.querySelectorAll('.rv');
+  if(!('IntersectionObserver' in window)){els.forEach(function(e){e.classList.add('in')});return}
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{rootMargin:'0px 0px -6% 0px'});
+  els.forEach(function(e){io.observe(e)});
+})();
+(function(){
+  var tabs=document.querySelectorAll('.tab'),imgs=document.querySelectorAll('.stage img');
+  tabs.forEach(function(t,i){t.addEventListener('click',function(){
+    tabs.forEach(function(x,j){x.setAttribute('aria-selected',j===i)});
+    imgs.forEach(function(m,j){m.classList.toggle('on',j===i)});
+  })});
+})();
+(function(){
+  var sw=document.querySelector('.sw');
+  sw.addEventListener('click',function(){
+    var y=sw.getAttribute('aria-checked')!=='true';sw.setAttribute('aria-checked',y);
+    document.querySelectorAll('[data-m][data-y]').forEach(function(el){el.textContent=el.dataset[y?'y':'m']});
+  });
+})();
+
+// Hero sequence: one letter's journey, night to blue hour. Advances on its own, pauses on hover.
+(function(){
+  var H=[
+    {img:'img/story-1-night.jpg',pos:'75% 40%',ch:'Night',t:'Deciding',h:'Some letters start late at night.'},
+    {img:'img/story-2-sign.jpg',pos:'80% 40%',ch:'Lamplight',t:'Drafting',h:'Every word checked before you sign.'},
+    {img:'img/h-envelope.jpg',pos:'100% 60%',ch:'Morning',t:'Ready',h:'Ready to send by morning.'},
+    {img:'img/story-4-corridor.jpg',pos:'78% 40%',ch:'Dusk',t:'Prepared',h:'Walk in with a clear record.'},
+    {img:'img/h-two-sides.jpg',pos:'75% 45%',ch:'The meeting',t:'Fair',h:'Fair to both sides of the table.'},
+    {img:'img/h-hr-manager.jpg',pos:'70% 40%',ch:'Blue hour',t:'On record',h:'Still standing when it is read again.'}
+  ];
+  var hero=document.querySelector('.hero'),bgs=hero.querySelector('.bgs'),seq=hero.querySelector('.seq'),row=seq.querySelector('.wrap'),h1=hero.querySelector('[data-k=h]');
+  var DUR=7000,cur=-1,timer=null,paused=false,left=DUR,started=0;
+  var layers=H.map(function(d){var el=document.createElement('div');el.className='bg';el.style.backgroundImage='url('+d.img+')';el.style.backgroundPosition=d.pos;bgs.appendChild(el);return el});
+  var btns=H.map(function(d,i){var b=document.createElement('button');b.innerHTML='<i></i><b>'+(i+1)+' / '+H.length+'</b><span>'+d.ch+'</span>';b.style.setProperty('--dur',DUR+'ms');b.addEventListener('click',function(){go(i,true)});row.appendChild(b);return b});
+  function go(i,user){
+    if(i===cur)return;
+    layers.forEach(function(l,j){l.classList.toggle('on',j===i)});
+    btns.forEach(function(b,j){b.classList.toggle('on',j===i);b.classList.toggle('done',j<i);var n=b.querySelector('i');n.style.animation='none';void n.offsetWidth;n.style.animation=''});
+    if(cur>=0){h1.classList.add('out');setTimeout(function(){h1.textContent=H[i].h;h1.classList.remove('out')},450)}else{h1.textContent=H[i].h}
+    cur=i;schedule(DUR);
+  }
+  function schedule(ms){clearTimeout(timer);left=ms;started=Date.now();if(!paused)timer=setTimeout(function(){go((cur+1)%H.length)},ms)}
+  hero.addEventListener('mouseenter',function(){paused=true;seq.classList.add('paused');clearTimeout(timer);left-=Date.now()-started});
+  hero.addEventListener('mouseleave',function(){paused=false;seq.classList.remove('paused');schedule(Math.max(left,800))});
+  var q=(location.hash.match(/hero=(\d)/)||[])[1];
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){DUR=12000}
+  go(q?Math.min(+q-1,H.length-1):0);
+  if(q){paused=true;clearTimeout(timer)}
+})();
+</script>
+</body>
+</html>

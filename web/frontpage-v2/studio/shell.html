@@ -1,0 +1,183 @@
+<title>DraftHR Front Page Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!--FONTS-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: the page stacks one switchable block per section; a fixed side panel (bottom sheet on phones) picks A, B, C or Off for each. */
+:root{
+  color-scheme:light;
+  --ui-bg:#ffffff;--ui-ink:#151515;--ui-mute:#6d6d72;--ui-line:#e6e6e8;--ui-fill:#f3f3f4;--ui-on:#151515;--ui-on-ink:#ffffff;
+  --ui-font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  /*IMG_VARS*/;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#ffffff;color:var(--ui-ink);font-family:var(--ui-font)}
+.slotwrap{position:relative}
+.slotwrap[hidden]{display:none!important}
+.slot{display:block;position:relative}
+.chip{position:absolute;top:12px;left:12px;z-index:30;display:flex;align-items:center;gap:2px;padding:3px;border-radius:10px;background:rgba(255,255,255,.94);border:1px solid var(--ui-line);box-shadow:0 6px 20px -8px rgba(0,0,0,.35);font:500 12.5px/1 var(--ui-font);color:var(--ui-ink);backdrop-filter:blur(8px)}
+.chip span{padding:0 8px 0 6px;color:var(--ui-mute);white-space:nowrap}
+.chip button{appearance:none;border:0;background:transparent;font:600 12.5px/1 var(--ui-font);color:var(--ui-ink);width:28px;height:26px;border-radius:7px;cursor:pointer}
+.chip button:hover{background:var(--ui-fill)}
+.chip button[aria-pressed="true"]{background:var(--ui-on);color:var(--ui-on-ink)}
+.chip button:disabled{opacity:.25;cursor:default;background:transparent}
+.slotwrap:first-child .chip{top:76px}
+
+.panel{position:fixed;z-index:100;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;bottom:12px;width:300px;display:flex;flex-direction:column;background:var(--ui-bg);border:1px solid var(--ui-line);border-radius:16px;box-shadow:0 24px 60px -20px rgba(0,0,0,.45);font-family:var(--ui-font);color:var(--ui-ink);overflow:hidden;transition:transform .25s ease}
+.panel.closed{transform:translateX(calc(100% + 24px))}
+.panel header{padding:16px 16px 12px;border-bottom:1px solid var(--ui-line);display:grid;gap:6px}
+.panel h1{margin:0;font:600 15px/1.2 var(--ui-font)}
+.panel header p{margin:0;font-size:12.5px;line-height:1.45;color:var(--ui-mute)}
+.legend{display:flex;gap:10px;font-size:12px;color:var(--ui-mute);flex-wrap:wrap}
+.legend b{color:var(--ui-ink);font-weight:600}
+.panel .body{overflow:auto;padding:8px 12px 12px;display:grid;gap:2px;flex:1;min-height:0}
+.row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--ui-fill)}
+.row .lbl{font-size:13.5px;font-weight:500;cursor:pointer}
+.seg{display:flex;gap:2px;background:var(--ui-fill);border-radius:8px;padding:2px}
+.seg button{appearance:none;border:0;background:transparent;font:600 12px/1 var(--ui-font);color:var(--ui-ink);min-width:28px;height:26px;padding:0 6px;border-radius:6px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ui-on);color:var(--ui-on-ink)}
+.seg button:disabled{opacity:.25;cursor:default}
+.presets{display:flex;flex-wrap:wrap;gap:6px;padding:12px 4px 4px}
+.presets button{appearance:none;border:1px solid var(--ui-line);background:#fff;font:500 12px/1 var(--ui-font);color:var(--ui-ink);height:28px;padding:0 10px;border-radius:999px;cursor:pointer}
+.presets button:hover{background:var(--ui-fill)}
+.panel footer{border-top:1px solid var(--ui-line);padding:12px 16px 14px;display:grid;gap:8px}
+.code{font:500 13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--ui-fill);border-radius:8px;padding:8px 10px;user-select:all;word-break:break-word}
+.copy{appearance:none;border:0;background:var(--ui-on);color:var(--ui-on-ink);font:600 13px/1 var(--ui-font);height:34px;border-radius:8px;cursor:pointer}
+.toggle{position:fixed;z-index:101;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);appearance:none;border:0;background:var(--ui-on);color:var(--ui-on-ink);font:600 13px/1 var(--ui-font);height:40px;padding:0 16px;border-radius:999px;box-shadow:0 10px 30px -10px rgba(0,0,0,.5);cursor:pointer}
+.panel:not(.closed) ~ .toggle{display:none}
+.hide{appearance:none;border:0;background:transparent;color:var(--ui-mute);font:500 12px/1 var(--ui-font);cursor:pointer;justify-self:end;padding:0}
+:focus-visible{outline:2px solid #3b6fe0;outline-offset:2px}
+@media (max-width:720px){
+  .panel{top:auto;left:8px;right:8px;width:auto;height:min(72vh,560px);bottom:calc(env(safe-area-inset-bottom,0px) + 8px)}
+  .panel.closed{transform:translateY(calc(100% + 24px))}
+  .chip span{display:none}
+}
+@media (prefers-reduced-motion:reduce){.panel{transition:none}}
+</style>
+
+<div id="stage"></div>
+
+<aside class="panel" id="panel" aria-label="Front page sections">
+  <header>
+    <div style="display:flex;justify-content:space-between;align-items:center"><h1>Front page studio</h1><button class="hide" id="hide" type="button">Hide</button></div>
+    <p>Choose a style for each part of the page, or switch it off. Your choices show live behind this panel.</p>
+    <div class="legend"><span><b>A</b> Novera</span><span><b>B</b> Thornhill</span><span><b>C</b> Asset</span></div>
+  </header>
+  <div class="body" id="rows"></div>
+  <footer>
+    <div class="code" id="code" aria-live="polite"></div>
+    <button class="copy" id="copy" type="button">Copy my choices</button>
+  </footer>
+</aside>
+<button class="toggle" id="show" type="button">Sections</button>
+
+<!--TEMPLATES-->
+
+<script>
+(function(){
+  var SLOTS=/*SLOTS*/, NAMES=/*NAMES*/, PRESETS=/*PRESETS*/, DEFAULT=/*DEFAULT*/;
+  var stage=document.getElementById('stage'), rows=document.getElementById('rows');
+  var state={}, hosts={}, rowBtns={}, chipBtns={};
+  var saved=null;
+  try{saved=JSON.parse(localStorage.getItem('drafthr-studio')||'null')}catch(e){}
+  var start=Object.assign({},PRESETS[DEFAULT],saved||{});
+
+  function bind(root,host){
+    // Monthly / yearly pricing switch, scoped to this block.
+    function setBill(k){
+      root.querySelectorAll('[data-bill]').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.bill===k)});
+      root.querySelectorAll('.toggle').forEach(function(t){t.dataset.y=k==='y'?'1':'0'});
+      root.querySelectorAll('[data-m][data-y]').forEach(function(el){el.textContent=el.dataset[k]});
+    }
+    root.querySelectorAll('[data-bill]').forEach(function(b){b.addEventListener('click',function(){setBill(b.dataset.bill)})});
+    root.querySelectorAll('.toggle .sw').forEach(function(s){s.addEventListener('click',function(){setBill(s.closest('.toggle').dataset.y==='1'?'m':'y')})});
+    // Draft / Review / Approve / Send tabs that swap the app screenshot.
+    var tabs=root.querySelectorAll('[role=tab]'),shot=root.getElementById('shot');
+    var map={editor:'var(--shot-editor)',matters:'var(--shot-matters)',home:'var(--shot-home)'};
+    tabs.forEach(function(t){t.addEventListener('click',function(){
+      tabs.forEach(function(x){x.setAttribute('aria-selected',x===t)});
+      if(shot&&map[t.dataset.shot])shot.style.backgroundImage=map[t.dataset.shot];
+    })});
+    // In-page links jump to the matching section wherever it now lives.
+    root.querySelectorAll('a[href^="#"]').forEach(function(a){a.addEventListener('click',function(ev){
+      var id=a.getAttribute('href').slice(1); if(!id)return;
+      for(var s in hosts){var r=hosts[s].shadowRoot; var el=r&&r.getElementById(id); if(el&&!hosts[s].parentNode.hidden){ev.preventDefault();el.scrollIntoView({behavior:'smooth'});return}}
+      var w=document.querySelector('.slotwrap[data-slot="'+id+'"]'); if(w&&!w.hidden){ev.preventDefault();w.scrollIntoView({behavior:'smooth'})}
+      else ev.preventDefault();
+    })});
+    // Reveal on scroll, from a visible resting state when observers are missing.
+    var els=root.querySelectorAll('.rv');
+    if(!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion: reduce)').matches){host.classList.remove('js');return}
+    host.classList.add('js');
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{rootMargin:'0px 0px -6% 0px'});
+    els.forEach(function(e,i){e.style.transitionDelay=(i%4)*60+'ms';io.observe(e)});
+  }
+
+  function render(slot,letter){
+    state[slot]=letter;
+    var host=hosts[slot], wrap=host.parentNode;
+    wrap.hidden=(letter==='off');
+    if(letter!=='off'){
+      var root=host.shadowRoot||host.attachShadow({mode:'open'});
+      root.innerHTML='';
+      root.appendChild(document.getElementById('css-'+letter).content.cloneNode(true));
+      root.appendChild(document.getElementById('t-'+slot+'-'+letter).content.cloneNode(true));
+      bind(root,host);
+    }
+    (rowBtns[slot]||[]).forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===letter))});
+    (chipBtns[slot]||[]).forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===letter))});
+    updateCode();
+  }
+
+  function updateCode(){
+    var parts=SLOTS.map(function(s){return s[1]+' '+(state[s[0]]==='off'?'off':state[s[0]])});
+    document.getElementById('code').textContent=parts.join(' · ');
+    try{localStorage.setItem('drafthr-studio',JSON.stringify(state))}catch(e){}
+  }
+
+  SLOTS.forEach(function(s){
+    var slot=s[0],label=s[1],avail=s[2];
+    var wrap=document.createElement('section'); wrap.className='slotwrap'; wrap.dataset.slot=slot; wrap.setAttribute('aria-label',label);
+    var chip=document.createElement('div'); chip.className='chip'; chip.innerHTML='<span>'+label+'</span>';
+    var host=document.createElement('div'); host.className='slot';
+    wrap.appendChild(chip); wrap.appendChild(host); stage.appendChild(wrap); hosts[slot]=host;
+
+    var row=document.createElement('div'); row.className='row';
+    var lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent=label;
+    lbl.addEventListener('click',function(){if(!wrap.hidden)wrap.scrollIntoView({behavior:'smooth'})});
+    var seg=document.createElement('div'); seg.className='seg'; seg.setAttribute('role','group'); seg.setAttribute('aria-label',label);
+    row.appendChild(lbl); row.appendChild(seg); rows.appendChild(row);
+    rowBtns[slot]=[]; chipBtns[slot]=[];
+    ['A','B','C','off'].forEach(function(v){
+      var ok=(v==='off')||avail.indexOf(v)>=0;
+      var b=document.createElement('button'); b.type='button'; b.dataset.v=v; b.textContent=v==='off'?'Off':v;
+      b.title=v==='off'?'Leave this section out':(ok?NAMES[v]:'Not in the '+NAMES[v]+' design');
+      b.disabled=!ok; b.addEventListener('click',function(){render(slot,v)});
+      seg.appendChild(b); rowBtns[slot].push(b);
+      if(v!=='off'){var c=b.cloneNode(true); c.addEventListener('click',function(){render(slot,v)}); chip.appendChild(c); chipBtns[slot].push(c)}
+    });
+    var first=start[slot]; if(first!=='off'&&avail.indexOf(first)<0)first=avail[0]||'off';
+    render(slot,first);
+  });
+
+  var pr=document.createElement('div'); pr.className='presets';
+  Object.keys(PRESETS).forEach(function(n){
+    var b=document.createElement('button'); b.type='button'; b.textContent=n;
+    b.addEventListener('click',function(){SLOTS.forEach(function(s){render(s[0],PRESETS[n][s[0]])}); window.scrollTo({top:0,behavior:'smooth'})});
+    pr.appendChild(b);
+  });
+  rows.insertBefore(pr,rows.firstChild);
+
+  var panel=document.getElementById('panel');
+  document.getElementById('hide').addEventListener('click',function(){panel.classList.add('closed')});
+  document.getElementById('show').addEventListener('click',function(){panel.classList.remove('closed')});
+  if(window.innerWidth<720)panel.classList.add('closed');
+  document.getElementById('copy').addEventListener('click',function(){
+    var t=document.getElementById('code').textContent, btn=this;
+    function done(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy my choices'},1600)}
+    try{navigator.clipboard.writeText(t).then(done,function(){selectCode()})}catch(e){selectCode()}
+    function selectCode(){var r=document.createRange();r.selectNodeContents(document.getElementById('code'));var s=getSelection();s.removeAllRanges();s.addRange(r)}
+  });
+})();
+</script>
