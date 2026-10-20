@@ -21,6 +21,8 @@ import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { AuthShell, ErrorAlert } from "@/routes/sign-in/AuthShell";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Stage = "verifying" | "ok" | "failed" | "missing";
 
@@ -155,7 +157,7 @@ export function VerifyEmail() {
       <div className="mt-5">
         <Link
           to="/sign-in"
-          className="inline-flex items-center justify-center w-full h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition"
+          className={cn(buttonVariants({ size: "lg" }), "w-full")}
         >
           Back to sign in
         </Link>

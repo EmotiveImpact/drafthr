@@ -19,6 +19,7 @@ import { AlertCircle, Check, Eye, EyeOff, ShieldCheck, XCircle } from "lucide-re
 import { Wordmark } from "@/components/ds";
 import { AuthSplitShell } from "./AuthSplitShell";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 type AuthShellProps = {
   /** Small eyebrow above the heading ("Sign up", "Reset password"). */
@@ -386,7 +387,7 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="w-full inline-flex items-center justify-center gap-2 h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-accent)]"
+      className={cn(buttonVariants({ size: "lg" }), "w-full")}
     >
       {children}
     </button>

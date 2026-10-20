@@ -15,6 +15,8 @@ import {
 } from "@/routes/sign-in/AuthShell";
 import { AuthSplitShell } from "@/routes/sign-in/AuthSplitShell";
 import { CheckYourEmail } from "@/routes/SignUp";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /**
  * /sign-in — the in-app, DraftHR-branded sign-in page.
@@ -319,7 +321,7 @@ export function SignIn() {
               <button
                 type="submit"
                 disabled={isBusy}
-                className="w-full inline-flex items-center justify-center gap-2 h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-accent)]"
+                className={cn(buttonVariants({ size: "lg" }), "w-full")}
               >
                 {submitting === "password" ? (
                   <>
@@ -397,7 +399,7 @@ function SocialButton({
       disabled={disabled}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-surface)] disabled:hover:border-[var(--ds-line)]"
+      className={cn(buttonVariants({ variant: "outline", size: "lg" }), "w-full gap-1.5 px-2 text-[14px]")}
     >
       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
       <span className="truncate">{shortLabel}</span>

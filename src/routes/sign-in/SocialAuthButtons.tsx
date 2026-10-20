@@ -17,6 +17,8 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Provider = "GoogleOAuth" | "MicrosoftOAuth" | "LinkedInOAuth";
 type BusyKey = "google" | "microsoft" | "linkedin" | null;
@@ -133,7 +135,7 @@ function SocialButton({
       disabled={disabled}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-surface)] disabled:hover:border-[var(--ds-line)]"
+      className={cn(buttonVariants({ variant: "outline", size: "lg" }), "w-full gap-1.5 px-2 text-[14px]")}
     >
       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
       <span className="truncate">{shortLabel}</span>
