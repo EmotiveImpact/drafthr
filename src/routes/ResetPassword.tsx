@@ -19,6 +19,8 @@ import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { AuthShell, ErrorAlert, PasswordField, PrimaryButton } from "@/routes/sign-in/AuthShell";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function ResetPassword() {
   const navigate = useNavigate();
@@ -50,7 +52,7 @@ export function ResetPassword() {
         <div className="mt-5">
           <Link
             to="/sign-in/forgot-password"
-            className="inline-flex items-center justify-center w-full h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition"
+            className={cn(buttonVariants({ size: "lg" }), "w-full")}
           >
             Request a new reset link
           </Link>
