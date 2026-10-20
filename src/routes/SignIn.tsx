@@ -399,7 +399,7 @@ function SocialButton({
       disabled={disabled}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className={cn(buttonVariants({ variant: "outline", size: "lg" }), "w-full gap-1.5 px-2 text-[14px]")}
+      className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "w-full gap-1.5 px-2 text-[14px]")}
     >
       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
       <span className="truncate">{shortLabel}</span>
