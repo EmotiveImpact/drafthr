@@ -123,15 +123,16 @@ import { NotificationsBell } from "@/components/NotificationsBell";
  */
 export type SidebarMode = Mode | "consultant";
 
-/* Rows, as .nav in the mocks: 36px, 14px text, 17px quiet icons, a soft
+/* Rows, as .nav in the mocks: 36px, 14px text, 16px quiet icons, a soft
  * filled pill for the current page. The phone menu keeps its roomier 40px
- * rows with 15px text and 18px icons. In the rail each row is a 40px square. */
+ * rows with 15px text and 18px icons. In the rail each row is a 40px square,
+ * padded 12px so the 16px icon sits in its middle. */
 const NAV_BUTTON =
   "h-10 gap-3 rounded-[9px] px-3 text-[15px] md:h-9 md:gap-2.5 md:text-[14px] text-[var(--ds-body)] transition-colors duration-[120ms] " +
   "hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] active:text-[var(--ds-ink)] " +
   "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--ds-ink)] " +
-  "[&_svg]:size-[18px] md:[&_svg]:size-[17px] [&>svg]:text-[var(--ds-subtle)] hover:[&>svg]:text-[var(--ds-ink)] data-[active=true]:[&>svg]:text-[var(--ds-ink)] " +
-  "group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:rounded-[10px] group-data-[collapsible=icon]:p-[11px]!";
+  "[&_svg]:size-[18px] md:[&_svg]:size-4 [&>svg]:text-[var(--ds-subtle)] hover:[&>svg]:text-[var(--ds-ink)] data-[active=true]:[&>svg]:text-[var(--ds-ink)] " +
+  "group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:rounded-[10px] group-data-[collapsible=icon]:p-3!";
 
 /* Nested rows (.sub): 30px, 13px muted (34px and 14px in the phone menu),
  * 10px each side as in the mock. The
@@ -345,9 +346,9 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
               title="Search letters, letter types and pages (Ctrl K)"
               className={TOOL_BUTTON}
             >
-              <Search className="size-[17px]" />
+              <Search className="size-[17px] md:size-4" />
             </button>
-            <NotificationsBell variant="dot" />
+            <NotificationsBell variant="dot" className="md:[&_svg]:size-4" />
             <button
               type="button"
               onClick={toggleSidebar}
@@ -355,7 +356,7 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
               title={isMobile ? "Close menu" : "Collapse sidebar (Ctrl B)"}
               className={TOOL_BUTTON}
             >
-              <PanelLeft className="size-[17px]" />
+              <PanelLeft className="size-[17px] md:size-4" />
             </button>
           </span>
         </>
@@ -409,7 +410,7 @@ function NewLetterButton({ mode }: { mode: SidebarMode | null }) {
           className={cn(
             "h-[42px] md:h-[38px] justify-center gap-2 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[15px] md:text-[14px] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms]",
             "hover:border-[var(--ds-line-hover)] hover:bg-[var(--ds-surface)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-2)] active:text-[var(--ds-ink)]",
-            "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:text-[var(--ds-ink)] [&_svg]:size-[17px]",
+            "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:text-[var(--ds-ink)] [&_svg]:size-[17px] md:[&_svg]:size-4",
             "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:rounded-[8px] group-data-[collapsible=icon]:shadow-none group-data-[collapsible=icon]:[&_svg]:size-[15px]"
           )}
         >
@@ -537,7 +538,7 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
         </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
-        <NotificationsBell variant="dot" className="size-10 rounded-[10px]" />
+        <NotificationsBell variant="dot" className="size-10 rounded-[10px] md:[&_svg]:size-4" />
       </SidebarMenuItem>
     </>
   );
