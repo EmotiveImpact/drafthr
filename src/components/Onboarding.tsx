@@ -303,7 +303,7 @@ export function Onboarding() {
                 />
               </div>
               <p className="text-[12px] text-[var(--ds-muted)]">
-                Everything is optional, but the more you provide, the less you retype later.
+                Only your name is needed. The more you add, the less you retype later.
               </p>
             </div>
           )}

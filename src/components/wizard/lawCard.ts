@@ -86,7 +86,7 @@ export function lawCardFor(
     return {
       kicker,
       heading: "What this letter must cover",
-      intro: "No specific legal steps for this letter. DraftHR still checks it before you send.",
+      intro: "DraftHR has no legal checklist for this letter yet, so take advice if you are unsure. It still checks the draft before you send.",
       rows,
     };
   }

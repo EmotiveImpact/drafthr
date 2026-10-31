@@ -49,14 +49,14 @@ describe("law card on the new letter page", () => {
     expect(card.rows.find((r) => r.id === "uk_warning_accompanied")?.state).toBe("add");
   });
 
-  it("explains when a letter has no specific legal steps", () => {
+  it("says plainly when a letter has no legal checklist yet", () => {
     const withNone = (["offer", "reference", "resignation", "pay_rise"] as const).find(
       (t) => rulesFor(t as never, "UK").length === 0
     );
     if (!withNone) return;
     const card = lawCardFor(withNone as never, "UK", {});
     expect(card.rows).toEqual([]);
-    expect(card.intro).toMatch(/No specific legal steps/);
+    expect(card.intro).toMatch(/no legal checklist for this letter yet/);
   });
 
   it("flattens nested answers into one string and ignores booleans", () => {
