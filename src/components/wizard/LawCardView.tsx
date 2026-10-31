@@ -78,7 +78,7 @@ export function LawCardView({ card, className }: { card: LawCard; className?: st
             <span className="mt-1 block text-[14px] font-medium text-[var(--ds-ink)]">
               {card.rows.length > 0
                 ? `${card.rows.length} ${card.rows.length === 1 ? "point" : "points"} this letter must cover`
-                : "No specific legal steps"}
+                : "No checklist yet"}
             </span>
           </span>
           <ChevronDown

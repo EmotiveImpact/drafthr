@@ -8,7 +8,7 @@ import { Band, SlidingTabs } from "@/components/wizard/Band";
 import { Callout, Spinner } from "@/components/wizard/kit";
 import { tintStyle, type Tint } from "@/components/templates/tints";
 import { catalogFor, type PriceKey } from "@/lib/billing/catalog";
-import { LETTER_CATALOG } from "@/lib/letters/catalog";
+import { letterCatalogByMode } from "@/lib/letters/catalog";
 import { startBillingCheckout, getBillingStatus, openBillingPortal, type BillingStatus } from "@/lib/billing/api";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,8 @@ const PLAN_NAMES: Record<string, string> = {
   employee_plus: "Employee Plus",
 };
 
-const TEMPLATE_COUNT = LETTER_CATALOG.length;
+/** HR plans count the HR letters only: the employee letters are not in an HR workspace. */
+const TEMPLATE_COUNT = letterCatalogByMode("employer").length;
 
 const HR_PLANS: {
   name: string;

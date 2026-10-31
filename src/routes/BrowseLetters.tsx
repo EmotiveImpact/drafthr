@@ -364,7 +364,7 @@ export function BrowseLetters({ mode }: { mode: Mode }) {
               sub={
                 category
                   ? plainLabel(category.description)
-                  : "Written to the ACAS Codes and checked by employment solicitors"
+                  : "Written to the ACAS Codes and UK and US employment law"
               }
               right={
                 (filtersOn || activeCategory !== "all") && (

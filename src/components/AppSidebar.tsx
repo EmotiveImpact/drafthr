@@ -50,6 +50,7 @@ import {
   LibraryBig,
   MessagesSquare,
   LogOut,
+  Mail,
   MoreHorizontal,
   PanelLeft,
   PanelLeftOpen,
@@ -1156,6 +1157,12 @@ function NavFooter({ mode }: { mode: SidebarMode | null }) {
               <Search />
               Search
               <DropdownMenuShortcut>Ctrl K</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a href="mailto:support@drafthr.io">
+                <Mail />
+                Contact support
+              </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
